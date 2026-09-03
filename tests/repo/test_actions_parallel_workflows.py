@@ -6,6 +6,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,18 @@ _CI_LINT_PARALLEL_STEPS = {
     "Ruff check": "nix develop --command uv run ruff check .",
     "Ruff format check": "nix develop --command uv run ruff format --check .",
     "pyscn check": "nix develop --command uv run pyscn check src/youtube_automation",
+}
+
+_CI_FULL_TEST_JOBS = {
+    "test-behavioral": (
+        "Behavioral tests",
+        'nix develop --command uv run pytest -n auto -m "not repo_contract and not slow"',
+    ),
+    "test-repository-contract": (
+        "Repository contract tests",
+        'nix develop --command uv run pytest -n auto -m "repo_contract and not slow"',
+    ),
+    "test-slow": ("Slow tests", "nix develop --command uv run pytest -n auto -m slow"),
 }
 
 _SUNO_FAST_PARALLEL_STEPS = {
@@ -255,8 +268,8 @@ def test_ci_path_classifier_selects_only_responsible_gates(
     assert {key for key, enabled in classified.items() if enabled} == expected_true
 
 
-def test_ci_required_jobs_always_report_but_gate_heavy_python_steps() -> None:
-    """Required lint/test job は常時存在し、extension-only 時は重い step だけを省略する。"""
+def test_ci_required_jobs_always_report_and_aggregate_only_successful_lanes() -> None:
+    """Required lint/test は常時存在し、test は実行対象 lane の成功だけを集約する。"""
     workflow = _load_workflow(_CI_WORKFLOW_PATH)
     jobs = workflow["jobs"]
 
@@ -264,17 +277,27 @@ def test_ci_required_jobs_always_report_but_gate_heavy_python_steps() -> None:
         trigger = _on_section(workflow)[trigger_name]
         assert "paths" not in trigger and "paths-ignore" not in trigger
 
-    for job_name in ("lint", "test"):
-        job = jobs[job_name]
-        assert job.get("needs") == "changes"
-        assert "if" not in job
-        steps = job["steps"]
-        assert any(step.get("if") == "needs.changes.outputs.python != 'true'" for step in steps)
-        heavy_steps = [step for step in steps if step.get("uses") or "nix develop" in str(step.get("run", ""))]
-        assert heavy_steps
-        assert all(step.get("if") == "needs.changes.outputs.python == 'true'" for step in heavy_steps)
-        for group in _parallel_groups(steps):
-            assert all(step.get("if") == "needs.changes.outputs.python == 'true'" for step in group)
+    lint = jobs["lint"]
+    assert lint.get("needs") == "changes"
+    assert "if" not in lint
+    lint_steps = lint["steps"]
+    assert any(step.get("if") == "needs.changes.outputs.python != 'true'" for step in lint_steps)
+    heavy_steps = [step for step in lint_steps if step.get("uses") or "nix develop" in str(step.get("run", ""))]
+    assert heavy_steps
+    assert all(step.get("if") == "needs.changes.outputs.python == 'true'" for step in heavy_steps)
+
+    test = jobs["test"]
+    assert test["if"] == "always()"
+    assert set(test["needs"]) == {"changes", "test-selected", *_CI_FULL_TEST_JOBS}
+    assert all("nix develop" not in str(step.get("run", "")) for step in test["steps"])
+    gate = _top_level_step(test["steps"], "Verify test lanes")
+    assert gate["env"]["CHANGES_RESULT"] == "${{ needs.changes.result }}"
+    assert gate["env"]["SELECTED_RESULT"] == "${{ needs.test-selected.result }}"
+    assert gate["env"]["SLOW_RESULT"] == "${{ needs.test-slow.result }}"
+    assert 'test "$SELECTED_RESULT" = "success"' in gate["run"]
+    assert 'test "$BEHAVIORAL_RESULT" = "success"' in gate["run"]
+    assert 'test "$REPOSITORY_CONTRACT_RESULT" = "success"' in gate["run"]
+    assert 'test "$SLOW_RESULT" = "success"' in gate["run"]
 
     assert jobs["build-smoke"]["if"] == "needs.changes.outputs.packaging == 'true'"
     assert jobs["windows-cost-tracker"]["if"] == "needs.changes.outputs.windows == 'true'"
@@ -287,50 +310,65 @@ def test_ci_required_jobs_always_report_but_gate_heavy_python_steps() -> None:
     assert jobs["adr-numbering"]["if"] == "needs.changes.outputs.adr == 'true'"
 
 
-def test_ci_passes_selector_plan_as_job_output_without_shell_interpolation() -> None:
+def test_ci_passes_selector_plan_and_execution_mode_as_job_outputs() -> None:
     workflow = _load_workflow(_CI_WORKFLOW_PATH)
     changes = workflow["jobs"]["changes"]
-    test_job = workflow["jobs"]["test"]
+    selected_job = workflow["jobs"]["test-selected"]
 
     assert changes["outputs"]["test_plan"] == "${{ steps.test-plan.outputs.plan }}"
+    assert changes["outputs"]["test_execution"] == "${{ steps.test-plan.outputs.execution }}"
     plan_step = _top_level_step(changes["steps"], "Build affected-test plan")
     assert plan_step["id"] == "test-plan"
+    assert plan_step["env"] == {"EVENT_NAME": "${{ github.event_name }}"}
     assert "select-affected-tests.py --format json" in plan_step["run"]
     assert "changed-paths.txt" in plan_step["run"]
-    assert "GITHUB_OUTPUT" in plan_step["run"]
+    assert "execution=selected" in plan_step["run"]
+    assert "execution=full" in plan_step["run"]
 
-    test_step = _top_level_step(test_job["steps"], "Test")
-    assert test_step["env"] == {
-        "EVENT_NAME": "${{ github.event_name }}",
-        "TEST_PLAN_JSON": "${{ needs.changes.outputs.test_plan }}",
-    }
-    run = test_step["run"]
-    assert "${{" not in run
-    assert "eval " not in run
-    assert "xargs" not in run
+    selected = _top_level_step(selected_job["steps"], "Selected tests")
+    assert selected["env"] == {"TEST_PLAN_JSON": "${{ needs.changes.outputs.test_plan }}"}
+    assert "${{" not in selected["run"]
+    assert "eval " not in selected["run"]
+    assert "xargs" not in selected["run"]
 
 
-def test_ci_pr_selected_plan_uses_safe_array_while_main_and_all_run_exact_full_suite() -> None:
-    workflow = _load_workflow(_CI_WORKFLOW_PATH)
-    jobs = workflow["jobs"]
-    assert "test" in jobs
-    assert "if" not in jobs["test"]
+def test_ci_run_scripts_read_context_values_through_env_indirection() -> None:
+    """`run:` へ `${{ }}` を直接展開せず env 経由で受け渡す規約を全 step で固定する。"""
+    jobs = _load_workflow(_CI_WORKFLOW_PATH)["jobs"]
 
-    run = _top_level_step(jobs["test"]["steps"], "Test")["run"]
-    assert '[ "$EVENT_NAME" = "pull_request" ]' in run
-    assert '[ "$plan_mode" = "selected" ]' in run
-    assert 'targets=("${plan_lines[@]:1}")' in run
-    assert 'pytest -n auto -- "${targets[@]}"' in run
-    assert "Selected pytest targets: ${#targets[@]}/${total_count}" in run
-    assert "nix develop --command uv run pytest -n auto\n" in run
-    assert "-m repo_contract" not in run
-    assert "not repo_contract and not slow" not in run
+    for job_name, job in jobs.items():
+        for step in job.get("steps") or []:
+            for target in [step, *(step.get("parallel") or [])]:
+                run = target.get("run")
+                if not isinstance(run, str):
+                    continue
+                label = f"{job_name} / {target.get('name', target.get('id', run.splitlines()[0]))}"
+                assert "${{" not in run, f"run へ ${{{{ }}}} を直接埋め込まない: {label}"
 
 
-def _run_ci_test_step(
-    tmp_path: Path, *, event_name: str, payload: dict[str, object]
+def test_ci_selected_and_full_plans_use_separate_runner_jobs() -> None:
+    jobs = _load_workflow(_CI_WORKFLOW_PATH)["jobs"]
+    selected_job = jobs["test-selected"]
+    assert selected_job["if"] == (
+        "needs.changes.outputs.python == 'true' && needs.changes.outputs.test_execution == 'selected'"
+    )
+    selected = _top_level_step(selected_job["steps"], "Selected tests")
+    assert 'targets=("${plan_lines[@]:1}")' in selected["run"]
+    assert 'pytest -n auto -- "${targets[@]}"' in selected["run"]
+
+    for job_name, (step_name, command) in _CI_FULL_TEST_JOBS.items():
+        job = jobs[job_name]
+        assert job["needs"] == "changes"
+        assert job["if"] == ("needs.changes.outputs.python == 'true' && needs.changes.outputs.test_execution == 'full'")
+        assert _top_level_step(job["steps"], step_name)["run"] == command
+        assert not _parallel_groups(job["steps"]), "各 full lane は独立 runner で実行する"
+
+
+def _run_selected_test_step(
+    tmp_path: Path, *, payload: dict[str, object]
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
-    run = _top_level_step(_load_workflow(_CI_WORKFLOW_PATH)["jobs"]["test"]["steps"], "Test")["run"]
+    steps = _load_workflow(_CI_WORKFLOW_PATH)["jobs"]["test-selected"]["steps"]
+    run = _top_level_step(steps, "Selected tests")["run"]
     repository = tmp_path / "repository"
     (repository / "tests").mkdir(parents=True)
     (repository / "tests/test_selected.py").write_text("", encoding="utf-8")
@@ -349,7 +387,6 @@ def _run_ci_test_step(
         cwd=repository,
         env=os.environ
         | {
-            "EVENT_NAME": event_name,
             "TEST_PLAN_JSON": json.dumps(payload),
             "RUNNER_TEMP": str(runner_temp),
             "NIX_ARGS_LOG": str(args_log),
@@ -364,9 +401,8 @@ def _run_ci_test_step(
 
 
 def test_ci_pr_executes_only_selected_targets_and_logs_selected_over_total(tmp_path: Path) -> None:
-    result, arguments = _run_ci_test_step(
+    result, arguments = _run_selected_test_step(
         tmp_path,
-        event_name="pull_request",
         payload={"mode": "selected", "targets": ["tests/test_selected.py"]},
     )
 
@@ -385,21 +421,139 @@ def test_ci_pr_executes_only_selected_targets_and_logs_selected_over_total(tmp_p
     ]
 
 
-@pytest.mark.parametrize(
-    ("event_name", "payload"),
-    [
-        ("push", {"mode": "selected", "targets": ["tests/test_selected.py"]}),
-        ("pull_request", {"mode": "all", "targets": []}),
-    ],
-)
-def test_ci_main_push_and_pr_fail_safe_execute_exact_full_suite(
-    tmp_path: Path, event_name: str, payload: dict[str, object]
-) -> None:
-    result, arguments = _run_ci_test_step(tmp_path, event_name=event_name, payload=payload)
+def _run_ci_test_plan_step(tmp_path: Path, *, event_name: str, plan: dict[str, object]) -> dict[str, str]:
+    """`Build affected-test plan` step を実際に実行し、`GITHUB_OUTPUT` の内容を返す。"""
+    steps = _load_workflow(_CI_WORKFLOW_PATH)["jobs"]["changes"]["steps"]
+    run = _top_level_step(steps, "Build affected-test plan")["run"]
+    plan_file = tmp_path / "plan.json"
+    plan_file.write_text(json.dumps(plan), encoding="utf-8")
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    python_stub = fake_bin / "python"
+    python_stub.write_text(
+        "#!/usr/bin/env bash\n"
+        'case "$1" in\n'
+        '  *select-affected-tests.py) cat "$PLAN_JSON_FILE" ;;\n'
+        '  *) exec "$REAL_PYTHON" "$@" ;;\n'
+        "esac\n",
+        encoding="utf-8",
+    )
+    python_stub.chmod(0o755)
+    runner_temp = tmp_path / "runner-temp"
+    runner_temp.mkdir()
+    github_output = tmp_path / "github-output.txt"
+    github_output.touch()
+
+    result = subprocess.run(
+        ["bash", "-c", run],
+        cwd=tmp_path,
+        env=os.environ
+        | {
+            "EVENT_NAME": event_name,
+            "PLAN_JSON_FILE": str(plan_file),
+            "REAL_PYTHON": sys.executable,
+            "RUNNER_TEMP": str(runner_temp),
+            "GITHUB_OUTPUT": str(github_output),
+            "PATH": f"{fake_bin}:{os.environ['PATH']}",
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Full pytest suite: 2/2 targets" in result.stdout
-    assert arguments == ["develop", "--command", "uv", "run", "pytest", "-n", "auto"]
+    return {
+        key: value
+        for line in github_output.read_text(encoding="utf-8").splitlines()
+        for key, value in [line.split("=", maxsplit=1)]
+    }
+
+
+@pytest.mark.parametrize(
+    ("event_name", "plan", "expected_execution"),
+    [
+        ("pull_request", {"mode": "selected", "targets": ["tests/test_selected.py"]}, "selected"),
+        ("pull_request", {"mode": "all", "targets": []}, "full"),
+        ("push", {"mode": "selected", "targets": ["tests/test_selected.py"]}, "full"),
+        ("push", {"mode": "all", "targets": []}, "full"),
+    ],
+)
+def test_ci_test_plan_step_runs_selected_only_for_pr_selected_plans(
+    tmp_path: Path, event_name: str, plan: dict[str, object], expected_execution: str
+) -> None:
+    """main push と ALL plan の fail-safe が full lane を選ぶことを実行して固定する。"""
+    outputs = _run_ci_test_plan_step(tmp_path, event_name=event_name, plan=plan)
+
+    assert outputs["plan"] == json.dumps(plan)
+    assert outputs["execution"] == expected_execution
+
+
+def _run_verify_test_lanes_step(
+    *,
+    changes_result: str = "success",
+    python_changed: str = "true",
+    test_execution: str = "full",
+    selected_result: str = "skipped",
+    behavioral_result: str = "success",
+    repository_contract_result: str = "success",
+    slow_result: str = "success",
+) -> subprocess.CompletedProcess[str]:
+    steps = _load_workflow(_CI_WORKFLOW_PATH)["jobs"]["test"]["steps"]
+    run = _top_level_step(steps, "Verify test lanes")["run"]
+    return subprocess.run(
+        ["bash", "-c", run],
+        env=os.environ
+        | {
+            "CHANGES_RESULT": changes_result,
+            "PYTHON_CHANGED": python_changed,
+            "TEST_EXECUTION": test_execution,
+            "SELECTED_RESULT": selected_result,
+            "BEHAVIORAL_RESULT": behavioral_result,
+            "REPOSITORY_CONTRACT_RESULT": repository_contract_result,
+            "SLOW_RESULT": slow_result,
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        pytest.param({"python_changed": "false", "test_execution": ""}, id="no-python"),
+        pytest.param(
+            {"test_execution": "selected", "selected_result": "success", "behavioral_result": "skipped"},
+            id="selected-pass",
+        ),
+        pytest.param({"test_execution": "full"}, id="full-pass"),
+    ],
+)
+def test_ci_test_gate_succeeds_only_when_every_applicable_lane_succeeded(overrides: dict[str, str]) -> None:
+    result = _run_verify_test_lanes_step(**overrides)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        pytest.param({"changes_result": "failure", "python_changed": "", "test_execution": ""}, id="changes-failed"),
+        pytest.param(
+            {"changes_result": "cancelled", "python_changed": "", "test_execution": ""},
+            id="changes-cancelled",
+        ),
+        pytest.param({"test_execution": "selected", "selected_result": "failure"}, id="selected-failed"),
+        pytest.param({"test_execution": "full", "behavioral_result": "failure"}, id="behavioral-failed"),
+        pytest.param({"test_execution": "full", "repository_contract_result": "failure"}, id="contract-failed"),
+        pytest.param({"test_execution": "full", "slow_result": "failure"}, id="slow-failed"),
+        pytest.param({"test_execution": ""}, id="unknown-execution-mode"),
+    ],
+)
+def test_ci_test_gate_fails_when_a_lane_or_the_classifier_did_not_succeed(overrides: dict[str, str]) -> None:
+    result = _run_verify_test_lanes_step(**overrides)
+
+    assert result.returncode != 0, result.stdout + result.stderr
 
 
 def test_extensions_jobs_are_gated_by_their_changed_path_outputs() -> None:

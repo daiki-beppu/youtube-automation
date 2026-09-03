@@ -139,10 +139,20 @@ def test_release_note_rejects_nonexistent_tag(tmp_path: Path) -> None:
 
 def test_ci_python_test_checkout_fetches_full_tag_history() -> None:
     workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
-    test_job = workflow["jobs"]["test"]
-    checkout = next(step for step in test_job["steps"] if str(step.get("uses", "")).startswith("actions/checkout@"))
+    test_jobs = (
+        "test-selected",
+        "test-behavioral",
+        "test-repository-contract",
+        "test-slow",
+    )
 
-    assert checkout["with"]["fetch-depth"] == 0
+    for job_name in test_jobs:
+        checkout = next(
+            step
+            for step in workflow["jobs"][job_name]["steps"]
+            if str(step.get("uses", "")).startswith("actions/checkout@")
+        )
+        assert checkout["with"]["fetch-depth"] == 0, job_name
 
 
 def test_python_publish_orders_release_authoring_review_approval_and_pull_request() -> None:

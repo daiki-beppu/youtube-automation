@@ -194,20 +194,24 @@ def test_slow_node_ids_reference_existing_modules_and_tests() -> None:
     assert collected == set(expected)
 
 
-def test_ci_main_push_and_fail_safe_run_full_suite_without_lane_filters() -> None:
+def test_ci_main_push_and_fail_safe_run_exhaustive_non_overlapping_lanes() -> None:
     workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
 
     assert '[ "$EVENT_NAME" = "pull_request" ]' in workflow
-    assert '[ "$plan_mode" = "selected" ]' in workflow
-    assert "nix develop --command uv run pytest -n auto\n" in workflow
-    assert '-m "not repo_contract and not slow"' not in workflow
-    assert "-m repo_contract" not in workflow
+    assert '[ "$mode" = "selected" ]' in workflow
+    assert workflow.count('-m "not repo_contract and not slow"') == 1
+    assert workflow.count('-m "repo_contract and not slow"') == 1
+    assert workflow.count("-m slow") == 1
 
 
 def test_development_documents_each_pytest_lane_command() -> None:
     development = (ROOT / "docs/development.md").read_text(encoding="utf-8")
 
-    for expression in ('-m "not repo_contract and not slow"', "-m repo_contract", "-m slow"):
+    for expression in (
+        '-m "not repo_contract and not slow"',
+        '-m "repo_contract and not slow"',
+        "-m slow",
+    ):
         assert expression in development
 
 
