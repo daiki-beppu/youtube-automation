@@ -2,7 +2,6 @@
 import { getCollection } from "astro:content";
 import data from "blume:data";
 import PageLayout from "blume/components/layout/PageLayout.astro";
-import { groupReleasesByScale } from "../release-scale";
 import "../styles/release-notes.css";
 
 type ReleaseKind = "main" | "extension";
@@ -14,158 +13,8 @@ interface ReleaseData {
   version: string;
 }
 
-interface OperatorPage {
-  description: string;
-  href: string;
-  label: string;
-}
-
-interface OperatorGroup {
-  id: string;
-  label: string;
-  pages: readonly OperatorPage[];
-}
-
-interface OperatorSection {
-  id: string;
-  label: string;
-  pages: readonly OperatorPage[];
-  groups?: readonly OperatorGroup[];
-}
-
-const operatorSections: readonly OperatorSection[] = [
-  {
-    id: "getting-started",
-    label: "はじめる",
-    pages: [
-      {
-        description: "空フォルダから automation と skill を導入",
-        href: "/getting-started/tool-setup",
-        label: "ツール導入",
-      },
-      {
-        description: "GCP・OAuth・アップロード準備を完了",
-        href: "/getting-started/oauth-setup",
-        label: "GCP / YouTube API セットアップ",
-      },
-      {
-        description: "読み取りと書き込みで OAuth token の権限を安全に使い分ける",
-        href: "/getting-started/oauth-scopes",
-        label: "OAuth 権限の使い分け",
-      },
-      {
-        description: "Suno・DistroKid・Community Helper の導入手順",
-        href: "/getting-started/chrome-extension-install-guide",
-        label: "Chrome 拡張の導入",
-      },
-    ],
-  },
-  {
-    id: "use",
-    label: "使う",
-    pages: [
-      {
-        description: "目的に合う skill を、できることの 1 行要約から比較",
-        href: "/skills/features",
-        label: "skill を探す",
-      },
-      {
-        description: "使う skill が決まったら、発動条件・前提・前後工程を確認",
-        href: "/skills",
-        label: "skill を使う",
-      },
-      {
-        description: "制作 workflow の選び方と再開方法",
-        href: "/guides/workflow-cheatsheet",
-        label: "ワークフローの使い分け",
-      },
-      {
-        description: "単一チャンネル構成から workspace へ移行する手順",
-        href: "/releases/workspace-migration",
-        label: "workspace 移行",
-      },
-    ],
-    groups: [
-      {
-        id: "experimental",
-        label: "実験的機能",
-        pages: [
-          {
-            description: "複数チャンネルの数字を確認する dashboard の使い方",
-            href: "/guides/dashboard",
-            label: "dashboard",
-          },
-          {
-            description: "GitHub Actions とローカルをつなぐ制作 workflow の使い方",
-            href: "/guides/cloud-execution",
-            label: "クラウドでの実行",
-          },
-          {
-            description: "ライブ配信中のチャットへ安全上限付きで自動返信する方法",
-            href: "/guides/live-chat-reply",
-            label: "ライブチャット自動返信",
-          },
-          {
-            description: "曲ごと・master 全体の音をブラウザで調整する方法",
-            href: "/guides/audio-studio",
-            label: "Audio Studio",
-          },
-          {
-            description: "マスター音源と動画を表示専用 HTML で確認する方法",
-            href: "/guides/review-viewers",
-            label: "review 用 HTML",
-          },
-        ],
-      },
-      {
-        id: "advanced",
-        label: "こんなこともできる！",
-        pages: [
-          {
-            description: "Vultr VPS から BGM を24時間ライブ配信する方法",
-            href: "/guides/live-streaming",
-            label: "ライブ配信",
-          },
-          {
-            description: "ライブ配信の停止・再起動と Discord 通知を確認する方法",
-            href: "/guides/streaming-healthcheck",
-            label: "ライブ配信の稼働確認",
-          },
-          {
-            description: "マスター音源に雨音などの環境音を重ねて調整する方法",
-            href: "/guides/ambient-layers",
-            label: "環境音レイヤー",
-          },
-          {
-            description: "公開曜日と時刻を決めて動画を自動で予約公開する方法",
-            href: "/guides/scheduled-publish",
-            label: "予約公開",
-          },
-          {
-            description: "タイトルと概要欄を海外の視聴者向けに多言語化する方法",
-            href: "/guides/localizations",
-            label: "タイトル・概要欄の多言語化",
-          },
-          {
-            description: "YouTube 用の楽曲を音楽配信向けに整理して受け渡す方法",
-            href: "/guides/distrokid",
-            label: "DistroKid 配信",
-          },
-        ],
-      },
-    ],
-  },
-];
-
-const releaseNotesSection = {
-  id: "release-notes",
-  label: "更新を確認する",
-} as const;
-const heroNavItems = [...operatorSections, releaseNotesSection];
-const sectionNumber = (index: number) => String(index + 1).padStart(2, "0");
-
 const routeByEntryId = new Map(data.routes.map((route) => [route.entryId, route.path]));
-const releases = (await getCollection("docs"))
+const latestRelease = (await getCollection("docs"))
   .map((entry) => {
     const release = entry.data as typeof entry.data & ReleaseData;
     return {
@@ -173,28 +22,48 @@ const releases = (await getCollection("docs"))
       href: routeByEntryId.get(entry.id) ?? `/${entry.id.replace(/\.mdx?$/, "")}`,
     };
   })
-  .sort((left, right) => {
-    const dateOrder = right.released_at.getTime() - left.released_at.getTime();
-    if (dateOrder !== 0) return dateOrder;
-    return left.kind === right.kind ? 0 : left.kind === "main" ? -1 : 1;
-  });
+  .toSorted((left, right) => right.released_at.getTime() - left.released_at.getTime())[0];
+
+// リリースノートが 0 件だとアップデート導線の行き先が無い。/releases は sidebar の
+// route prefix でしかなくページ実体を持たないため、そこへ逃がすと 404 を配信してしまう。
+// 静的サイトなので、壊れた導線を出すより build 時に落として気付ける方が安全。
+if (!latestRelease) {
+  throw new Error("リリースノートが 0 件のためトップページを生成できません");
+}
+
+const taskCards = [
+  {
+    description: "ツール導入、YouTube API、OAuth の準備を始める",
+    href: "/getting-started/tool-setup",
+    label: "はじめる",
+    number: "01",
+  },
+  {
+    description: "制作・公開・ライブ配信・手元ツールの使い方を見る",
+    href: "/guides/workflow-cheatsheet",
+    label: "ガイド",
+    number: "02",
+  },
+  {
+    description: "できることや制作ワークフローから skill を選ぶ",
+    href: "/skills",
+    label: "スキル",
+    number: "03",
+  },
+  {
+    description: "変更内容と、利用中の環境を追従させる手順を確認する",
+    href: latestRelease.href,
+    label: "アップデート",
+    number: "04",
+  },
+] as const;
 
 const kindLabel: Record<ReleaseKind, string> = {
   main: "本体",
   extension: "Chrome 拡張",
 };
-const releaseKinds: ReleaseKind[] = ["main", "extension"];
-const releaseGroupsByKind = releaseKinds.map((kind) => ({
-  groups: groupReleasesByScale(releases.filter((release) => release.kind === kind)),
-  kind,
-  label: kindLabel[kind],
-}));
-
 const formatDate = (date: Date) =>
-  new Intl.DateTimeFormat("ja-JP", {
-    dateStyle: "long",
-    timeZone: "UTC",
-  }).format(date);
+  new Intl.DateTimeFormat("ja-JP", { dateStyle: "long", timeZone: "UTC" }).format(date);
 ---
 
 <PageLayout
@@ -209,108 +78,66 @@ const formatDate = (date: Date) =>
   searchEnabled={data.config.search.enabled}
   siteUrl={data.config.site}
   ogEnabled={data.config.og.enabled}
+  locale={data.config.i18n?.defaultLocale}
+  ui={data.ui}
   page={{
     title: "YouTube-Automation 運用ガイド",
     description: data.config.description,
   }}
 >
-  <main class="release-shell">
-    <header class="release-hero">
-      <div class="release-hero__title">
-        <p class="release-eyebrow">operator docs</p>
-        <h1>YouTube-Automation<br />運用ガイド</h1>
-      </div>
-      <div class="release-hero__brief">
-        <p>導入、日々の制作、アップデート確認に必要な公式ドキュメントを目的別に案内します。</p>
-        <nav aria-label="このページの案内">
-          {heroNavItems.map((item, index) => (
-            <a href={`#${item.id}`}>{sectionNumber(index)}&nbsp; {item.label}</a>
-          ))}
-        </nav>
-      </div>
+  <main class="home-shell">
+    <header class="home-hero">
+      <p class="release-eyebrow">YouTube-Automation 運用ガイド</p>
+      <h1>何をしたいですか？</h1>
+      <p>導入から日々の制作、公開後の運用まで、目的に合う公式ドキュメントを案内します。</p>
+      <button class="home-search" data-home-search type="button">
+        <svg aria-hidden="true" height="20" viewBox="0 0 24 24" width="20">
+          <circle cx="11" cy="11" fill="none" r="7" stroke="currentColor" stroke-width="2"></circle>
+          <path d="m16 16 4 4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2"></path>
+        </svg>
+        <span>ドキュメントを検索</span>
+        <kbd>⌘ K</kbd>
+      </button>
     </header>
 
-    <div class="doc-sections">
-      {operatorSections.map((section, index) => (
-        <section class="doc-section" data-doc-section={section.id} id={section.id}>
-          <header class="doc-section__heading">
-            <span aria-hidden="true">{sectionNumber(index)}</span>
-            <h2>{section.label}</h2>
-          </header>
-          <ul class="doc-list">
-            {section.pages.map((page) => (
-              <li>
-                <a class="doc-card" href={page.href}>
-                  <h3>{page.label}</h3>
-                  <p>{page.description}</p>
-                  <span aria-hidden="true">読む →</span>
-                </a>
-              </li>
-            ))}
-          </ul>
-          {section.groups?.map((group) => (
-            <section class="doc-group" data-doc-group={group.id}>
-              <h3>{group.label}</h3>
-              <ul class="doc-list">
-                {group.pages.map((page) => (
-                  <li>
-                    <a class="doc-card" href={page.href}>
-                      <h4>{page.label}</h4>
-                      <p>{page.description}</p>
-                      <span aria-hidden="true">読む →</span>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))}
-        </section>
+    <nav aria-label="目的から選ぶ" class="home-task-grid">
+      {taskCards.map((card) => (
+        <a class="home-task-card" href={card.href}>
+          <span aria-hidden="true">{card.number}</span>
+          <h2>{card.label}</h2>
+          <p>{card.description}</p>
+          <strong aria-hidden="true">開く →</strong>
+        </a>
       ))}
+    </nav>
 
-      <section
-        class="doc-section"
-        data-doc-section={releaseNotesSection.id}
-        id={releaseNotesSection.id}
-      >
-        <header class="doc-section__heading">
-          <span aria-hidden="true">{sectionNumber(operatorSections.length)}</span>
-          <h2>リリースノート</h2>
-        </header>
-        <p class="doc-section-lead">本体と Chrome 拡張の新機能・改善内容を確認できます。</p>
-        <div class="release-sections">
-          {releaseGroupsByKind.map(({ groups, kind, label }) => (
-            <section class="release-section" data-release-kind={kind}>
-              <h3>{label}</h3>
-              {groups.map((group) => (
-                <section class="release-scale" data-release-scale={group.scale}>
-                  <h4>{group.label}</h4>
-                  <ol class="release-list" aria-label={`${label}の${group.label}一覧`}>
-                    {group.releases.map((release) => (
-                      <li>
-                        <a class="release-card" href={release.href}>
-                          <div class="release-meta">
-                            <span class:list={["release-kind", `release-kind--${release.kind}`]}>
-                              {kindLabel[release.kind]}
-                            </span>
-                            <time datetime={release.released_at.toISOString()}>
-                              {formatDate(release.released_at)}
-                            </time>
-                          </div>
-                          <h5>{release.version}</h5>
-                          <p>{release.summary}</p>
-                          <span class="release-link" aria-hidden="true">
-                            詳しく見る <span>→</span>
-                          </span>
-                        </a>
-                      </li>
-                    ))}
-                  </ol>
-                </section>
-              ))}
-            </section>
-          ))}
+    <section class="home-latest" data-home-section="latest-release">
+      <header>
+        <div>
+          <p class="release-eyebrow">latest release</p>
+          <h2>最新のアップデート</h2>
         </div>
-      </section>
-    </div>
+        <a href={latestRelease.href}>すべて見る →</a>
+      </header>
+      <a class="release-card" href={latestRelease.href}>
+        <div class="release-meta">
+          <span class:list={["release-kind", `release-kind--${latestRelease.kind}`]}>
+            {kindLabel[latestRelease.kind]}
+          </span>
+          <time datetime={latestRelease.released_at.toISOString()}>
+            {formatDate(latestRelease.released_at)}
+          </time>
+        </div>
+        <h2>{latestRelease.version}</h2>
+        <p>{latestRelease.summary}</p>
+        <span class="release-link" aria-hidden="true">リリースノートを読む <span>→</span></span>
+      </a>
+    </section>
   </main>
+  <script>
+    document.querySelector("[data-home-search]")?.addEventListener("click", () => {
+      const trigger = document.querySelector<HTMLButtonElement>("[data-blume-search-open]");
+      trigger?.click();
+    });
+  </script>
 </PageLayout>

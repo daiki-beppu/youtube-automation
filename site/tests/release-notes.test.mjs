@@ -231,109 +231,28 @@ const sectionByAttribute = (html, attribute, value) => {
 const hrefsWithin = (markup) =>
   [...markup.matchAll(/href="(\/[^"#?]*)"/g)].map((match) => match[1]);
 
-test("landing page の hero は YouTube-Automation 運用ガイドを名乗る", async () => {
+test("トップページは日本語検索と読者タスク別4入口を表示する", async () => {
   const html = await readIndex();
-  const title = /<title>([^<]+)<\/title>/.exec(html);
-  const eyebrow = /<p class="release-eyebrow">([^<]+)<\/p>/.exec(html);
-  const heading = /<h1>([\s\S]*?)<\/h1>/.exec(html);
-
-  assert.equal(title?.[1], "YouTube-Automation 運用ガイド");
-  assert.equal(eyebrow?.[1], "operator docs");
-  assert.match(heading?.[1] ?? "", /^YouTube-Automation<br\s*\/?>運用ガイド$/);
-});
-
-test("hero h1 は 375px / 1440px の両端で製品名を語中で折らない寸法を保つ", async () => {
-  const css = await readFile(new URL("../styles/release-notes.css", import.meta.url), "utf8");
-  const declarations = /\.release-hero h1 \{([\s\S]*?)\}/.exec(css)?.[1] ?? "";
-
-  assert.ok(declarations !== "", ".release-hero h1 の宣言が見つかりません");
-  // 1 行を保つのは font-size clamp。overflow-wrap は収まらなかったときの最終手段で、
-  // 既定値のままだと折り返せず overflow-x: clip で文字が見切れる。
-  // `anywhere` はこのファイルの他の見出し用で、hero では最終手段を弱い方に留める。
-  assert.doesNotMatch(declarations, /overflow-wrap:\s*anywhere/);
-  assert.match(declarations, /overflow-wrap:\s*break-word/);
-
-  const clamp = /font-size:\s*clamp\(\s*([\d.]+)rem\s*,\s*([\d.]+)vw\s*,\s*([\d.]+)rem\s*\)/.exec(declarations);
-  assert.ok(clamp, "font-size の clamp が 3 値の形で読み取れません");
-  const [, minRem, vw, maxRem] = clamp.map(Number);
-
-  // 375px: タイトル列 約343px。実測で font-size 32px = 2rem のとき 1 行に収まる。
-  assert.ok(Number(minRem) <= 2, `375px の下限 2rem を超えています: ${minRem}rem`);
-  // 1440px: タイトル列 約777px。実測で font-size 76px = 4.75rem のとき 1 行に収まる。
-  assert.ok(Number(maxRem) <= 4.75, `1440px の上限 4.75rem を超えています: ${maxRem}rem`);
-  // 768px は vw 項が効く帯。6vw = 46.08px で列 707px に収まることを実測済み。
-  assert.ok(Number(vw) <= 6, `768px 帯の vw 係数 6vw を超えています: ${vw}vw`);
-});
-
-test(`landing page は3区分を表示し、公開operator docs ${operatorRoutes.length}件だけへ1回ずつ到達できる`, async () => {
-  const html = await readIndex();
-  const sectionLabels = [
-    ["getting-started", "はじめる"],
-    ["use", "使う"],
-    ["release-notes", "リリースノート"],
-  ];
-
-  for (const [section, label] of sectionLabels) {
-    const markup = sectionByAttribute(html, "data-doc-section", section);
-    assert.match(markup, new RegExp(`<h2>${label}</h2>`));
-  }
-
-  const operatorMarkup = operatorSections
-    .map(({ section }) => sectionByAttribute(html, "data-doc-section", section))
-    .join("\n");
-  const operatorHrefs = hrefsWithin(operatorMarkup).filter((href) =>
-    operatorRoutes.includes(href)
+  const source = await readFile(new URL("../pages/index.astro", import.meta.url), "utf8");
+  const latest = (await releaseNotes()).toSorted(
+    (left, right) => right.released_at.getTime() - left.released_at.getTime()
+  )[0];
+  const cards = [...html.matchAll(/class="home-task-card" href="([^"]+)"[^>]*>[\s\S]*?<h2>([^<]+)<\/h2>/g)].map(
+    (match) => ({ href: match[1], label: match[2] })
   );
-  assert.deepEqual(operatorHrefs, operatorRoutes);
-  assert.doesNotMatch(operatorMarkup, /href="\/getting-started\/onboarding(?:\/|"|#)/);
-  assert.match(operatorMarkup, />skill を探す</);
-  assert.match(operatorMarkup, />skill を使う</);
-  assert.doesNotMatch(operatorMarkup, />skill (?:カタログ|ガイド)</);
-  assert.match(operatorMarkup, /できることの 1 行要約/);
-  assert.match(operatorMarkup, /発動条件・前提・前後工程/);
-});
 
-test("landing page は活用ガイドを使う内の「こんなこともできる！」として表示する", async () => {
-  const use = sectionByAttribute(await readIndex(), "data-doc-section", "use");
-  const advanced = sectionByAttribute(use, "data-doc-group", "advanced");
-
-  assert.match(advanced, /<h3>こんなこともできる！<\/h3>/);
-  assert.deepEqual(hrefsWithin(advanced), [
-    "/guides/live-streaming",
-    "/guides/streaming-healthcheck",
-    "/guides/ambient-layers",
-    "/guides/scheduled-publish",
-    "/guides/localizations",
-    "/guides/distrokid",
+  assert.match(html, /<main class="home-shell">/);
+  assert.match(html, /<h1>何をしたいですか？<\/h1>/);
+  assert.match(html, /<button[^>]*data-home-search[^>]*>[\s\S]*?ドキュメントを検索/);
+  assert.match(source, /querySelector<HTMLButtonElement>\("\[data-blume-search-open\]"\)/);
+  assert.deepEqual(cards, [
+    { href: "/getting-started/tool-setup", label: "はじめる" },
+    { href: "/guides/workflow-cheatsheet", label: "ガイド" },
+    { href: "/skills", label: "スキル" },
+    { href: `/releases/${latest.version}`, label: "アップデート" },
   ]);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/live-streaming").length, 1);
-  assert.equal(
-    hrefsWithin(use).filter((href) => href === "/guides/streaming-healthcheck").length,
-    1
-  );
-  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/ambient-layers").length, 1);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/scheduled-publish").length, 1);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/localizations").length, 1);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/distrokid").length, 1);
-});
-
-test("landing page は実験的機能を使う内の専用グループとして表示する", async () => {
-  const use = sectionByAttribute(await readIndex(), "data-doc-section", "use");
-  const experimental = sectionByAttribute(use, "data-doc-group", "experimental");
-
-  assert.match(experimental, /<h3>実験的機能<\/h3>/);
-  assert.deepEqual(hrefsWithin(experimental), [
-    "/guides/dashboard",
-    "/guides/cloud-execution",
-    "/guides/live-chat-reply",
-    "/guides/audio-studio",
-    "/guides/review-viewers",
-  ]);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/dashboard").length, 1);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/cloud-execution").length, 1);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/live-chat-reply").length, 1);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/audio-studio").length, 1);
-  assert.equal(hrefsWithin(use).filter((href) => href === "/guides/review-viewers").length, 1);
+  assert.match(source, /href: latestRelease\.href/);
+  assert.match(source, /<a href=\{latestRelease\.href\}>すべて見る/);
 });
 
 test("読者タスク別4タブは route prefix ごとに sidebar を切り替える", async () => {
@@ -638,74 +557,18 @@ test("release がない規模の group は返さない", () => {
   ]);
 });
 
-test("top page は kind の下に非空の更新規模 section を見出し階層付きで描画する", async () => {
+test("トップページは最新リリース1件をハイライトする", async () => {
   const html = await readIndex();
-  const releases = await releaseNotes();
+  const notes = await releaseNotes();
+  const latest = notes.toSorted(
+    (left, right) => right.released_at.getTime() - left.released_at.getTime()
+  )[0];
+  const highlight = sectionByAttribute(html, "data-home-section", "latest-release");
 
-  for (const [kind, kindLabel] of [
-    ["main", "本体"],
-    ["extension", "Chrome 拡張"],
-  ]) {
-    const kindSection = sectionByAttribute(html, "data-release-kind", kind);
-    const expectedGroups = groupReleasesByScale(
-      releases.filter((release) => release.kind === kind)
-    );
-
-    assert.match(kindSection, new RegExp(`<h3>${kindLabel}</h3>`));
-    assert.equal(
-      [...kindSection.matchAll(/<section[^>]*data-release-scale=/g)].length,
-      expectedGroups.length
-    );
-    for (const group of expectedGroups) {
-      const scaleSection = sectionByAttribute(
-        kindSection,
-        "data-release-scale",
-        group.scale
-      );
-      assert.match(scaleSection, new RegExp(`<h4>${group.label}<\\/h4>`));
-      assert.match(scaleSection, /<ol[^>]*class="release-list"[^>]*>\s*<li>/);
-    }
-    assert.doesNotMatch(kindSection, /<section[^>]*data-release-scale[^>]*>\s*<h4>[^<]+<\/h4>\s*<ol[^>]*>\s*<\/ol>/);
-  }
-});
-
-test("top page の kind × 更新規模 group は実ファイルの所属・日付・リンクを維持する", async () => {
-  const html = await readIndex();
-  const releases = await releaseNotes();
-  const expectedGroups = ["main", "extension"].flatMap((kind) =>
-    groupReleasesByScale(releases.filter((release) => release.kind === kind)).map(
-      (group) => ({ entries: group.releases, kind, scale: group.scale })
-    )
-  );
-
-  for (const expected of expectedGroups) {
-    const kindSection = sectionByAttribute(html, "data-release-kind", expected.kind);
-    const scaleSection = sectionByAttribute(
-      kindSection,
-      "data-release-scale",
-      expected.scale
-    );
-    const hrefs = [...scaleSection.matchAll(/class="release-card" href="([^"]+)"/g)].map(
-      (match) => match[1]
-    );
-
-    assert.deepEqual(
-      hrefs,
-      expected.entries.map((entry) => `/releases/${entry.version}`)
-    );
-    for (const entry of expected.entries) {
-      assert.match(scaleSection, new RegExp(`<h5>${entry.version}</h5>`));
-      assert.match(
-        scaleSection,
-        new RegExp(`<time datetime="${entry.released_at.toISOString()}">[^<]+</time>`)
-      );
-    }
-    assert.match(
-      scaleSection,
-      new RegExp(`<span class="release-kind release-kind--${expected.kind}">`)
-    );
-    assert.match(scaleSection, /<p>[^<]+<\/p>/);
-  }
+  assert.equal((highlight.match(/class="release-card"/g) ?? []).length, 1);
+  assert.match(highlight, new RegExp(`href="/releases/${latest.version}"`));
+  assert.match(highlight, new RegExp(`<h2>${latest.version}</h2>`));
+  assert.match(highlight, new RegExp(latest.summary.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
 });
 
 test("対応形式でない version は version を示して拒否する", () => {
@@ -714,33 +577,6 @@ test("対応形式でない version は version を示して拒否する", () =>
   for (const version of invalidVersions) {
     assert.throws(() => scaleFromVersion(version), new RegExp(version.replaceAll(".", "\\.")));
   }
-});
-
-test("一覧は本体とChrome拡張に分かれ、それぞれ公開日の新しい順で表示する", async () => {
-  const html = await readIndex();
-  const main = sectionByAttribute(html, "data-release-kind", "main");
-  const extension = sectionByAttribute(html, "data-release-kind", "extension");
-  const hrefs = (markup) =>
-    [...markup.matchAll(/class="release-card" href="([^"]+)"/g)].map((match) => match[1]);
-
-  assert.match(main, /<h3>本体<\/h3>/);
-  assert.match(extension, /<h3>Chrome 拡張<\/h3>/);
-  const releases = await releaseNotes();
-  const expectedHrefs = (kind) =>
-    groupReleasesByScale(releases.filter((release) => release.kind === kind)).flatMap(
-      (group) => group.releases.map((release) => `/releases/${release.version}`)
-    );
-  assert.deepEqual(hrefs(main), expectedHrefs("main"));
-  assert.deepEqual(hrefs(extension), expectedHrefs("extension"));
-});
-
-test("本体とChrome拡張を区別し、詳細ページへリンクする", async () => {
-  const html = await readIndex();
-
-  assert.match(html, /release-kind--main[^>]*>\s*本体/);
-  assert.match(html, /release-kind--extension[^>]*>\s*Chrome 拡張/);
-  assert.match(html, /href="\/releases\/v5\.6\.0\/?"/);
-  assert.match(html, /href="\/releases\/ext-v0\.3\.0\/?"/);
 });
 
 const sidebarGroups = (html) => {
@@ -765,12 +601,15 @@ const releaseNotes = async () => {
       const kind = source.match(/^kind:\s*(?<kind>main|extension)$/mu)?.groups.kind;
       const releasedAt = source.match(/^released_at:\s*(?<date>\d{4}-\d{2}-\d{2})$/mu)
         ?.groups.date;
+      const summary = source.match(/^summary:\s*"?(?<summary>.+?)"?$/mu)?.groups.summary;
       assert.ok(title, `release note has no title: ${file}`);
       assert.ok(kind, `release note has no kind: ${file}`);
       assert.ok(releasedAt, `release note has no released_at: ${file}`);
+      assert.ok(summary, `release note has no summary: ${file}`);
       return {
         kind,
         released_at: new Date(`${releasedAt}T00:00:00.000Z`),
+        summary,
         title,
         version: file.replace(/\.md$/u, ""),
       };

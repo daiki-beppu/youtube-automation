@@ -28,12 +28,7 @@ Google Auth Platform の GUI は API で自動化できないため、setup が 
 > 3. **Clients** で Desktop app client を作成する。
 > 4. Client secrets で secret を追加し、**Download JSON** で保存してから setup に `done` と返す。
 
-`done` の後は setup が次を実行し、ダウンロード済み JSON を `auth/client_secrets.json` へ配置して再診断する。
-
-```bash
-uv run yt-doctor --fix-client-secrets
-uv run yt-doctor --apply --json
-```
+`done` の後は setup が `uv run yt-doctor --fix-client-secrets` と `uv run yt-doctor --apply --json` を実行し、ダウンロード済み JSON を `auth/client_secrets.json` へ配置して再診断する。利用者がこのコマンドをターミナルへ入力する必要はない。
 
 ### 6. 完了を確認する
 
@@ -48,6 +43,8 @@ uv run yt-doctor --apply --json
 ## 上級者向け代替ルートと参照情報
 
 推奨ルートを使わず既存 GCP project を手動管理したい場合に限り、以下の bootstrap / Terraform を使う。`client_secrets.json` の解決順、Vertex AI の project / location 解決、セキュリティ、トラブルシューティングもこの後に記載する。これらの経路は廃止しないが、初回利用者の標準手順ではない。
+
+ここに掲載するコマンドも、原則として Claude デスクトップアプリへ「対象 project と変更内容を確認してから、この手順を実行してください」と依頼する。利用者が直接ターミナルへ入力するのは、組織の運用規則で AI エージェントの実行が許可されない場合に限る。
 
 ### ルート A: `gcp-bootstrap.sh`（gcloud 半自動化・最速）
 
@@ -146,12 +143,13 @@ cd ../../..
 
 ## 動作確認
 
-```bash
-# YouTube OAuth 初回認証（ブラウザ起動）
-yt-channel-status
+Claude デスクトップアプリの同じチャットへ、次を貼る。
 
-# Vertex AI での画像生成
-uv run yt-generate-image --prompt "a gentle watercolor forest" --output /tmp/test.png -y
+```text
+セットアップの動作確認をしてください。
+1. `yt-channel-status` で YouTube OAuth の初回認証を確認してください。ブラウザでの Google ログインや同意が必要になったら、そこで止めて私に操作を依頼してください。
+2. `uv run yt-generate-image --prompt "a gentle watercolor forest" --output /tmp/test.png -y` で Vertex AI の画像生成を確認してください。
+3. secret や token の内容は表示せず、各確認の成否と、失敗時に次に必要な操作だけを日本語で要約してください。
 ```
 
 両方成功すれば完了。
