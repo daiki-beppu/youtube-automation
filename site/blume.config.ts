@@ -10,12 +10,13 @@ import {
 } from "./operator-doc-source";
 import { releaseFrontmatter } from "./release-schema";
 import { releaseRedirects, releaseSidebarGroups } from "./release-sidebar";
-import { createSkillPageSource } from "./skill-page-source";
+import { createSkillPageSource, skillSidebarRoutes } from "./skill-page-source";
 
 const lightAccent = dadsTokens.Color.Key["800"].$value;
 const darkAccent = dadsTokens.Color.Key["400"].$value;
 const repositoryRoot = fileURLToPath(new URL("..", import.meta.url));
 const releaseNotesRoot = join(repositoryRoot, "docs/release-notes");
+const releaseNavigationGroups = releaseSidebarGroups(releaseNotesRoot);
 const operatorDocReleaseFieldSchema = z
   .custom((value) => value === operatorDocReleaseField)
   .transform(() => undefined);
@@ -54,58 +55,74 @@ export default defineConfig({
     sidebar: [
       {
         label: "はじめる",
-        items: ["/tool-setup", "/oauth-setup", "/chrome-extension-install-guide"],
+        root: "/getting-started",
+        items: [
+          "/getting-started/tool-setup",
+          "/getting-started/oauth-setup",
+          "/getting-started/chrome-extension-install-guide",
+        ],
       },
       {
-        label: "使う",
+        label: "ガイド",
+        root: "/guides",
         items: [
-          "/skills",
-          "/features",
-          "/workflow-cheatsheet",
-          "/channel-workspace-migration",
+          "/guides/workflow-cheatsheet",
+          "/guides/channel-workspace-migration",
           {
             display: "group",
             label: "実験的機能",
             items: [
-              "/dashboard",
-              "/cloud-execution",
-              "/live-chat-reply",
-              "/audio-studio",
-              "/review-viewers",
+              "/guides/dashboard",
+              "/guides/cloud-execution",
+              "/guides/live-chat-reply",
+              "/guides/audio-studio",
+              "/guides/review-viewers",
             ],
           },
           {
             display: "group",
             label: "こんなこともできる！",
             items: [
-              "/live-streaming",
-              "/ambient-layers",
-              "/scheduled-publish",
-              "/localizations",
-              "/distrokid",
+              "/guides/live-streaming",
+              "/guides/ambient-layers",
+              "/guides/scheduled-publish",
+              "/guides/localizations",
+              "/guides/distrokid",
             ],
           },
         ],
       },
-      ...releaseSidebarGroups(releaseNotesRoot),
+      {
+        label: "スキル",
+        root: "/skills",
+        items: skillSidebarRoutes(repositoryRoot),
+      },
+      {
+        label: "アップデート",
+        root: "/releases",
+        items: releaseNavigationGroups,
+      },
     ],
-    // Operator routes are intentionally flat; root-scoped tabs keep the same
-    // three-section sidebar visible instead of treating one route as a prefix.
     tabs: [
       {
-        href: "/#getting-started",
+        href: "/getting-started/tool-setup",
         label: "はじめる",
-        path: "/",
+        path: "/getting-started",
       },
       {
-        href: "/#use",
-        label: "使う",
-        path: "/",
+        href: "/guides/workflow-cheatsheet",
+        label: "ガイド",
+        path: "/guides",
       },
       {
-        href: "/#release-notes",
-        label: "リリースノート",
-        path: "/",
+        href: "/skills",
+        label: "スキル",
+        path: "/skills",
+      },
+      {
+        href: releaseNavigationGroups[0].items[0],
+        label: "アップデート",
+        path: "/releases",
       },
     ],
   },

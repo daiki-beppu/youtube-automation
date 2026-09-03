@@ -1,4 +1,4 @@
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readdirSync, realpathSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { join, resolve, sep } from "node:path";
 import type { ContentSource, SourceEntry } from "blume/sources/types";
@@ -13,6 +13,18 @@ export const DEV_ONLY_SKILL_NAMES = new Set([
   "hallmark",
   "shadcn",
 ]);
+
+/** 配布対象 skill の全ページを明示 sidebar へ漏れなく追加する。 */
+export const skillSidebarRoutes = (repositoryRoot: string): string[] => [
+  "/skills",
+  "/skills/features",
+  ...readdirSync(resolve(repositoryRoot, ".claude/skills"), { withFileTypes: true })
+    .filter(
+      (entry) => entry.isDirectory() && !DEV_ONLY_SKILL_NAMES.has(entry.name)
+    )
+    .map((entry) => `/skills/${entry.name}`)
+    .toSorted(),
+];
 
 export interface SkillPage {
   readonly apiCalls?: string;
@@ -296,7 +308,7 @@ const renderSkillIndex = (
   if (uncategorized.length > 0) {
     sections.push(`## 未分類\n\n${uncategorized.join("\n")}`);
   }
-  return `# 発動条件から skill を使う\n\n${skills.length} 個の skill について、発動条件・前提・前後工程を確認できます。目的に合う skill がまだ決まっていない場合は、[できることの 1 行要約から探す](/features)ページへ進んでください。\n\n${sections.join("\n\n")}\n`;
+  return `# 発動条件から skill を使う\n\n${skills.length} 個の skill について、発動条件・前提・前後工程を確認できます。目的に合う skill がまだ決まっていない場合は、[できることの 1 行要約から探す](/skills/features)ページへ進んでください。\n\n${sections.join("\n\n")}\n`;
 };
 
 const assertInsideRepository = (repositoryRoot: string, path: string): string => {

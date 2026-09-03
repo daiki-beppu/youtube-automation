@@ -144,7 +144,7 @@ test("mapped Markdown link は site route と fragment へ書き換える", () =
 
   assert.equal(
     rewriteMarkdownLinks(markdown, "docs/features.md", operatorDocMap),
-    "[workflow](/workflow-cheatsheet#再開) [setup](/onboarding#install)"
+    "[workflow](/guides/workflow-cheatsheet#再開) [setup](/getting-started/onboarding#install)"
   );
 });
 

@@ -13,29 +13,29 @@ export interface OperatorDocMapping {
 }
 
 export const operatorDocMap = [
-  { source: "ONBOARDING.md", route: "/onboarding" },
-  { source: "docs/tool-setup.md", route: "/tool-setup" },
-  { source: "docs/oauth-setup.md", route: "/oauth-setup" },
-  { source: "docs/features.md", route: "/features" },
-  { source: "docs/workflow-cheatsheet.md", route: "/workflow-cheatsheet" },
+  { source: "ONBOARDING.md", route: "/getting-started/onboarding" },
+  { source: "docs/tool-setup.md", route: "/getting-started/tool-setup" },
+  { source: "docs/oauth-setup.md", route: "/getting-started/oauth-setup" },
+  { source: "docs/features.md", route: "/skills/features" },
+  { source: "docs/workflow-cheatsheet.md", route: "/guides/workflow-cheatsheet" },
   {
     source: "docs/chrome-extension-install-guide.md",
-    route: "/chrome-extension-install-guide",
+    route: "/getting-started/chrome-extension-install-guide",
   },
-  { source: "docs/dashboard.md", route: "/dashboard" },
+  { source: "docs/dashboard.md", route: "/guides/dashboard" },
   {
     source: "docs/channel-workspace-migration.md",
-    route: "/channel-workspace-migration",
+    route: "/guides/channel-workspace-migration",
   },
-  { source: "docs/cloud-execution.md", route: "/cloud-execution" },
-  { source: "docs/live-streaming.md", route: "/live-streaming" },
-  { source: "docs/live-chat-reply.md", route: "/live-chat-reply" },
-  { source: "docs/ambient-layers.md", route: "/ambient-layers" },
-  { source: "docs/scheduled-publish.md", route: "/scheduled-publish" },
-  { source: "docs/localizations.md", route: "/localizations" },
-  { source: "docs/distrokid.md", route: "/distrokid" },
-  { source: "docs/audio-studio.md", route: "/audio-studio" },
-  { source: "docs/review-viewers.md", route: "/review-viewers" },
+  { source: "docs/cloud-execution.md", route: "/guides/cloud-execution" },
+  { source: "docs/live-streaming.md", route: "/guides/live-streaming" },
+  { source: "docs/live-chat-reply.md", route: "/guides/live-chat-reply" },
+  { source: "docs/ambient-layers.md", route: "/guides/ambient-layers" },
+  { source: "docs/scheduled-publish.md", route: "/guides/scheduled-publish" },
+  { source: "docs/localizations.md", route: "/guides/localizations" },
+  { source: "docs/distrokid.md", route: "/guides/distrokid" },
+  { source: "docs/audio-studio.md", route: "/guides/audio-studio" },
+  { source: "docs/review-viewers.md", route: "/guides/review-viewers" },
 ] as const satisfies readonly OperatorDocMapping[];
 
 /** Internal marker allowing staged operator entries through release-only fields. */
