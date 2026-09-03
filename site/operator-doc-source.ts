@@ -55,7 +55,7 @@ export const operatorDocMap = [
   {
     legacyRoute: "/channel-workspace-migration",
     source: "docs/channel-workspace-migration.md",
-    route: "/guides/channel-workspace-migration",
+    route: "/releases/workspace-migration",
   },
   {
     legacyRoute: "/cloud-execution",
@@ -102,6 +102,13 @@ export const operatorDocMap = [
     source: "docs/review-viewers.md",
     route: "/guides/review-viewers",
   },
+  {
+    source: "docs/migration/high-cpm-locales.md",
+    route: "/releases/high-cpm-locales",
+  },
+  { source: "docs/upgrades/v5.4.0.md", route: "/releases/upgrades/v5.4.0" },
+  { source: "docs/upgrades/v5.5.0.md", route: "/releases/upgrades/v5.5.0" },
+  { source: "docs/upgrades/v5.5.1.md", route: "/releases/upgrades/v5.5.1" },
 ] as const satisfies readonly OperatorDocMapping[];
 
 /** Internal marker allowing staged operator entries through release-only fields. */
@@ -186,6 +193,36 @@ export const operatorDocRedirects = (
       ? []
       : [{ from: entry.legacyRoute, status: 301 as const, to: entry.route }]
   );
+
+const upgradeGuideRoutePrefix = "/releases/upgrades/";
+const upgradeGuideVersion = /^v(\d+)\.(\d+)\.(\d+)$/u;
+
+const upgradeGuideOrder = (route: string): number[] => {
+  const version = upgradeGuideVersion.exec(route.slice(upgradeGuideRoutePrefix.length));
+  if (version === null) {
+    throw new Error(`Unsupported upgrade guide route: ${route}`);
+  }
+  return version.slice(1).map(Number);
+};
+
+/**
+ * 「アップデート」タブの「バージョン別アップグレード」節。
+ * version ごとに navigation を手で足す運用は追加漏れで drift するため（#4802）、
+ * 公開 map から導いて新しい version から並べる。
+ */
+export const upgradeGuideRoutes = (map: readonly OperatorDocMapping[]): string[] =>
+  validateMap(map)
+    .map((entry) => entry.route)
+    .filter((route) => route.startsWith(upgradeGuideRoutePrefix))
+    // 比較関数は要素が 1 件だと呼ばれないため、order は先に全件求めて fail closed にする。
+    .map((route) => ({ order: upgradeGuideOrder(route), route }))
+    .toSorted((left, right) => {
+      const difference = left.order.findIndex(
+        (value, index) => value !== right.order[index]
+      );
+      return difference === -1 ? 0 : right.order[difference] - left.order[difference];
+    })
+    .map((entry) => entry.route);
 
 const targetParts = (target: string): { fragment: string; path: string } => {
   const fragmentIndex = target.indexOf("#");

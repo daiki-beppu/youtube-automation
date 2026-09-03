@@ -9,6 +9,7 @@ import {
   operatorDocRedirects,
   rewriteFeatureSkillLinks,
   rewriteMarkdownLinks,
+  upgradeGuideRoutes,
 } from "../operator-doc-source.ts";
 
 const expectedSources = [
@@ -29,6 +30,10 @@ const expectedSources = [
   "docs/distrokid.md",
   "docs/audio-studio.md",
   "docs/review-viewers.md",
+  "docs/migration/high-cpm-locales.md",
+  "docs/upgrades/v5.4.0.md",
+  "docs/upgrades/v5.5.0.md",
+  "docs/upgrades/v5.5.1.md",
 ];
 
 const createRepository = async (map = operatorDocMap) => {
@@ -51,6 +56,55 @@ test(`operator document map は生成対象${expectedSources.length}件だけを
   assert.equal(
     new Set(operatorDocMap.map(({ route }) => route)).size,
     expectedSources.length
+  );
+});
+
+test("追従ドキュメントをすべてアップデート tab 配下へ割り当てる", () => {
+  const routes = new Map(operatorDocMap.map(({ route, source }) => [source, route]));
+
+  assert.equal(
+    routes.get("docs/channel-workspace-migration.md"),
+    "/releases/workspace-migration"
+  );
+  assert.equal(
+    routes.get("docs/migration/high-cpm-locales.md"),
+    "/releases/high-cpm-locales"
+  );
+  for (const version of ["v5.4.0", "v5.5.0", "v5.5.1"]) {
+    assert.equal(
+      routes.get(`docs/upgrades/${version}.md`),
+      `/releases/upgrades/${version}`
+    );
+  }
+});
+
+test("バージョン別アップグレードの navigation を map から新しい版順に導出する", () => {
+  assert.deepEqual(upgradeGuideRoutes(operatorDocMap), [
+    "/releases/upgrades/v5.5.1",
+    "/releases/upgrades/v5.5.0",
+    "/releases/upgrades/v5.4.0",
+  ]);
+  assert.deepEqual(
+    upgradeGuideRoutes([
+      { source: "docs/upgrades/v5.4.0.md", route: "/releases/upgrades/v5.4.0" },
+      { source: "docs/tool-setup.md", route: "/getting-started/tool-setup" },
+      { source: "docs/upgrades/v5.10.0.md", route: "/releases/upgrades/v5.10.0" },
+      { source: "docs/upgrades/v5.9.2.md", route: "/releases/upgrades/v5.9.2" },
+    ]),
+    [
+      "/releases/upgrades/v5.10.0",
+      "/releases/upgrades/v5.9.2",
+      "/releases/upgrades/v5.4.0",
+    ]
+  );
+});
+
+test("対応形式でない upgrade guide route は route を示して拒否する", () => {
+  const map = [{ source: "docs/upgrades/next.md", route: "/releases/upgrades/next" }];
+
+  assert.throws(
+    () => upgradeGuideRoutes(map),
+    /upgrade guide route.*\/releases\/upgrades\/next/i
   );
 });
 
@@ -92,18 +146,22 @@ test("存在しない原本は解決対象を示して fail closed する", asyn
   await assert.rejects(source.load(), /ONBOARDING\.md/);
 });
 
-test(`タブ導入前の flat route ${expectedSources.length}件を新 route へ恒久リダイレクトする`, () => {
+const expectedRedirects = operatorDocMap.filter(
+  ({ legacyRoute }) => legacyRoute !== undefined
+);
+
+test(`タブ導入前の flat route ${expectedRedirects.length}件を新 route へ恒久リダイレクトする`, () => {
   assert.deepEqual(
     operatorDocRedirects(operatorDocMap),
-    operatorDocMap.map(({ legacyRoute, route }) => ({
+    expectedRedirects.map(({ legacyRoute, route }) => ({
       from: legacyRoute,
       status: 301,
       to: route,
     }))
   );
   assert.equal(
-    new Set(operatorDocMap.map(({ legacyRoute }) => legacyRoute)).size,
-    expectedSources.length
+    new Set(expectedRedirects.map(({ legacyRoute }) => legacyRoute)).size,
+    expectedRedirects.length
   );
 });
 

@@ -8,6 +8,7 @@ import {
   operatorDocMap,
   operatorDocRedirects,
   operatorDocReleaseField,
+  upgradeGuideRoutes,
 } from "./operator-doc-source";
 import { releaseFrontmatter } from "./release-schema";
 import {
@@ -72,7 +73,6 @@ export default defineConfig({
         root: "/guides",
         items: [
           "/guides/workflow-cheatsheet",
-          "/guides/channel-workspace-migration",
           {
             display: "group",
             label: "実験的機能",
@@ -105,7 +105,20 @@ export default defineConfig({
       {
         label: "アップデート",
         root: "/releases",
-        items: releaseNavigationGroups,
+        items: [
+          {
+            label: "移行ガイド",
+            items: [
+              "/releases/workspace-migration",
+              "/releases/high-cpm-locales",
+            ],
+          },
+          {
+            label: "バージョン別アップグレード",
+            items: upgradeGuideRoutes(operatorDocMap),
+          },
+          ...releaseNavigationGroups,
+        ],
       },
     ],
     tabs: [

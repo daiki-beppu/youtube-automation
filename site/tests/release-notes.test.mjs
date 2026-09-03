@@ -6,7 +6,11 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { operatorDocMap, operatorDocRedirects } from "../operator-doc-source.ts";
+import {
+  operatorDocMap,
+  operatorDocRedirects,
+  upgradeGuideRoutes,
+} from "../operator-doc-source.ts";
 import {
   groupReleasesByScale,
   releaseScaleLabels,
@@ -38,7 +42,7 @@ const operatorSections = [
     routes: [
       "/skills/features",
       "/guides/workflow-cheatsheet",
-      "/guides/channel-workspace-migration",
+      "/releases/workspace-migration",
       "/guides/dashboard",
       "/guides/cloud-execution",
       "/guides/live-chat-reply",
@@ -54,8 +58,14 @@ const operatorSections = [
   },
 ];
 const operatorRoutes = operatorSections.flatMap(({ routes }) => routes);
+/** navigation と同じ導出を使い、map への追加が sidebar 未掲載のまま通らないようにする。 */
+const updateRoutes = [
+  "/releases/high-cpm-locales",
+  ...upgradeGuideRoutes(operatorDocMap),
+];
+const publicOperatorRoutes = [...operatorRoutes, ...updateRoutes];
 /** 公開 route に、navigation から除外される /onboarding を足した生成 route 総数。 */
-const generatedRouteCount = operatorRoutes.length + 1;
+const generatedRouteCount = publicOperatorRoutes.length + 1;
 
 const readStylesheetClosure = async (html) => {
   const inlineStyles = [...html.matchAll(/<style(?:\s[^>]*)?>([\s\S]*?)<\/style>/g)].map(
@@ -342,7 +352,12 @@ test("読者タスク別4タブは route prefix ごとに sidebar を切り替�
       label: "アップデート",
       route: "/releases/v5.6.0",
       tabHref: "/releases/v5.7.0",
-      sidebarRoutes: ["/releases/v5.6.0", "/releases/ext-v0.3.0"],
+      sidebarRoutes: [
+        "/releases/v5.6.0",
+        "/releases/ext-v0.3.0",
+        "/releases/workspace-migration",
+        ...updateRoutes,
+      ],
     },
   ];
 
@@ -370,13 +385,13 @@ test("読者タスク別4タブは route prefix ごとに sidebar を切り替�
   }
 });
 
-test(`onboarding は直接描画だけを維持し、公開operator docs ${operatorRoutes.length}件だけを検索へ載せる`, async () => {
+test(`onboarding は直接描画だけを維持し、公開operator docs ${publicOperatorRoutes.length}件だけを検索へ載せる`, async () => {
   const search = JSON.parse(
     await readFile(new URL("../dist/blume-search.json", import.meta.url), "utf8")
   );
   const searchRoutes = search.map(({ route }) => route);
 
-  for (const route of operatorRoutes) {
+  for (const route of publicOperatorRoutes) {
     const html = await readOperatorDoc(route);
     assert.match(html, /<article\b/);
     assert.equal(searchRoutes.filter((candidate) => candidate === route).length, 1);
@@ -418,7 +433,7 @@ test(`operator docs の${generatedRouteCount} route は原本の先頭見出し�
     ["/getting-started/chrome-extension-install-guide", "Chrome 拡張インストールガイド"],
     ["/guides/dashboard", "Analytics dashboard"],
     [
-      "/guides/channel-workspace-migration",
+      "/releases/workspace-migration",
       "単一チャンネル repository から workspace への移行",
     ],
     ["/guides/cloud-execution", "クラウドでの実行"],
@@ -430,6 +445,10 @@ test(`operator docs の${generatedRouteCount} route は原本の先頭見出し�
     ["/guides/distrokid", "楽曲を DistroKid 配信向けに準備する"],
     ["/guides/audio-studio", "Audio Studio で音を調整する"],
     ["/guides/review-viewers", "review 用 HTML で音源と動画を確認する"],
+    ["/releases/high-cpm-locales", "high-CPM ローカライズ移行ガイド"],
+    ["/releases/upgrades/v5.4.0", "v5.4.0 アップグレードガイド"],
+    ["/releases/upgrades/v5.5.0", "v5.5.0 アップグレードガイド"],
+    ["/releases/upgrades/v5.5.1", "v5.5.1 アップグレードガイド"],
   ]);
 
   assert.equal(expectedTitles.size, generatedRouteCount);
@@ -453,7 +472,7 @@ test("AI出力はonboardingだけを除外し、直接取得用Markdown生成は
   assert.doesNotMatch(llms, /\[Onboarding\]\(\/getting-started\/onboarding\)/i);
   assert.doesNotMatch(llmsFull, /^# Onboarding$/mu);
   assert.doesNotMatch(llmsFull, /## 1\. このリポジトリは何か/);
-  for (const route of operatorRoutes) {
+  for (const route of publicOperatorRoutes) {
     assert.match(llms, new RegExp(route.replaceAll("/", "\\/")));
     assert.match(llmsFull, new RegExp(`^Source: ${route}$`, "mu"));
   }
@@ -475,7 +494,7 @@ test("sitemap が生成された場合だけ onboarding route を含めない", 
   for (const path of sitemapPaths) {
     const sitemap = await readFile(new URL(`../dist/${path}`, import.meta.url), "utf8");
     assert.doesNotMatch(sitemap, /\/getting-started\/onboarding\/?(?:<|$)/);
-    for (const route of operatorRoutes) {
+    for (const route of publicOperatorRoutes) {
       assert.match(sitemap, new RegExp(`${route}/?`));
     }
   }
