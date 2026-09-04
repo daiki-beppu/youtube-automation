@@ -236,3 +236,40 @@ def test_update_without_tag_only_updates_main_pin(tmp_path: Path, monkeypatch: p
     assert main(["update", "--registry", str(registry)]) == 0
     apply_calls = [(cwd, command) for cwd, command in calls if "yt-automation-update" in command]
     assert apply_calls == [(main_pin, ["uv", "run", "yt-automation-update", "apply", "--commit", "--accept-hooks"])]
+
+
+@pytest.mark.parametrize("check_code", [0, 1, 2])
+def test_dry_run_distinguishes_update_available_from_error(
+    tmp_path: Path, monkeypatch, capsys, check_code: int
+) -> None:
+    channel = tmp_path / "tag"
+    _tag_channel(channel)
+    registry = _registry(tmp_path / "channels.json", [channel])
+    calls = []
+
+    def fake_run(command, **kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, check_code, "", "check error" if check_code == 2 else "")
+
+    monkeypatch.setattr("youtube_automation.commands.system.channels.subprocess.run", fake_run)
+    result = main(["update", "--registry", str(registry), "--tag", "v5.7.0", "--dry-run", "--json"])
+    output = json.loads(capsys.readouterr().out)
+    assert result == (1 if check_code == 2 else 0)
+    assert output["summary"]["failed"] == (1 if check_code == 2 else 0)
+    assert len(calls) == 1
+    if check_code == 1:
+        assert output["channels"][0]["detail"] == "更新差分あり"
+
+
+def test_failed_update_preserves_cause_before_retry_hint(tmp_path: Path, monkeypatch, capsys) -> None:
+    channel = tmp_path / "tag"
+    _tag_channel(channel)
+    registry = _registry(tmp_path / "channels.json", [channel])
+    cause = "[error] ステップ 1/5 '確認' で失敗しました: local fix あり"
+    retry = "[error] 原因を解消して同じコマンドを再実行してください"
+    monkeypatch.setattr(
+        "youtube_automation.commands.system.channels.subprocess.run",
+        lambda command, **kwargs: subprocess.CompletedProcess(command, 1, "apply start", cause + "\n" + retry),
+    )
+    assert main(["update", "--registry", str(registry), "--tag", "v5.7.0", "--json"]) == 1
+    assert cause in json.loads(capsys.readouterr().out)["channels"][0]["detail"]
