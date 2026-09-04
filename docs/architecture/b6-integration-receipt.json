@@ -1528,6 +1528,13 @@
       "handoff": "B6"
     },
     {
+      "old_owner": "legacy.docs.channel-workspace-migration.md",
+      "exact_new_owner": "docs/migration/workspace-to-single-repo.md",
+      "symbols": [],
+      "consumers": [],
+      "handoff": "B6"
+    },
+    {
       "old_owner": "legacy.docs.chrome-extension-install-guide.md",
       "exact_new_owner": "docs/chrome-extension-install-guide.md",
       "symbols": [],
