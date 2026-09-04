@@ -94,6 +94,7 @@ describe("planUnattendedRun", () => {
         collection: {
           ...COLLECTION,
           suno_playlist_url: "https://suno.com/playlist/known",
+          expected_file_count: 10,
         },
         entryCount: 5,
         resumeState: {
@@ -109,6 +110,26 @@ describe("planUnattendedRun", () => {
         },
       })
     ).toEqual({ kind: "complete", reason: "playlist-created" });
+  });
+
+  it("does not complete skip-download when entries were added after the playlist checkpoint", () => {
+    expect(
+      planUnattendedRun({
+        request: {
+          ...REQUEST,
+          entryIndices: undefined,
+          skipDownload: true,
+        },
+        collection: {
+          ...COLLECTION,
+          pattern_count: 8,
+          suno_playlist_url: "https://suno.com/playlist/known",
+          expected_file_count: 10,
+        },
+        entryCount: 8,
+        resumeState: null,
+      })
+    ).not.toMatchObject({ kind: "complete" });
   });
 
   it("caps work and carries the remaining entries to the next scheduled run", () => {

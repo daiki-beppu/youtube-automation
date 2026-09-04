@@ -285,6 +285,8 @@ export function planUnattendedRun(options: {
     request.skipDownload === true &&
     typeof collection.suno_playlist_url === "string" &&
     collection.suno_playlist_url.length > 0 &&
+    typeof collection.expected_file_count === "number" &&
+    collection.expected_file_count >= entryCount * CLIPS_PER_REQUEST &&
     !hasPendingResumeEntries
   ) {
     return { kind: "complete", reason: "playlist-created" };
