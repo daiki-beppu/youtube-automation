@@ -21,6 +21,10 @@ class ChannelRegistryUpdate:
     action: str
     index: int
 
+    def as_json(self) -> str:
+        """registry へ書き込む JSON 本文（末尾改行なし）を返す。"""
+        return json.dumps([str(channel) for channel in self.channels], ensure_ascii=False, indent=2)
+
     def write(self) -> None:
         """変更があれば backup を残して registry を原子的に置換する。"""
         if self.action == "noop":
@@ -32,17 +36,20 @@ class ChannelRegistryUpdate:
         temporary = Path(temporary_name)
         try:
             with os.fdopen(descriptor, "w", encoding="utf-8") as file:
-                json.dump([str(channel) for channel in self.channels], file, ensure_ascii=False, indent=2)
-                file.write("\n")
+                file.write(f"{self.as_json()}\n")
             temporary.replace(self.path)
         except OSError:
             temporary.unlink(missing_ok=True)
             raise
 
 
+def _normalized(value: str) -> str:
+    return os.path.normcase(os.path.normpath(value))
+
+
 def _same_path(left: Path, right: Path) -> bool:
-    normalized_left = os.path.normcase(os.path.normpath(str(left)))
-    normalized_right = os.path.normcase(os.path.normpath(str(right)))
+    normalized_left = _normalized(str(left))
+    normalized_right = _normalized(str(right))
     return normalized_left == normalized_right or left.resolve(strict=False) == right.resolve(strict=False)
 
 
@@ -86,7 +93,7 @@ def load_channel_registry(path: Path | None = None) -> list[Path]:
         channel = Path(value)
         if not channel.is_absolute():
             raise ChannelRegistryError(f"channel registry index {index} は絶対 path でなければなりません: {value}")
-        normalized = os.path.normcase(os.path.normpath(value))
+        normalized = _normalized(value)
         if normalized in seen:
             raise ChannelRegistryError(f"channel registry index {index} の path が重複しています: {value}")
         seen.add(normalized)

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import fnmatch
-import json
 import os
 import shutil
 import subprocess
@@ -18,7 +17,6 @@ from youtube_automation.commands.channel.channel_import import SLUG_PATTERN, _va
 from youtube_automation.core.errors import ChannelRegistryError, ConfigError
 from youtube_automation.infrastructure.analytics.channel_registry import (
     DEFAULT_CHANNEL_REGISTRY,
-    ChannelRegistryUpdate,
     plan_channel_registry_update,
 )
 from youtube_automation.infrastructure.auth.client_secrets import template_bytes
@@ -220,13 +218,9 @@ def export_channel(
     except OSError as error:
         print(f"[error] channel registry の書込に失敗しました（dest は残します）: {error}", file=sys.stderr)
         print("channel registry を次の内容へ手動更新してください:")
-        print(_registry_json(registry_update))
+        print(registry_update.as_json())
         return EXIT_VALIDATION
     return EXIT_OK
-
-
-def _registry_json(update: ChannelRegistryUpdate) -> str:
-    return json.dumps([str(channel) for channel in update.channels], ensure_ascii=False, indent=2)
 
 
 def build_parser() -> argparse.ArgumentParser:
