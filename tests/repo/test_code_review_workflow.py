@@ -43,11 +43,13 @@ def test_successive_pushes_cancel_the_in_progress_run() -> None:
     assert concurrency["cancel-in-progress"] is True
 
 
-def test_draft_and_skip_review_label_opt_out_of_the_review() -> None:
+def test_draft_skip_review_label_and_release_branch_opt_out_of_the_review() -> None:
     gate = _workflow()["jobs"]["auth-check"]["if"]
 
     assert gate == (
-        "${{ !github.event.pull_request.draft && !contains(github.event.pull_request.labels.*.name, 'skip-review') }}"
+        "${{ !github.event.pull_request.draft "
+        "&& !contains(github.event.pull_request.labels.*.name, 'skip-review') "
+        "&& !startsWith(github.head_ref, 'release/') }}"
     )
 
 

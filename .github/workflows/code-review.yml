@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   auth-check:
-    if: ${{ !github.event.pull_request.draft && !contains(github.event.pull_request.labels.*.name, 'skip-review') }}
+    if: ${{ !github.event.pull_request.draft && !contains(github.event.pull_request.labels.*.name, 'skip-review') && !startsWith(github.head_ref, 'release/') }}
     runs-on: ubuntu-latest
     outputs:
       available: ${{ steps.auth.outputs.available }}
