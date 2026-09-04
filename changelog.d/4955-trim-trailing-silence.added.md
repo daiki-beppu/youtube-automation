@@ -1,0 +1,1 @@
+- `yt-suno-audio-cleanup` が既定で末尾のパディング無音も除去し、トリム後の実尺を基準に fade-out guard を適用するようにした

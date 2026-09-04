@@ -75,6 +75,7 @@ TS CLI `uv run yt-generate-master` は `audio` の実行時既定値を組み込
 | `post_processing.rain_layers.output_codec` / `.output_sample_rate` | `pcm_s16le` / `44100` | 出力 WAV の ffmpeg コーデックとサンプリングレート（ステレオ固定）。後段の外部 DAW でミキシング+マスタリングする運用想定 |
 | `post_processing.suno_audio_cleanup.enabled` | `true` | Suno ダウンロード直後の個別音源に、無音カット / EQ / dynaudnorm / limiter / LUFS 正規化 / 末尾 fade guard を適用する。従来挙動へ戻す場合はチャンネル側で `false` にする |
 | `post_processing.suno_audio_cleanup.max_workers` | `2` | `apply` の曲単位最大並列数（1〜8）。CLI `--jobs` が優先し、`--jobs 1` で従来どおり main thread の直列実行を選ぶ。範囲外は処理開始前に失敗する |
+| `post_processing.suno_audio_cleanup.trim_silence.trailing` | `true` | 冒頭カットは維持したまま末尾無音カットだけを止める場合は `false`。冒頭・末尾とも `threshold_db` を共用する |
 | `post_processing.suno_audio_cleanup.loudnorm.I` | `-14` | YouTube 向け LUFS 正規化の目標値。チャンネル側 `config/skills/masterup.json` 優先、既存 `masterup.yaml` fallback で調整可能 |
 | `validation.loudness_deviation.max_lu` | `2.0` | マスター結合前に許容するコレクション内 integrated LUFS の最大差（LU）。0 より大きい数値のみ |
 | `pair_selection.mode` | `auto` | `suno-prompts.json` の `lyrics` から歌詞あり/なしを判定し、歌詞ありならペアから 1 曲、歌詞なしなら 2 clip 両方を採用する。`never` で整理をスキップ |
@@ -338,7 +339,7 @@ Audio Studio で調整した値が `20-documentation/audio-adjustments.json::tra
 
 適用内容:
 
-- 冒頭無音カット (`silenceremove`)
+- 冒頭・末尾無音カット (`silenceremove`。末尾は `areverse` で本当の末尾だけを対象にする)
 - 350Hz 付近のもやつき / 8kHz 付近のシャリつきを軽く抑える EQ
 - 曲中の音量ムラを `dynaudnorm` で緩和
 - `alimiter` による瞬間ピーク抑制

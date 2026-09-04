@@ -36,6 +36,7 @@ class CleanupConfig:
     enabled: bool = False
     backup_originals: bool = True
     trim_silence: bool = True
+    trim_silence_trailing: bool = True
     silence_threshold_db: float = -50.0
     adaptive_eq: bool = True
     muddiness_freq_hz: int = 350
@@ -77,6 +78,7 @@ def resolve_cleanup_config(skill_cfg: Mapping[str, object]) -> CleanupConfig:
         enabled=bool(raw.get("enabled", False)),
         backup_originals=bool(raw.get("backup_originals", True)),
         trim_silence=bool(trim.get("enabled", True)),
+        trim_silence_trailing=bool(trim.get("trailing", True)),
         silence_threshold_db=float(trim.get("threshold_db", -50.0)),
         adaptive_eq=bool(eq.get("enabled", True)),
         muddiness_freq_hz=int(eq.get("muddiness_freq_hz", 350)),
@@ -114,7 +116,11 @@ def cleanup_config_settings(cfg: CleanupConfig) -> dict[str, object]:
             "TP": cfg.true_peak,
         },
         "limiter": {"enabled": cfg.limiter, "limit": cfg.limiter_limit},
-        "trim_silence": {"enabled": cfg.trim_silence, "threshold_db": cfg.silence_threshold_db},
+        "trim_silence": {
+            "enabled": cfg.trim_silence,
+            "trailing": cfg.trim_silence_trailing,
+            "threshold_db": cfg.silence_threshold_db,
+        },
         "tail_fade_guard": {"enabled": cfg.tail_fade_guard, "fade_sec": cfg.tail_fade_sec},
         "volume_smoothing": cfg.volume_smoothing,
     }
@@ -142,6 +148,7 @@ def apply_cleanup_overrides(cfg: CleanupConfig, overrides: object) -> CleanupCon
         limiter=cast(bool, limiter.get("enabled", cfg.limiter)),
         limiter_limit=cast(float, limiter.get("limit", cfg.limiter_limit)),
         trim_silence=cast(bool, trim.get("enabled", cfg.trim_silence)),
+        trim_silence_trailing=cast(bool, trim.get("trailing", cfg.trim_silence_trailing)),
         silence_threshold_db=cast(float, trim.get("threshold_db", cfg.silence_threshold_db)),
         tail_fade_guard=cast(bool, tail.get("enabled", cfg.tail_fade_guard)),
         tail_fade_sec=cast(float, tail.get("fade_sec", cfg.tail_fade_sec)),
@@ -202,6 +209,17 @@ def build_filter(cfg: CleanupConfig, *, duration_sec: float | None = None) -> st
         filters.append(
             f"silenceremove=start_periods=1:start_duration=0.2:start_threshold={cfg.silence_threshold_db:g}dB"
         )
+        if cfg.trim_silence_trailing:
+            filters.extend(
+                [
+                    "areverse",
+                    (
+                        "silenceremove=start_periods=1:start_duration=0.2:"
+                        f"start_threshold={cfg.silence_threshold_db:g}dB"
+                    ),
+                    "areverse",
+                ]
+            )
     if cfg.adaptive_eq:
         filters.append(f"equalizer=f={cfg.muddiness_freq_hz}:t=q:w=1:g={cfg.muddiness_gain_db:g}")
         filters.append(f"equalizer=f={cfg.harshness_freq_hz}:t=q:w=1:g={cfg.harshness_gain_db:g}")
@@ -215,6 +233,43 @@ def build_filter(cfg: CleanupConfig, *, duration_sec: float | None = None) -> st
         start = max(0.0, duration_sec - cfg.tail_fade_sec)
         filters.append(f"afade=t=out:st={start:g}:d={cfg.tail_fade_sec:g}")
     return ",".join(filters) if filters else "anull"
+
+
+def probe_trimmed_duration(path: Path, cfg: CleanupConfig) -> float:
+    """Measure the duration after the same leading/trailing silence trim used by cleanup."""
+    trim_only = replace(
+        cfg,
+        adaptive_eq=False,
+        volume_smoothing=False,
+        limiter=False,
+        loudnorm=False,
+        tail_fade_guard=False,
+    )
+    cmd = [
+        "ffmpeg",
+        "-nostdin",
+        "-i",
+        str(path),
+        "-af",
+        build_filter(trim_only),
+        "-progress",
+        "pipe:1",
+        "-nostats",
+        "-f",
+        "null",
+        "-",
+    ]
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg trim duration probe failed ({path.name}, rc={proc.returncode}):\n{proc.stderr}")
+    durations = [
+        int(line.removeprefix("out_time_us=")) / 1_000_000
+        for line in proc.stdout.splitlines()
+        if line.startswith("out_time_us=") and line.removeprefix("out_time_us=").isdigit()
+    ]
+    if not durations:
+        raise RuntimeError(f"ffmpeg trim duration probe returned no duration: {path.name}")
+    return max(durations)
 
 
 def collect_audio_files(collection_dir: Path) -> list[Path]:
@@ -265,6 +320,8 @@ def process_file(path: Path, cfg: CleanupConfig, *, apply: bool, force: bool, qu
         return False
 
     duration = probe_duration(path)
+    if apply and cfg.trim_silence and cfg.trim_silence_trailing and cfg.tail_fade_guard:
+        duration = probe_trimmed_duration(path, cfg)
     tmp = _tmp_output_for(path)
     cmd = build_ffmpeg_cmd(path, tmp, cfg, duration_sec=duration)
 

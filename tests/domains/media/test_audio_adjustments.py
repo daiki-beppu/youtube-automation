@@ -30,7 +30,7 @@ def _settings() -> dict[str, object]:
         },
         "loudnorm": {"enabled": True, "I": -14.0, "LRA": 11.0, "TP": -1.5},
         "limiter": {"enabled": True, "limit": 0.95},
-        "trim_silence": {"enabled": True, "threshold_db": -50.0},
+        "trim_silence": {"enabled": True, "trailing": True, "threshold_db": -50.0},
         "tail_fade_guard": {"enabled": True, "fade_sec": 3.0},
         "volume_smoothing": True,
     }
