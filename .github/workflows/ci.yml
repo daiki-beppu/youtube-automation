@@ -19,6 +19,7 @@ jobs:
       windows: ${{ steps.classify.outputs.windows }}
       adr: ${{ steps.classify.outputs.adr }}
       test_plan: ${{ steps.test-plan.outputs.plan }}
+      test_execution: ${{ steps.test-plan.outputs.execution }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,10 +53,18 @@ jobs:
           bash .github/scripts/classify-ci-paths.sh "$RUNNER_TEMP/changed-paths.txt" | tee -a "$GITHUB_OUTPUT"
       - name: Build affected-test plan
         id: test-plan
+        env:
+          EVENT_NAME: ${{ github.event_name }}
         run: |
           set -eu
           plan=$(python .github/scripts/select-affected-tests.py --format json "$RUNNER_TEMP/changed-paths.txt")
           printf 'plan=%s\n' "$plan" >> "$GITHUB_OUTPUT"
+          mode=$(python -c 'import json,sys; print(json.loads(sys.argv[1])["mode"])' "$plan")
+          if [ "$EVENT_NAME" = "pull_request" ] && [ "$mode" = "selected" ]; then
+            echo "execution=selected" >> "$GITHUB_OUTPUT"
+          else
+            echo "execution=full" >> "$GITHUB_OUTPUT"
+          fi
 
   lint:
     needs: changes
@@ -110,21 +119,16 @@ jobs:
               ;;
           esac
           PYSCN_DIFF_BASE="$base" nix develop --command uv run python .github/scripts/pyscn-diff-gate.py
-  test:
+  test-selected:
     needs: changes
+    if: needs.changes.outputs.python == 'true' && needs.changes.outputs.test_execution == 'selected'
     runs-on: ubuntu-latest
     steps:
-      - name: No Python tests required
-        if: needs.changes.outputs.python != 'true'
-        run: echo "Extension-only change; Python tests are not applicable."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: needs.changes.outputs.python == 'true'
         with:
           fetch-depth: 0
       - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
-        if: needs.changes.outputs.python == 'true'
       - name: Cache uv
-        if: needs.changes.outputs.python == 'true'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/uv
@@ -132,12 +136,9 @@ jobs:
           restore-keys: |
             uv-${{ runner.os }}-
       - name: Install dependencies
-        if: needs.changes.outputs.python == 'true'
         run: nix develop --command uv sync
-      - name: Test
-        if: needs.changes.outputs.python == 'true'
+      - name: Selected tests
         env:
-          EVENT_NAME: ${{ github.event_name }}
           TEST_PLAN_JSON: ${{ needs.changes.outputs.test_plan }}
         run: |
           set -euo pipefail
@@ -172,7 +173,6 @@ jobs:
           print(*targets, sep="\n")
           PY
           mapfile -t plan_lines < "$plan_file"
-          plan_mode="${plan_lines[0]}"
           targets=("${plan_lines[@]:1}")
           total_count=$(python - <<'PY'
           from pathlib import Path
@@ -186,12 +186,105 @@ jobs:
           )
           PY
           )
-          if [ "$EVENT_NAME" = "pull_request" ] && [ "$plan_mode" = "selected" ]; then
-            echo "Selected pytest targets: ${#targets[@]}/${total_count}"
-            nix develop --command uv run pytest -n auto -- "${targets[@]}"
+          echo "Selected pytest targets: ${#targets[@]}/${total_count}"
+          nix develop --command uv run pytest -n auto -- "${targets[@]}"
+
+  test-behavioral:
+    needs: changes
+    if: needs.changes.outputs.python == 'true' && needs.changes.outputs.test_execution == 'full'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+      - name: Cache uv
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
+      - name: Install dependencies
+        run: nix develop --command uv sync
+      - name: Behavioral tests
+        run: nix develop --command uv run pytest -n auto -m "not repo_contract and not slow"
+
+  test-repository-contract:
+    needs: changes
+    if: needs.changes.outputs.python == 'true' && needs.changes.outputs.test_execution == 'full'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+      - name: Cache uv
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
+      - name: Install dependencies
+        run: nix develop --command uv sync
+      - name: Repository contract tests
+        run: nix develop --command uv run pytest -n auto -m "repo_contract and not slow"
+
+  test-slow:
+    needs: changes
+    if: needs.changes.outputs.python == 'true' && needs.changes.outputs.test_execution == 'full'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+      - name: Cache uv
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
+      - name: Install dependencies
+        run: nix develop --command uv sync
+      - name: Slow tests
+        run: nix develop --command uv run pytest -n auto -m slow
+
+  # branch protection の required check 名を維持し、selected/full/extension-only の
+  # いずれでも実行された lane の成功だけを集約する。
+  test:
+    needs: [changes, test-selected, test-behavioral, test-repository-contract, test-slow]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify test lanes
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          PYTHON_CHANGED: ${{ needs.changes.outputs.python }}
+          TEST_EXECUTION: ${{ needs.changes.outputs.test_execution }}
+          SELECTED_RESULT: ${{ needs.test-selected.result }}
+          BEHAVIORAL_RESULT: ${{ needs.test-behavioral.result }}
+          REPOSITORY_CONTRACT_RESULT: ${{ needs.test-repository-contract.result }}
+          SLOW_RESULT: ${{ needs.test-slow.result }}
+        run: |
+          set -euo pipefail
+          if [ "$CHANGES_RESULT" != "success" ]; then
+            echo "changes job did not succeed: $CHANGES_RESULT" >&2
+            exit 1
+          fi
+          if [ "$PYTHON_CHANGED" != "true" ]; then
+            echo "Python tests are not applicable."
+          elif [ "$TEST_EXECUTION" = "selected" ]; then
+            test "$SELECTED_RESULT" = "success"
+          elif [ "$TEST_EXECUTION" = "full" ]; then
+            test "$BEHAVIORAL_RESULT" = "success"
+            test "$REPOSITORY_CONTRACT_RESULT" = "success"
+            test "$SLOW_RESULT" = "success"
           else
-            echo "Full pytest suite: ${total_count}/${total_count} targets"
-            nix develop --command uv run pytest -n auto
+            echo "Unknown test execution mode: $TEST_EXECUTION" >&2
+            exit 1
           fi
 
   build-smoke:

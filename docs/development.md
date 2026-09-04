@@ -51,7 +51,7 @@ devShell の shellHook が実行する `uv sync` で main dependencies と defau
 uv run pytest -n auto                            # 全スイートを CPU コア数の worker で並列実行
 uv run pytest tests/ --ignore=tests/integration -n auto   # ユニットのみ並列実行
 uv run pytest tests/ --ignore=tests/integration -n auto -m "not repo_contract and not slow"  # behavioral fast lane
-uv run pytest tests/ --ignore=tests/integration -n auto -m repo_contract  # docs / CI / packaging 契約
+uv run pytest tests/ --ignore=tests/integration -n auto -m "repo_contract and not slow"  # docs / CI / packaging 契約（slow との重複なし）
 uv run pytest tests/ --ignore=tests/integration -n auto -m slow           # 実 tool / process / 待機を含む lane
 python .github/scripts/run-affected-tests.py                              # worktree差分へCI共通selectorを適用
 ```
@@ -74,7 +74,8 @@ python .github/scripts/run-affected-tests.py                              # work
 - **CI では `-n auto` を有効化済み**（`.github/workflows/ci.yml` の test ジョブ）
 - **外部 GitHub Actions は full commit SHA で固定**し、追跡する stable version を同じ `uses:` 行のコメントに残す。複数 workflow で同じ action を使う場合も SHA/version を統一し、`tests/repo/test_github_actions_pinning.py` で mutable ref・drift・未棚卸し action を拒否する
 - **CI の changed-path 分岐**: `.github/scripts/classify-ci-paths.sh` が PR と `main` push の差分を Python / packaging / Windows / ADR / 3 helper に分類する。branch protection の required check である `lint` / `test` job は path filter や job-level `if` で消さず、extension-only 変更では成功する軽量 step を返して Nix・uv・pytest を起動しない。空 diff は全 gate を有効化する fail-safe とし、分類変更時は `tests/repo/test_actions_parallel_workflows.py` の対応表も更新する
-- **影響テスト選別エンジン**: `.github/scripts/select-affected-tests.py <changed-paths-file>` は、1行1pathの変更一覧から production import の推移的な逆参照、鏡像 test、直接変更 test、repository契約の明示対応表を統合し、pytest targetを決定的に1行1件で返す。`--format json` でも同じplanを出力する。空入力、削除・rename旧path、未知/config/docs path、解析失敗、`tests/conftest.py`・helper・fixture・依存lock等のfail-safe pathでは `ALL` を返す。markerでは絞り込まない。PR の `test` job とローカルの `python .github/scripts/run-affected-tests.py` はselected planを安全なargvで実行しtarget数/全test module数を記録する。local runnerはmerge-base以降のcommitに加えstaged・unstaged・untracked pathも統合する。`ALL` と `main` push はexact `pytest -n auto`の全suiteを実行するため、選別漏れはmerge後に検出される。extension-only の required job lightweight success は維持する
+- **全件 pytest の並列 lane**: `main` push と影響テスト選別が `ALL` を返した PR は、behavioral（`not repo_contract and not slow`）/ repository contract（`repo_contract and not slow`）/ slow（`slow`）の排他的かつ網羅的な3 jobを独立runnerで並列実行する。通常 PR の selected plan は専用jobで対象ファイルを1回だけ実行する。branch protection の required `test` job は `changes` job 自体の成否と実行対象laneの成功を集約し、extension-only でも軽量成功を返す。`changes` が失敗すると分類outputが空になりlaneが丸ごとskipされるため、`needs.changes.result` を先に検査して空outputを「Python変更なし」と誤判定しない。lane を同一runnerへ詰め込むと複数の `pytest -n auto` がCPU・Nixキャッシュを奪い合い、timeoutと低速化を招くため禁止する
+- **影響テスト選別エンジン**: `.github/scripts/select-affected-tests.py <changed-paths-file>` は、1行1pathの変更一覧から production import の推移的な逆参照、鏡像 test、直接変更 test、repository契約の明示対応表を統合し、pytest targetを決定的に1行1件で返す。`--format json` でも同じplanを出力する。空入力、削除・rename旧path、未知/config/docs path、解析失敗、`tests/conftest.py`・helper・fixture・依存lock等のfail-safe pathでは `ALL` を返す。markerでは絞り込まない。PR の `test` job とローカルの `python .github/scripts/run-affected-tests.py` はselected planを安全なargvで実行しtarget数/全test module数を記録する。local runnerはmerge-base以降のcommitに加えstaged・unstaged・untracked pathも統合する。`ALL` と `main` push は排他的な3 marker laneの和で全suiteを実行するため、選別漏れはmerge後に検出される。extension-only の required job lightweight success は維持する
 - worker ごとの分離: `tests/conftest.py` が `CHANNEL_DIR` の tmp コピーを **worker プロセスごとに独立して** 作り直す（controller が自動設定した値を環境変数継承でそのまま共有しない）。ユーザーが明示的に `CHANNEL_DIR` を指定した場合は全 worker がその指定を尊重する
 - 注意: nix devShell / CLI を実 subprocess で叩く契約テストはホスト負荷に敏感で、混雑したマシンでは並列時に所要時間が大きく伸びることがある
 
