@@ -113,7 +113,10 @@ def test_tag_diff_names_the_release_from_check_output(
         session_start, "_command", lambda command, root, **kwargs: subprocess.CompletedProcess(command, 1, stdout, "")
     )
     assert session_start.main([]) == 0
-    assert "新しい release v5.7.2 があります。yt-channels update --tag v5.7.2 で追従してください" in capsys.readouterr().out
+    assert (
+        "新しい release v5.7.2 があります。yt-channels update --tag v5.7.2 で追従してください"
+        in capsys.readouterr().out
+    )
 
 
 def test_blocked_main_notification_names_the_upstream_head(

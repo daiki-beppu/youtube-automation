@@ -161,11 +161,12 @@ def _update_one(path: Path, args: argparse.Namespace) -> ChannelUpdate:
     except OSError as exc:
         return ChannelUpdate(str(path), "failed", args.tag or listing.pin, detail=str(exc))
     output = "\n".join(part for part in (completed.stdout.strip(), completed.stderr.strip()) if part)
+    if args.dry_run and completed.returncode in {0, 1}:
+        detail = "更新差分あり" if completed.returncode == 1 else "最新です"
+        return ChannelUpdate(str(path), "success", args.tag or listing.pin, detail=detail)
     if completed.returncode != 0:
-        detail = output.splitlines()[-1] if output else f"exit {completed.returncode}"
+        detail = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
         return ChannelUpdate(str(path), "failed", args.tag or listing.pin, detail=detail)
-    if args.dry_run:
-        return ChannelUpdate(str(path), "success", args.tag or listing.pin)
     return ChannelUpdate(str(path), "success", args.tag or listing.pin, _followup_actions(path, output))
 
 
