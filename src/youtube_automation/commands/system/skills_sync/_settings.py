@@ -7,6 +7,17 @@ import json
 import sys
 from pathlib import Path
 
+_KNOWN_REMOVED_HOOK_COMMANDS = frozenset(
+    {
+        'for f in $CLAUDE_FILE_PATHS; do case "$f" in '
+        "channels|channels/*|*/channels|*/channels/*|collections|collections/*|*/collections|*/collections/*|"
+        "config/channel|config/channel/*|*/config/channel|*/config/channel/*|assets|assets/*|*/assets|*/assets/*|"
+        "data|data/*|*/data|*/data/*|auth|auth/*|*/auth|*/auth/*) "
+        "uv run yt-workspace-guard check $CLAUDE_FILE_PATHS; exit $?;; esac; done; exit 0",
+        "uv run yt-workspace-guard context",
+    }
+)
+
 
 def read_json_object(path: Path, *, missing_ok: bool = False) -> dict[str, object]:
     if missing_ok and not path.exists():
@@ -67,6 +78,49 @@ def missing_hooks(target: dict[str, object], template: dict[str, object]) -> lis
     return missing
 
 
+def removed_hooks(target: dict[str, object]) -> list[tuple[str, object, str]]:
+    target_hooks = target.get("hooks", {})
+    if not isinstance(target_hooks, dict):
+        raise ValueError("hooks は object である必要があります")
+    removed: list[tuple[str, object, str]] = []
+    for event, groups in target_hooks.items():
+        if not isinstance(groups, list):
+            raise ValueError("hooks の event は配列である必要があります")
+        for group in groups:
+            if not isinstance(group, dict) or not isinstance(group.get("hooks", []), list):
+                raise ValueError("hook group の形式が不正です")
+            for hook in group["hooks"]:
+                if isinstance(hook, dict) and hook.get("command") in _KNOWN_REMOVED_HOOK_COMMANDS:
+                    removed.append((str(event), group.get("matcher"), str(hook["command"])))
+    return removed
+
+
+def _prune_removed_hooks(target: dict[str, object]) -> None:
+    target_hooks = target.get("hooks")
+    assert isinstance(target_hooks, dict)
+    for event in list(target_hooks):
+        groups = target_hooks[event]
+        assert isinstance(groups, list)
+        retained_groups: list[object] = []
+        for group in groups:
+            assert isinstance(group, dict)
+            hooks = group.get("hooks", [])
+            assert isinstance(hooks, list)
+            group["hooks"] = [
+                hook
+                for hook in hooks
+                if not (isinstance(hook, dict) and hook.get("command") in _KNOWN_REMOVED_HOOK_COMMANDS)
+            ]
+            if group["hooks"]:
+                retained_groups.append(group)
+        if retained_groups:
+            target_hooks[event] = retained_groups
+        else:
+            del target_hooks[event]
+    if not target_hooks:
+        target.pop("hooks", None)
+
+
 def sync_settings_asset(spec: dict[str, str], root: Path, target: Path, args: argparse.Namespace) -> int:
     if args.symlink:
         print("  [warn] settings は JSON merge のため --symlink を無視します", file=sys.stderr)
@@ -76,16 +130,25 @@ def sync_settings_asset(spec: dict[str, str], root: Path, target: Path, args: ar
         missing_allow = merge_unique_strings(merged, template, "allow")
         missing_deny = merge_unique_strings(merged, template, "deny")
         hooks = missing_hooks(merged, template)
+        removals = removed_hooks(merged)
     except (OSError, json.JSONDecodeError, ValueError) as exc:
         print(f"  [error] settings をマージできません: {exc}", file=sys.stderr)
         return 1
 
     for event, group in hooks:
-        for hook in group["hooks"]:
+        group_hooks = group["hooks"]
+        assert isinstance(group_hooks, list)
+        for hook in group_hooks:
+            assert isinstance(hook, dict)
             print(f"  hook 追加候補: {event} / {group.get('matcher')} / {hook.get('type')} / {hook.get('command')}")
+    for event, matcher, command in removals:
+        print(f"  hook 除去候補: {event} / {matcher} / command / {command}")
     accept_hooks = bool(getattr(args, "accept_hooks", False))
-    if hooks and not accept_hooks and getattr(sys.stdin, "isatty", lambda: False)():
-        accept_hooks = input("  hook を追加しますか? [y/N] ").strip().lower() in {"y", "yes"}
+    hook_changes = bool(hooks or removals)
+    if hook_changes and not accept_hooks and getattr(sys.stdin, "isatty", lambda: False)():
+        accept_hooks = input("  hook の追加・除去を適用しますか? [y/N] ").strip().lower() in {"y", "yes"}
+    if removals and accept_hooks:
+        _prune_removed_hooks(merged)
     if hooks and accept_hooks:
         merged_hooks = merged.setdefault("hooks", {})
         assert isinstance(merged_hooks, dict)
@@ -93,8 +156,10 @@ def sync_settings_asset(spec: dict[str, str], root: Path, target: Path, args: ar
             merged_hooks.setdefault(event, []).append(group)
     elif hooks:
         print("  [skip] hook 追加は未承認です (--accept-hooks で承認)")
+    if removals and not accept_hooks:
+        print("  [skip] hook 除去は未承認です (--accept-hooks で承認)")
 
-    changed = bool(missing_allow or missing_deny or (hooks and accept_hooks) or not target.exists())
+    changed = bool(missing_allow or missing_deny or (hook_changes and accept_hooks) or not target.exists())
     result = "created" if not target.exists() else "updated" if changed else "unchanged"
     if changed and not args.dry_run:
         target.parent.mkdir(parents=True, exist_ok=True)

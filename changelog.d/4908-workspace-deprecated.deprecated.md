@@ -1,0 +1,1 @@
+- workspace 経路は次の major release で削除予定です。単一リポジトリへの移行には `yt-channel-export` を使用してください（#4908）。

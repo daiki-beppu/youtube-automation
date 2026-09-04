@@ -9,6 +9,7 @@ import pytest
 
 from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system import skills_sync
+from youtube_automation.commands.system.skills_sync import _settings
 
 
 def _template(root: Path) -> None:
@@ -35,26 +36,6 @@ def _template(root: Path) -> None:
 def _run(root: Path, target: Path, monkeypatch, *extra: str) -> int:
     monkeypatch.setattr(skills_sync, "_editable_root", lambda: root)
     return skills_sync.main(["sync", "--asset", "settings", "--target", str(target), *extra])
-
-
-def _workspace_guard_command(settings: dict[str, object]) -> str:
-    groups = settings["hooks"]["PreToolUse"]
-    commands = [
-        hook["command"]
-        for group in groups
-        if group["matcher"] == "Edit|Write"
-        for hook in group["hooks"]
-        if "yt-workspace-guard" in hook["command"]
-    ]
-    assert len(commands) == 1
-    return commands[0]
-
-
-def _session_context_command(settings: dict[str, object]) -> str:
-    groups = settings["hooks"]["SessionStart"]
-    commands = [hook["command"] for group in groups for hook in group["hooks"]]
-    assert commands == ["uv run yt-workspace-guard context"]
-    return commands[0]
 
 
 # hook は呼び出し元の cwd に依存しないよう Claude の project root を明示する（#4835）。
@@ -119,25 +100,78 @@ def test_settings_noninteractive_skips_hooks_but_merges_permissions(tmp_path, mo
     assert "hooks" not in merged
 
 
-def test_distributed_settings_include_workspace_guard_alongside_auth_hook(tmp_path, monkeypatch) -> None:
-    target = tmp_path / "downstream" / ".claude" / "settings.json"
+def test_settings_prunes_known_removed_hooks_and_preserves_other_hooks(tmp_path, monkeypatch) -> None:
+    _template(tmp_path)
+    target = tmp_path / "settings.json"
+    target.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Edit|Write",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": next(
+                                        command
+                                        for command in _settings._KNOWN_REMOVED_HOOK_COMMANDS
+                                        if " check " in command
+                                    ),
+                                },
+                                {"type": "command", "command": "keep-pre"},
+                            ],
+                        }
+                    ],
+                    "SessionStart": [
+                        {"hooks": [{"type": "command", "command": "uv run yt-workspace-guard context"}]},
+                        {"hooks": [{"type": "command", "command": "keep-session"}]},
+                    ],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
 
-    assert _run(REPO_ROOT, target, monkeypatch, "--accept-hooks") == 0
-
+    assert _run(tmp_path, target, monkeypatch, "--accept-hooks") == 0
     merged = json.loads(target.read_text(encoding="utf-8"))
-    command = _workspace_guard_command(merged)
-    assert "uv run yt-workspace-guard check $CLAUDE_FILE_PATHS" in command
-    all_commands = [hook["command"] for group in merged["hooks"]["PreToolUse"] for hook in group["hooks"]]
-    assert any("auth/client_secrets.json" in candidate for candidate in all_commands)
+    commands = [hook["command"] for groups in merged["hooks"].values() for group in groups for hook in group["hooks"]]
+    assert set(commands) == {"keep-pre", "keep-session", "block-secrets"}
+    assert all(group["hooks"] for groups in merged["hooks"].values() for group in groups)
 
 
-def test_distributed_settings_include_session_start_context_hook(tmp_path, monkeypatch) -> None:
-    target = tmp_path / "downstream" / ".claude" / "settings.json"
+def test_settings_noninteractive_reports_prune_without_writing(tmp_path, monkeypatch, capsys) -> None:
+    _template(tmp_path)
+    target = tmp_path / "settings.json"
+    target.write_text(
+        json.dumps(
+            {
+                "permissions": {
+                    "allow": ["Agent", "Bash(uv run yt-upload-auto*)"],
+                    "deny": ["Read(.env)"],
+                },
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Edit|Write",
+                            "hooks": [{"type": "command", "command": "block-secrets"}],
+                        }
+                    ],
+                    "SessionStart": [{"hooks": [{"type": "command", "command": "uv run yt-workspace-guard context"}]}],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    before = target.read_bytes()
 
-    assert _run(REPO_ROOT, target, monkeypatch, "--accept-hooks") == 0
+    assert _run(tmp_path, target, monkeypatch) == 0
+    assert target.read_bytes() == before
+    assert "hook 除去候補" in capsys.readouterr().out
 
-    merged = json.loads(target.read_text(encoding="utf-8"))
-    assert _session_context_command(merged) == "uv run yt-workspace-guard context"
+
+def test_distributed_settings_template_excludes_workspace_guard() -> None:
+    assert "yt-workspace-guard" not in (REPO_ROOT / ".claude/settings.template.json").read_text(encoding="utf-8")
 
 
 def test_distributed_settings_include_background_progress_hook(tmp_path, monkeypatch) -> None:
@@ -203,37 +237,6 @@ def test_repository_ruff_hook_never_syncs_the_venv() -> None:
     assert "uv run --no-sync ruff format" in command
     assert "uv run --no-sync ruff check --fix" in command
     assert "uv run ruff" not in command
-
-
-def test_workspace_guard_hook_prefilters_unrelated_paths(tmp_path) -> None:
-    settings = json.loads((REPO_ROOT / ".claude" / "settings.template.json").read_text(encoding="utf-8"))
-    command = _workspace_guard_command(settings)
-    env = {**os.environ, "CLAUDE_FILE_PATHS": "README.md docs/guide.md", "PATH": str(tmp_path)}
-
-    result = subprocess.run(command, shell=True, env=env, capture_output=True, text=True, check=False)
-
-    assert result.returncode == 0
-    assert result.stderr == ""
-
-
-def test_workspace_guard_hook_propagates_block_and_paths(tmp_path) -> None:
-    settings = json.loads((REPO_ROOT / ".claude" / "settings.template.json").read_text(encoding="utf-8"))
-    command = _workspace_guard_command(settings)
-    invocation = tmp_path / "invocation"
-    fake_uv = tmp_path / "uv"
-    fake_uv.write_text(
-        f'#!/bin/sh\nprintf "%s\\n" "$*" > "{invocation}"\necho "channel mismatch" >&2\nexit 2\n',
-        encoding="utf-8",
-    )
-    fake_uv.chmod(0o755)
-    paths = "channels/beta/collections/new workspace/assets/cover.png"
-    env = {**os.environ, "CLAUDE_FILE_PATHS": paths, "PATH": str(tmp_path)}
-
-    result = subprocess.run(command, shell=True, env=env, capture_output=True, text=True, check=False)
-
-    assert result.returncode == 2
-    assert result.stderr == "channel mismatch\n"
-    assert invocation.read_text(encoding="utf-8") == f"run yt-workspace-guard check {paths}\n"
 
 
 def test_settings_invalid_target_is_not_overwritten(tmp_path, monkeypatch) -> None:
