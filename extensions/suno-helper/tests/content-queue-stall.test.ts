@@ -13,6 +13,7 @@ interface RunPayload {
   playlistName: string;
   runMode?: "serial" | "queue";
   regenerateDurationOutliers?: boolean;
+  downloadEnabled?: boolean;
   collectionId: string;
 }
 
