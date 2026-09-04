@@ -1,0 +1,1 @@
+- fal.ai queue・storage API の安全な HTTP client と `FAL_KEY` の secret 解決を追加
