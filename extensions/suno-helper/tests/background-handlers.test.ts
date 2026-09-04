@@ -1377,6 +1377,45 @@ describe('background onMessage("startDownload"): 監視開始前の .zip は無�
     ).toHaveLength(0);
   });
 
+  it("Given Suno Studio bounce の fresh ZIP When complete event が届く Then 完了通知する", async () => {
+    const freshStart = new Date().toISOString();
+    const studioBounceUrl =
+      "https://suno-ai--studio-bounce-prod-web.modal.run/render_streaming/v2/test";
+    const { handlers, sentMessages, createdListeners, downloadListeners } =
+      await loadBackground({
+        searchResultsById: {
+          101: [
+            {
+              filename: "collection.zip",
+              startTime: freshStart,
+              url: studioBounceUrl,
+            },
+          ],
+        },
+      });
+
+    await handlers.get("startDownload")!({
+      data: { format: "wav" },
+      sender: { tab: { id: 42 } },
+    });
+
+    createdListeners[0](
+      freshZip(101, {
+        filename: "collection.zip",
+        startTime: freshStart,
+        url: studioBounceUrl,
+      })
+    );
+    downloadListeners[0]({ id: 101, state: { current: "complete" } });
+    await flushPromises();
+
+    expect(sentMessages).toContainEqual({
+      type: "downloadComplete",
+      data: { filename: "collection.zip" },
+      tabId: 42,
+    });
+  });
+
   it("Given malformed URL の fresh ZIP When complete event が届く Then 完了扱いしない", async () => {
     const freshStart = new Date().toISOString();
     const { handlers, sentMessages, createdListeners, downloadListeners } =
@@ -2005,6 +2044,62 @@ describe('background onMessage("postDownloaded"): privileged POST boundary', () 
 });
 
 // sendTrustedCmdP --------------------------------------------------------------
+
+describe('background onMessage("sendTrustedClick"): 座標へ trusted click を送る', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("Given Studio content の座標 When sendTrustedClick Then mousePressed / mouseReleased を dispatch する", async () => {
+    const { handlers, chromeDebugger } = await loadBackground();
+
+    await handlers.get("sendTrustedClick")!({
+      data: { x: 123.5, y: 456.25 },
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(chromeDebugger.attach).toHaveBeenCalledWith({ tabId: 42 }, "1.3");
+    expect(chromeDebugger.sendCommand).toHaveBeenNthCalledWith(
+      1,
+      { tabId: 42 },
+      "Input.dispatchMouseEvent",
+      {
+        type: "mouseMoved",
+        x: 123.5,
+        y: 456.25,
+        button: "none",
+        buttons: 0,
+      }
+    );
+    expect(chromeDebugger.sendCommand).toHaveBeenNthCalledWith(
+      2,
+      { tabId: 42 },
+      "Input.dispatchMouseEvent",
+      {
+        type: "mousePressed",
+        x: 123.5,
+        y: 456.25,
+        button: "left",
+        buttons: 1,
+        clickCount: 1,
+      }
+    );
+    expect(chromeDebugger.sendCommand).toHaveBeenNthCalledWith(
+      3,
+      { tabId: 42 },
+      "Input.dispatchMouseEvent",
+      {
+        type: "mouseReleased",
+        x: 123.5,
+        y: 456.25,
+        button: "left",
+        buttons: 0,
+        clickCount: 1,
+      }
+    );
+    expect(chromeDebugger.detach).toHaveBeenCalledWith({ tabId: 42 });
+  });
+});
 
 describe('background onMessage("sendTrustedCmdP"): Mac は modifiers=4 (Meta) を使う', () => {
   afterEach(() => {

@@ -169,6 +169,8 @@ interface ProtocolMap {
   /** content → background: chrome.debugger で trusted Cmd+P を dispatch する (#1251)。
    *  content script は chrome.debugger API にアクセスできないため background に委譲する。 */
   sendTrustedCmdP(payload: { isMac: boolean }): void;
+  /** Studio content → background: React が trusted input を要求する control をクリックする。 */
+  sendTrustedClick(payload: { x: number; y: number }): void;
   /** overlay → background: localhost read API を extension origin から取得する。 */
   discoverServerSources(): LocalServerSource[];
   fetchCompatibilityWarning(payload: {

@@ -74,18 +74,7 @@ async function clickButtonByName(name: string): Promise<void> {
   if (button.disabled) {
     throw new Error(`Studio の ${name} ボタンが無効です`);
   }
-  button.click();
-}
-
-async function clickButtonByAriaLabel(label: string): Promise<void> {
-  const button = await waitForElement(
-    () => buttonByAriaLabel(label),
-    `${label} ボタン`
-  );
-  if (button.disabled) {
-    throw new Error(`Studio の ${label} ボタンが無効です`);
-  }
-  button.click();
+  dispatchStudioPointerClick(button);
 }
 
 async function waitForTrackCount(expected: number): Promise<HTMLElement[]> {
@@ -111,7 +100,15 @@ function setInputValue(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
-function dispatchPointerClick(element: HTMLElement): void {
+export function commitStudioInputValue(
+  input: HTMLInputElement,
+  value: string
+): void {
+  setInputValue(input, value);
+  input.blur();
+}
+
+export function dispatchStudioPointerClick(element: HTMLElement): void {
   const rect = element.getBoundingClientRect();
   const common = {
     bubbles: true,
@@ -138,6 +135,55 @@ function dispatchPointerClick(element: HTMLElement): void {
   element.dispatchEvent(new PointerEvent("pointerup", pointer));
   element.dispatchEvent(new MouseEvent("mouseup", common));
   element.dispatchEvent(new MouseEvent("click", common));
+}
+
+async function dispatchTrustedStudioClick(element: HTMLElement): Promise<void> {
+  const rect = element.getBoundingClientRect();
+  await sendMessage("sendTrustedClick", {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  });
+}
+
+export async function clickStudioButtonUntil<T extends HTMLElement>(
+  buttonName: string,
+  findResult: () => T | null,
+  description: string,
+  clickMode: "trusted" | "pointer" = "trusted"
+): Promise<T> {
+  const deadline = Date.now() + DOM_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const result = findResult();
+    if (result && isVisible(result)) return result;
+    const button = buttonByName(buttonName);
+    if (button && !button.disabled) {
+      if (clickMode === "pointer") {
+        dispatchStudioPointerClick(button);
+      } else {
+        await dispatchTrustedStudioClick(button);
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
+  }
+  throw new Error(`Studio の ${description} が見つかりません`);
+}
+
+export async function clickStudioAriaButtonUntil<T extends HTMLElement>(
+  ariaLabel: string,
+  findResult: () => T | null,
+  description: string
+): Promise<T> {
+  const deadline = Date.now() + DOM_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const result = findResult();
+    if (result && isVisible(result)) return result;
+    const button = buttonByAriaLabel(ariaLabel);
+    if (button && !button.disabled) {
+      await dispatchTrustedStudioClick(button);
+    }
+    await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
+  }
+  throw new Error(`Studio の ${description} が見つかりません`);
 }
 
 function findLibraryScroller(element: Element): HTMLElement | null {
@@ -244,12 +290,12 @@ async function renameTrack(track: HTMLElement, name: string): Promise<void> {
     'button.track-menu-reveal[data-context-menu-trigger="true"]'
   );
   if (!menu) throw new Error("Studio の track menu が見つかりません");
-  dispatchPointerClick(menu);
+  dispatchStudioPointerClick(menu);
   const renameButton = await waitForElement(
     () => buttonByName("Rename Track"),
     "Rename Track ボタン"
   );
-  dispatchPointerClick(renameButton);
+  dispatchStudioPointerClick(renameButton);
   const input = await waitForElement(
     () =>
       Array.from(document.body.children).find(
@@ -260,13 +306,7 @@ async function renameTrack(track: HTMLElement, name: string): Promise<void> {
       ) ?? null,
     "track 名入力"
   );
-  setInputValue(input, name);
-  input.dispatchEvent(
-    new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
-  );
-  input.dispatchEvent(
-    new KeyboardEvent("keyup", { key: "Enter", bubbles: true })
-  );
+  commitStudioInputValue(input, name);
   await waitForElement(
     () => (trackName(track) === name ? track : null),
     `track 名 ${name}`
@@ -283,10 +323,18 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
       ) {
         throw new Error("Studio ページを開けませんでした");
       }
-      await clickButtonByAriaLabel("Project menu");
-      await clickButtonByName("New Project");
-      await clickButtonByName("New empty project");
-      await waitForElement(
+      await clickStudioAriaButtonUntil(
+        "Project menu",
+        () => buttonByName("New Project"),
+        "New Project ボタン"
+      );
+      await clickStudioButtonUntil(
+        "New Project",
+        () => buttonByName("New empty project"),
+        "New empty project ボタン"
+      );
+      await clickStudioButtonUntil(
+        "New empty project",
         () =>
           buttonByAriaLabel("Project menu")?.textContent?.trim() ===
           "Untitled Project"
@@ -296,22 +344,20 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
       );
     },
     async renameProject(name) {
-      await clickButtonByAriaLabel("Project menu");
-      await clickButtonByName("Rename");
-      const input = await waitForElement(
+      await clickStudioAriaButtonUntil(
+        "Project menu",
+        () => buttonByName("Rename"),
+        "Rename ボタン"
+      );
+      const input = await clickStudioButtonUntil(
+        "Rename",
         () =>
           document.querySelector<HTMLInputElement>(
             'input[aria-label="Project name"]'
           ),
         "Project name 入力"
       );
-      setInputValue(input, name);
-      input.dispatchEvent(
-        new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
-      );
-      input.dispatchEvent(
-        new KeyboardEvent("keyup", { key: "Enter", bubbles: true })
-      );
+      commitStudioInputValue(input, name);
       await waitForElement(
         () =>
           buttonByAriaLabel("Project menu")?.textContent?.trim() === name
@@ -321,20 +367,41 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
       );
     },
     async openLibrary() {
-      await clickButtonByAriaLabel("Open library");
-      await clickButtonByName("All Songs");
-      await waitForElement(
+      await clickStudioAriaButtonUntil(
+        "Open library",
+        () => buttonByName("All Songs"),
+        "All Songs ボタン"
+      );
+      await clickStudioButtonUntil(
+        "All Songs",
         () =>
           document.querySelector<HTMLElement>(
             '[draggable="true"][data-clip-id]'
           ),
-        "Library の clip 一覧"
+        "Library の clip 一覧",
+        "pointer"
       );
     },
     async placeClipOnTrackAtStart(clipId, trackIndex) {
       if (trackIndex > 0) {
-        await clickButtonByAriaLabel("Add new track");
-        await clickButtonByName("Add Audio track");
+        await clickStudioAriaButtonUntil(
+          "Add new track",
+          () => buttonByAriaLabel("Add Audio track"),
+          "Add Audio track ボタン"
+        );
+        // The menu animates from the trigger. Its item is already "visible"
+        // before the final transform settles, so clicking immediately can hit
+        // the backdrop at the stale center point and only close the menu.
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        await clickStudioAriaButtonUntil(
+          "Add Audio track",
+          () =>
+            document.querySelectorAll<HTMLElement>("[data-track-id]").length ===
+            trackIndex + 1
+              ? document.querySelector<HTMLElement>("[data-track-id]")
+              : null,
+          `track ${trackIndex + 1} 件`
+        );
       }
       const tracks = await waitForTrackCount(trackIndex + 1);
       const source = await findLibraryClip(clipId);
@@ -361,7 +428,11 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
       });
     },
     async openExportMenu() {
-      await clickButtonByAriaLabel("Export menu");
+      await clickStudioAriaButtonUntil(
+        "Export menu",
+        () => buttonByName("Multitrack"),
+        "Multitrack export ボタン"
+      );
     },
     async clickMultitrackExport() {
       const button = await waitForElement(
@@ -373,7 +444,7 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
           "Studio の Multitrack export が利用できません。Premier プランを確認してください"
         );
       }
-      button.click();
+      dispatchStudioPointerClick(button);
     },
   };
 }

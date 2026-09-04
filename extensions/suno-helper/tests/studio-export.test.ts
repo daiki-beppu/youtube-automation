@@ -1,8 +1,17 @@
+// @vitest-environment jsdom
+
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../lib/messaging", () => ({ sendMessage: vi.fn() }));
 
-import { exportStudioMultitrack } from "../lib/studio-export";
+import { sendMessage } from "../lib/messaging";
+import {
+  clickStudioAriaButtonUntil,
+  clickStudioButtonUntil,
+  commitStudioInputValue,
+  dispatchStudioPointerClick,
+  exportStudioMultitrack,
+} from "../lib/studio-export";
 
 const TITLE_BY_CLIP = new Map([
   ["clip-a", "Song A"],
@@ -30,6 +39,137 @@ function createDeps(
 }
 
 describe("Studio multitrack export", () => {
+  it("Given pointerdown で開く Studio menu When 操作 Then click() ではなく pointer sequence で開く", () => {
+    const button = document.createElement("button");
+    const menu = document.createElement("div");
+    button.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+    button.addEventListener("pointerdown", () => {
+      menu.textContent = "New Project";
+      document.body.append(menu);
+    });
+    document.body.append(button);
+
+    dispatchStudioPointerClick(button);
+
+    expect(document.body.textContent).toContain("New Project");
+    button.remove();
+    menu.remove();
+  });
+
+  it("Given 最初の All Songs 操作が遷移中に無視される When Library を開く Then clip が出るまで再操作する", async () => {
+    const button = document.createElement("button");
+    button.textContent = "All Songs";
+    button.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+    let attempts = 0;
+    button.addEventListener("pointerdown", () => {
+      attempts += 1;
+      if (attempts < 2) return;
+      const clip = document.createElement("div");
+      clip.dataset.clipId = "clip-a";
+      clip.draggable = true;
+      clip.getBoundingClientRect = () =>
+        ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+      document.body.append(clip);
+    });
+    document.body.append(button);
+
+    const clip = await clickStudioButtonUntil(
+      "All Songs",
+      () => document.querySelector<HTMLElement>("[data-clip-id]"),
+      "Library の clip 一覧",
+      "pointer"
+    );
+
+    expect(clip.dataset.clipId).toBe("clip-a");
+    expect(attempts).toBe(2);
+    document.body.replaceChildren();
+  });
+
+  it("Given trusted input が必要な Studio menu item When 操作 Then background に座標を渡す", async () => {
+    const button = document.createElement("button");
+    button.textContent = "AudioA";
+    button.setAttribute("aria-label", "Add Audio track");
+    button.getBoundingClientRect = () =>
+      ({ left: 30, top: 40, width: 20, height: 10 }) as DOMRect;
+    vi.mocked(sendMessage).mockImplementation(async (type) => {
+      if (type !== "sendTrustedClick") return undefined;
+      const track = document.createElement("div");
+      track.dataset.trackId = "track-2";
+      track.getBoundingClientRect = () =>
+        ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+      document.body.append(track);
+    });
+    document.body.append(button);
+
+    await clickStudioAriaButtonUntil(
+      "Add Audio track",
+      () => document.querySelector<HTMLElement>("[data-track-id]"),
+      "track 2 件"
+    );
+
+    expect(sendMessage).toHaveBeenCalledWith("sendTrustedClick", {
+      x: 40,
+      y: 45,
+    });
+    document.body.replaceChildren();
+    vi.mocked(sendMessage).mockReset();
+  });
+
+  it("Given Studio の inline rename When 値を確定 Then blur で保存を発火する", () => {
+    const input = document.createElement("input");
+    let committed = "";
+    input.addEventListener("blur", () => {
+      committed = input.value;
+    });
+    document.body.append(input);
+    input.focus();
+
+    commitStudioInputValue(input, "collection-2026");
+
+    expect(committed).toBe("collection-2026");
+    input.remove();
+  });
+
+  it("Given 最初の Add new track 操作が無視される When menu を開く Then項目が出るまで再操作する", async () => {
+    const button = document.createElement("button");
+    button.setAttribute("aria-label", "Add new track");
+    button.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+    let attempts = 0;
+    vi.mocked(sendMessage).mockImplementation(async (type) => {
+      if (type !== "sendTrustedClick") return undefined;
+      attempts += 1;
+      if (attempts < 2) return;
+      const item = document.createElement("button");
+      item.textContent = "AudioA";
+      item.setAttribute("aria-label", "Add Audio track");
+      item.getBoundingClientRect = () =>
+        ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+      document.body.append(item);
+    });
+    document.body.append(button);
+
+    const item = await clickStudioAriaButtonUntil(
+      "Add new track",
+      () =>
+        document.querySelector<HTMLButtonElement>(
+          'button[aria-label="Add Audio track"]'
+        ),
+      "Add Audio track ボタン"
+    );
+
+    expect(item.getAttribute("aria-label")).toBe("Add Audio track");
+    expect(attempts).toBe(2);
+    expect(sendMessage).toHaveBeenCalledWith("sendTrustedClick", {
+      x: 10,
+      y: 10,
+    });
+    document.body.replaceChildren();
+    vi.mocked(sendMessage).mockReset();
+  });
+
   it("Given clip IDs When export Then collection 名の project に各 clip を配置して Multitrack を開始する", async () => {
     const deps = createDeps();
 

@@ -1,4 +1,7 @@
-const TRUSTED_DOWNLOAD_HOSTS = ["suno.com"];
+const TRUSTED_DOWNLOAD_HOSTS = [
+  "suno.com",
+  "suno-ai--studio-bounce-prod-web.modal.run",
+];
 const TRUSTED_DOWNLOAD_HOST_SUFFIXES = [".suno.com", ".suno.ai"];
 const DOWNLOAD_WATCHER_SESSION_KEY = "suno-helper:downloadWatcher";
 const DOWNLOAD_COMPLETE_POLL_MS = 3000;

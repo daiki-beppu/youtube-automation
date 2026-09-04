@@ -19,7 +19,7 @@ import { onMessage, sendMessage } from "../lib/messaging";
 import { showSunoNotification } from "../lib/notification";
 import { relayTabId, requireRelayTab } from "../lib/overlay-relay";
 import { migrateServerSourcesStorage } from "../lib/storage";
-import { sendTrustedCmdP } from "../lib/trusted-shortcut";
+import { sendTrustedClick, sendTrustedCmdP } from "../lib/trusted-shortcut";
 import {
   acquireUnattendedLease,
   releaseUnattendedLease,
@@ -229,6 +229,14 @@ export default defineBackground(() => {
       throw new Error("sendTrustedCmdP: 送信元タブが特定できません");
     }
     await sendTrustedCmdP(tabId, data.isMac);
+  });
+
+  onMessage("sendTrustedClick", async ({ data, sender }) => {
+    const tabId = relayTabId(sender);
+    if (tabId === null) {
+      throw new Error("sendTrustedClick: 送信元タブが特定できません");
+    }
+    await sendTrustedClick(tabId, data.x, data.y);
   });
 
   onMessage("fetchCompatibilityWarning", ({ data, sender }) => {
