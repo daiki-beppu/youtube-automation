@@ -82,11 +82,11 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> None:
-    parser = _build_parser()
-    args = parser.parse_args()
-
-    # short skill-config から選択 engine のセクションを読み込む。
+def _resolve_generation_settings(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> tuple[str, dict, str, str]:
+    """CLI 引数と short 設定から生成パラメータを解決する."""
     skill_cfg = load_skill_config(SHORT_SKILL_NAME)
     engine = args.engine or skill_cfg.get("engine", "veo")
     if engine not in {"veo", "fal"}:
@@ -95,19 +95,72 @@ def main() -> None:
     default_model = DEFAULT_FAL_MODEL if engine == "fal" else DEFAULT_MODEL
     model = args.model or engine_cfg.get("model", default_model)
     prompt = args.prompt or engine_cfg.get("default_prompt", DEFAULT_PROMPT)
+    return engine, engine_cfg, model, prompt
 
-    # コレクションパス解決
+
+def _resolve_collection_path(args: argparse.Namespace, parser: argparse.ArgumentParser) -> Path:
+    """CLI 引数または現在位置からコレクションパスを解決する."""
     if args.collection:
         collection_path = Path(args.collection)
         if not collection_path.is_absolute():
-            collection_path = Path.cwd() / collection_path
-    else:
-        cwd = Path.cwd()
-        if CollectionPaths(cwd).assets_dir.exists():
-            collection_path = cwd
-        else:
-            parser.error("コレクションパスを指定するか、コレクションディレクトリ内で実行してください")
-            return
+            return Path.cwd() / collection_path
+        return collection_path
+
+    cwd = Path.cwd()
+    if CollectionPaths(cwd).assets_dir.exists():
+        return cwd
+    parser.error("コレクションパスを指定するか、コレクションディレクトリ内で実行してください")
+
+
+def _generate(
+    engine: str,
+    engine_cfg: dict,
+    image_path: Path,
+    output_path: Path,
+    model: str,
+    prompt: str,
+) -> bool:
+    """選択されたエンジンで Shorts ループを生成する."""
+    if engine != "fal":
+        try:
+            client = create_veo_genai_client()
+        except ConfigError as e:
+            print(f"[ERROR] {e}")
+            return False
+        return generate_loop_video(
+            client,
+            image_path,
+            output_path,
+            model,
+            prompt,
+            aspect_ratio=SHORT_ASPECT_RATIO,
+        )
+
+    raw_canvas = engine_cfg.get("canvas", {})
+    canvas = {str(key): tuple(value) for key, value in raw_canvas.items()}
+    upscale = engine_cfg.get("upscale_to", [1080, 1920])
+    return generate_fal_loop_video(
+        image_path,
+        output_path,
+        model,
+        prompt,
+        duration_seconds=int(engine_cfg.get("duration_seconds", 8)),
+        aspect_ratio=SHORT_ASPECT_RATIO,
+        resolution=str(engine_cfg.get("resolution", "768P")),
+        prompt_expansion_mode=str(engine_cfg.get("prompt_expansion_mode", "balanced")),
+        timeout_sec=float(engine_cfg.get("timeout_seconds", 600)),
+        poll_interval_sec=float(engine_cfg.get("poll_interval_seconds", 2)),
+        allowed_models=frozenset(engine_cfg.get("allowed_models", DEFAULT_FAL_ALLOWED_MODELS)),
+        canvas=canvas or {SHORT_ASPECT_RATIO: (768, 1344)},
+        upscale_to=tuple(upscale) if upscale is not None else None,
+    )
+
+
+def main() -> None:
+    parser = _build_parser()
+    args = parser.parse_args()
+    engine, engine_cfg, model, prompt = _resolve_generation_settings(args, parser)
+    collection_path = _resolve_collection_path(args, parser)
 
     try:
         image_path, output_path = resolve_paths(collection_path)
@@ -135,39 +188,7 @@ def main() -> None:
 
     # 生成実行
     start_time = time.monotonic()
-    if engine == "fal":
-        raw_canvas = engine_cfg.get("canvas", {})
-        canvas = {str(key): tuple(value) for key, value in raw_canvas.items()}
-        upscale = engine_cfg.get("upscale_to", [1080, 1920])
-        success = generate_fal_loop_video(
-            image_path,
-            output_path,
-            model,
-            prompt,
-            duration_seconds=int(engine_cfg.get("duration_seconds", 8)),
-            aspect_ratio=SHORT_ASPECT_RATIO,
-            resolution=str(engine_cfg.get("resolution", "768P")),
-            prompt_expansion_mode=str(engine_cfg.get("prompt_expansion_mode", "balanced")),
-            timeout_sec=float(engine_cfg.get("timeout_seconds", 600)),
-            poll_interval_sec=float(engine_cfg.get("poll_interval_seconds", 2)),
-            allowed_models=frozenset(engine_cfg.get("allowed_models", DEFAULT_FAL_ALLOWED_MODELS)),
-            canvas=canvas or {SHORT_ASPECT_RATIO: (768, 1344)},
-            upscale_to=tuple(upscale) if upscale is not None else None,
-        )
-    else:
-        try:
-            client = create_veo_genai_client()
-        except ConfigError as e:
-            print(f"[ERROR] {e}")
-            sys.exit(1)
-        success = generate_loop_video(
-            client,
-            image_path,
-            output_path,
-            model,
-            prompt,
-            aspect_ratio=SHORT_ASPECT_RATIO,
-        )
+    success = _generate(engine, engine_cfg, image_path, output_path, model, prompt)
     elapsed = time.monotonic() - start_time
 
     print()
