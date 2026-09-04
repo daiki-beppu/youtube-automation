@@ -38,7 +38,10 @@ def _gate_reason(root: Path) -> str | None:
         return f"デフォルトブランチ以外（{branch or 'detached'}）のため自動追従しません"
     if _git_output(root, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}") is None:
         return "追跡 upstream branch がないため自動追従しません"
-    if _git_output(root, "status", "--porcelain", "--untracked-files=no"):
+    status = _git_output(root, "status", "--porcelain", "--untracked-files=no")
+    if status is None:
+        return "作業ツリーを確認できないため自動追従しません"
+    if status:
         return "追跡ファイルに未コミット変更があるため自動追従しません"
     return None
 
@@ -99,8 +102,11 @@ def _run(_: argparse.Namespace) -> int:
                     print(f"{_PREFIX} 追従に失敗しました")
                 print(f"{_PREFIX} 復旧: uv run yt-automation-update apply --commit")
                 return 0
-            actions = _followup_actions(root, output)
             print(f"{_PREFIX} upstream への追従と commit が完了しました")
+            try:
+                actions = _followup_actions(root, output)
+            except (OSError, subprocess.TimeoutExpired):
+                actions = ["更新後の migrate / render 検査に失敗しました。手動で確認してください"]
             if actions:
                 print(f"{_PREFIX} 要対応: {', '.join(actions)}")
     except (ConfigError, OSError, subprocess.TimeoutExpired):

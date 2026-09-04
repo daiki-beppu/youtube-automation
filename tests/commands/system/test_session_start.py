@@ -171,7 +171,20 @@ def test_check_timeout_is_quiet(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     assert capsys.readouterr().out == ""
 
 
-def test_four_condition_gate_uses_tracking_branch_and_ignores_untracked(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    ("changed_command", "value", "reason"),
+    [
+        (None, None, None),
+        (("rev-parse", "--path-format=absolute", "--git-dir"), "/main/.git/worktrees/channel", "linked worktree"),
+        (("branch", "--show-current"), "feature", "デフォルトブランチ以外"),
+        (("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"), None, "追跡 upstream"),
+        (("status", "--porcelain", "--untracked-files=no"), " M tracked.txt", "未コミット変更"),
+        (("status", "--porcelain", "--untracked-files=no"), None, "確認できない"),
+    ],
+)
+def test_four_condition_gate_uses_tracking_branch_and_ignores_untracked(
+    monkeypatch: pytest.MonkeyPatch, changed_command, value, reason
+) -> None:
     root = Path("/channel")
     outputs = {
         ("rev-parse", "--path-format=absolute", "--git-dir"): "/channel/.git",
@@ -181,5 +194,29 @@ def test_four_condition_gate_uses_tracking_branch_and_ignores_untracked(monkeypa
         ("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"): "origin/main",
         ("status", "--porcelain", "--untracked-files=no"): "",
     }
+    if changed_command is not None:
+        outputs[changed_command] = value
     monkeypatch.setattr(session_start, "_git_output", lambda root, *args: outputs.get(args))
-    assert session_start._gate_reason(root) is None
+    actual = session_start._gate_reason(root)
+    assert actual is None if reason is None else reason in actual
+
+
+@pytest.mark.parametrize("failing_command", ["migrate-config", "yt-document-render"])
+def test_successful_commit_is_reported_when_followup_cannot_start(
+    tmp_path: Path, monkeypatch, capsys, failing_command
+) -> None:
+    repo = _repo(tmp_path, 'branch="main"')
+    _environment(monkeypatch, repo)
+    monkeypatch.setattr(session_start, "_gate_reason", lambda root: None)
+
+    def command(args, root, **kwargs):
+        if failing_command in args:
+            raise OSError("cannot start")
+        return subprocess.CompletedProcess(args, 1 if args[-1] == "check" else 0, "", "")
+
+    monkeypatch.setattr(session_start, "_command", command)
+    assert session_start.main([]) == 0
+    output = capsys.readouterr().out
+    assert "追従と commit が完了" in output
+    assert "検査に失敗" in output
+    assert len(output.splitlines()) <= 3
