@@ -12,7 +12,8 @@ import tempfile
 from pathlib import Path
 
 from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.commands.channel.channel_import import SLUG_PATTERN, _validate_config
+from youtube_automation.commands.channel.channel_import import SLUG_PATTERN, _validate_config, _workspace_root
+from youtube_automation.core.errors import ConfigError
 from youtube_automation.infrastructure.auth.client_secrets import template_bytes
 
 EXIT_OK = 0
@@ -159,7 +160,7 @@ def export_channel(
             print("[error] channel に未 commit の変更があります（--allow-dirty で override）", file=sys.stderr)
             return EXIT_USAGE
         plan = _copy_plan(source)
-    except (OSError, ValueError) as error:
+    except (ConfigError, OSError, ValueError) as error:
         print(f"[error] export の検証に失敗しました: {error}", file=sys.stderr)
         return EXIT_VALIDATION
     count, size = len(plan), sum(item[2] for item in plan)
@@ -176,8 +177,9 @@ def export_channel(
             target = staging / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(_validated_target(copy_source, source) if copy_source.is_symlink() else copy_source, target)
-        copied_count = len(plan)
-        copied_size = sum((staging / relative).stat().st_size for _, relative, _ in plan)
+        copied_plan = _copy_plan(staging)
+        copied_count = len(copied_plan)
+        copied_size = sum(item[2] for item in copied_plan)
         if (copied_count, copied_size) != (count, size):
             raise ValueError("copy 前後のファイル数または総サイズが一致しません")
         _validate_config(staging)
@@ -185,7 +187,7 @@ def export_channel(
         if destination_was_empty:
             destination.rmdir()
         staging.rename(destination)
-    except (OSError, ValueError) as error:
+    except (ConfigError, OSError, ValueError) as error:
         shutil.rmtree(staging, ignore_errors=True)
         if destination_was_empty and not destination.exists():
             destination.mkdir()
@@ -214,7 +216,7 @@ def run(args: argparse.Namespace) -> int:
     return export_channel(
         args.slug,
         args.dest,
-        workspace=Path.cwd(),
+        workspace=_workspace_root(Path.cwd()),
         allow_dirty=args.allow_dirty,
         dry_run=args.dry_run,
     )

@@ -4,7 +4,10 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from youtube_automation.commands.channel import channel_export
+from youtube_automation.core.errors import ConfigError
 
 
 def _workspace(tmp_path: Path) -> tuple[Path, Path]:
@@ -110,17 +113,19 @@ def test_export_refuses_nonempty_destination_and_dry_run_writes_nothing(tmp_path
     assert not destination.exists()
 
 
-def test_export_validation_failure_rolls_back_without_touching_source(tmp_path: Path, monkeypatch) -> None:
+@pytest.mark.parametrize("error_type", [ConfigError, OSError, ValueError])
+def test_export_validation_failure_rolls_back_without_touching_source(tmp_path: Path, monkeypatch, error_type) -> None:
     workspace, source = _workspace(tmp_path)
     before = subprocess.run(
         ["git", "status", "--porcelain"], cwd=workspace, check=True, capture_output=True, text=True
     ).stdout
     monkeypatch.setattr(
-        channel_export, "_validate_config", lambda _path: (_ for _ in ()).throw(ValueError("bad config"))
+        channel_export, "_validate_config", lambda _path: (_ for _ in ()).throw(error_type("bad config"))
     )
     destination = tmp_path / "exported"
     assert channel_export.export_channel("demo", destination, workspace=workspace) == channel_export.EXIT_VALIDATION
     assert not destination.exists()
+    assert not list(tmp_path.glob(".channel-export-*"))
     assert (
         subprocess.run(
             ["git", "status", "--porcelain"], cwd=workspace, check=True, capture_output=True, text=True
@@ -154,3 +159,11 @@ def test_initial_commit_excludes_copied_secrets_and_media(tmp_path: Path) -> Non
     assert not set(ignored).intersection(staged)
     assert tracked in staged
     assert "auth/client_secrets.template.json" in staged
+
+
+def test_export_cli_finds_workspace_from_channel_subdirectory(tmp_path: Path, monkeypatch) -> None:
+    _, source = _workspace(tmp_path)
+    monkeypatch.chdir(source / "config")
+    destination = tmp_path / "exported"
+    assert channel_export.main(["demo", str(destination), "--dry-run"]) == 0
+    assert not destination.exists()
