@@ -8,6 +8,7 @@ import pytest
 
 from youtube_automation.commands.channel import channel_export
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.analytics.channel_registry import ChannelRegistryUpdate
 
 
 @pytest.fixture(autouse=True)
@@ -199,7 +200,7 @@ def test_registry_write_failure_keeps_export_and_prints_manual_document(tmp_path
     def fail_write(_update) -> None:
         raise OSError("read only")
 
-    monkeypatch.setattr(channel_export.ChannelRegistryUpdate, "write", fail_write)
+    monkeypatch.setattr(ChannelRegistryUpdate, "write", fail_write)
     assert (
         channel_export.export_channel("demo", destination, workspace=workspace, registry=registry)
         == channel_export.EXIT_VALIDATION
