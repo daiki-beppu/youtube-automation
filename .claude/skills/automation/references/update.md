@@ -573,3 +573,8 @@ git commit -m "chore: youtube-automation <target_ref> への追従 (#N)"
 - `src/youtube_automation/commands/system/automation_update.py`（upstream リポ）— 本スキルが委譲する機械的手順の実体（`yt-automation-update check` / `apply`）
 - `/automation-release`（upstream リポ）— リリース PR を作成し CHANGELOG.md を昇格させる upstream 側スキル（本スキルが読み取るリリース本文を生成する）
 - `/setup` — 追従後に `yt-doctor` で WARNING / FAILED が出た場合の再診断入口、および `[HUMAN STEP]` の書き方の参考実装
+
+
+### `--allow-dirty --commit` の再実行と既存差分
+
+`--commit` は今回の apply 前後で新たに status に現れた path だけを commit する。`--allow-dirty` を付けても開始前の tracked / staged / untracked 差分は含めない（#4911）。前回失敗時の pin 書き換え等が既に dirty な場合、その差分は手動確認して個別 commit してから再実行する。既存の変更をすべて自動 stage する復旧には使わない。

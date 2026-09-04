@@ -204,12 +204,13 @@ def _git_status_paths(root: Path) -> set[str]:
 
 
 def _commit_apply_changes(root: Path, before_paths: set[str], ref: str) -> None:
+    # #4911: --allow-dirty でも開始前の変更は含めない。既存の staged 変更も commit --only で保護する。
     paths = sorted(_git_status_paths(root) - before_paths)
     if not paths:
         raise _StepFailed("apply 前後の git status に commit 対象の差分がありません")
     commands = [
         ["git", "add", "--", *paths],
-        ["git", "commit", "-m", f"chore: youtube-automation {ref} への追従"],
+        ["git", "commit", "--only", "-m", f"chore: youtube-automation {ref} への追従", "--", *paths],
     ]
     for command in commands:
         try:

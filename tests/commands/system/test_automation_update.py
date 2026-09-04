@@ -874,12 +874,18 @@ def _init_apply_git_repo(repo: Path) -> None:
     subprocess.run(["git", "commit", "-qm", "base"], cwd=repo, check=True)
 
 
+@pytest.mark.parametrize("branch_pin", [False, True])
+@pytest.mark.parametrize("allow_dirty", [False, True])
 def test_apply_commit_commits_only_new_status_paths(
-    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, branch_pin: bool, allow_dirty: bool
 ) -> None:
-    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    repo = _write_repo(tmp_path, BRANCH_FOLLOW_PYPROJECT if branch_pin else INLINE_TABLE_PYPROJECT)
     _init_apply_git_repo(repo)
     (repo / "existing-untracked.txt").write_text("keep me local\n", encoding="utf-8")
+
+    if allow_dirty:
+        (repo / "preexisting-staged.txt").write_text("user work", encoding="utf-8")
+        subprocess.run(["git", "add", "preexisting-staged.txt"], cwd=repo, check=True)
 
     monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: False)
     monkeypatch.setattr(automation_update, "_check_channel_config", lambda root: "config/channel/ ロード成功")
@@ -889,26 +895,35 @@ def test_apply_commit_commits_only_new_status_paths(
             generated = cwd / ".claude" / "skills" / "generated.md"
             generated.parent.mkdir(parents=True)
             generated.write_text("generated\n", encoding="utf-8")
+        if cmd[:2] == ["uv", "lock"] and branch_pin:
+            _write_uv_lock(cwd, _SHA_NEW)
         return 0
 
     monkeypatch.setattr(automation_update, "_run_command", _run)
 
-    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--commit"]) == 0
+    args = ["apply", "--target", str(repo), "--commit"]
+    args += [] if branch_pin else ["--tag", "v5.6.0"]
+    args += ["--allow-dirty"] if allow_dirty else []
+    assert main(args) == 0
+    expected_ref = _SHA_NEW[:12] if branch_pin else "v5.6.0"
     assert (
         subprocess.run(
             ["git", "log", "-1", "--pretty=%s"], cwd=repo, check=True, capture_output=True, text=True
         ).stdout.strip()
-        == "chore: youtube-automation v5.6.0 への追従"
+        == f"chore: youtube-automation {expected_ref} への追従"
     )
     committed = subprocess.run(
         ["git", "show", "--pretty=", "--name-only", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
     ).stdout.splitlines()
-    assert committed == [".claude/skills/generated.md", "pyproject.toml"]
+    assert committed == [".claude/skills/generated.md", "uv.lock" if branch_pin else "pyproject.toml"]
     remaining = subprocess.run(
         ["git", "status", "--porcelain"], cwd=repo, check=True, capture_output=True, text=True
     ).stdout
     assert "?? existing-untracked.txt\n" in remaining
     assert ".claude/skills/generated.md" not in remaining
+
+    if allow_dirty:
+        assert "A  preexisting-staged.txt\n" in remaining
 
 
 def test_apply_commit_failure_keeps_updated_worktree(
