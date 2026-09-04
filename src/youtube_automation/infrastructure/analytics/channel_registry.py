@@ -1,14 +1,64 @@
-"""所有チャンネル registry の読み取り専用 loader。"""
+"""所有チャンネル registry の loader と原子的 writer。"""
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
+import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from youtube_automation.core.errors import ChannelRegistryError
 
 DEFAULT_CHANNEL_REGISTRY = Path.home() / ".config" / "tayk" / "channels.json"
+
+
+@dataclass(frozen=True)
+class ChannelRegistryUpdate:
+    path: Path
+    channels: tuple[Path, ...]
+    action: str
+    index: int
+
+    def write(self) -> None:
+        """変更があれば backup を残して registry を原子的に置換する。"""
+        if self.action == "noop":
+            return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        if self.path.exists():
+            shutil.copy2(self.path, self.path.with_name(f"{self.path.name}.bak"))
+        descriptor, temporary_name = tempfile.mkstemp(prefix=f".{self.path.name}.", dir=self.path.parent)
+        temporary = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as file:
+                json.dump([str(channel) for channel in self.channels], file, ensure_ascii=False, indent=2)
+                file.write("\n")
+            temporary.replace(self.path)
+        except OSError:
+            temporary.unlink(missing_ok=True)
+            raise
+
+
+def _same_path(left: Path, right: Path) -> bool:
+    normalized_left = os.path.normcase(os.path.normpath(str(left)))
+    normalized_right = os.path.normcase(os.path.normpath(str(right)))
+    return normalized_left == normalized_right or left.resolve(strict=False) == right.resolve(strict=False)
+
+
+def plan_channel_registry_update(path: Path, *, source: Path, destination: Path) -> ChannelRegistryUpdate:
+    """source の同位置置換、destination の追加、または no-op を計画する。"""
+    destination = destination.absolute()
+    channels = load_channel_registry(path) if path.exists() else []
+    for index, channel in enumerate(channels):
+        if _same_path(channel, destination):
+            return ChannelRegistryUpdate(path, tuple(channels), "noop", index)
+    for index, channel in enumerate(channels):
+        if _same_path(channel, source):
+            updated = [*channels]
+            updated[index] = destination
+            return ChannelRegistryUpdate(path, tuple(updated), "replace", index)
+    return ChannelRegistryUpdate(path, (*channels, destination), "append", len(channels))
 
 
 def load_channel_registry(path: Path | None = None) -> list[Path]:

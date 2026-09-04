@@ -10,6 +10,11 @@ from youtube_automation.commands.channel import channel_export
 from youtube_automation.core.errors import ConfigError
 
 
+@pytest.fixture(autouse=True)
+def _isolated_registry(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(channel_export, "DEFAULT_CHANNEL_REGISTRY", tmp_path / "registry/channels.json")
+
+
 def _workspace(tmp_path: Path) -> tuple[Path, Path]:
     workspace = tmp_path / "workspace"
     source = workspace / "channels" / "demo"
@@ -167,3 +172,39 @@ def test_export_cli_finds_workspace_from_channel_subdirectory(tmp_path: Path, mo
     destination = tmp_path / "exported"
     assert channel_export.main(["demo", str(destination), "--dry-run"]) == 0
     assert not destination.exists()
+
+def test_export_replaces_workspace_registry_entry_and_dry_run_only_reports_plan(tmp_path: Path, capsys) -> None:
+    workspace, source = _workspace(tmp_path)
+    other = tmp_path / "other"
+    destination = tmp_path / "exported"
+    registry = tmp_path / "channels.json"
+    registry.write_text(json.dumps([str(other), str(source)]), encoding="utf-8")
+
+    assert (
+        channel_export.export_channel("demo", destination, workspace=workspace, registry=registry, dry_run=True)
+        == channel_export.EXIT_OK
+    )
+    assert json.loads(registry.read_text(encoding="utf-8")) == [str(other), str(source)]
+    assert "registry plan: replace index=1" in capsys.readouterr().out
+
+    assert channel_export.export_channel("demo", destination, workspace=workspace, registry=registry) == 0
+    assert json.loads(registry.read_text(encoding="utf-8")) == [str(other), str(destination)]
+
+
+def test_registry_write_failure_keeps_export_and_prints_manual_document(tmp_path: Path, monkeypatch, capsys) -> None:
+    workspace, _ = _workspace(tmp_path)
+    destination = tmp_path / "exported"
+    registry = tmp_path / "channels.json"
+
+    def fail_write(_update) -> None:
+        raise OSError("read only")
+
+    monkeypatch.setattr(channel_export.ChannelRegistryUpdate, "write", fail_write)
+    assert (
+        channel_export.export_channel("demo", destination, workspace=workspace, registry=registry)
+        == channel_export.EXIT_VALIDATION
+    )
+    assert destination.is_dir()
+    captured = capsys.readouterr()
+    assert "手動更新" in captured.out
+    assert str(destination) in captured.out
