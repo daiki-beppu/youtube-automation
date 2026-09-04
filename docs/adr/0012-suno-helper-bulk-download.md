@@ -6,7 +6,7 @@ accepted (2026-06-23、#1143 レビューで改訂 2026-06-29)。
 
 ## Amendment: Studio Multitrack export（2026-09-04、#4923）
 
-ZIP の取得経路を Suno Studio の Multitrack export に置き換える。playlist 追加後に collection id 名の空 project を作成し、対象 clip をそれぞれ別 track の位置 0 に配置する。配置数を検証してから Export → Multitrack を押し、`blob:https://suno.com/...` の ZIP を `chrome.downloads` で監視する。`POST /collections/<id>/downloaded` の 4 フィールド契約は維持し、`format` は `"wav"` 固定とする。
+ZIP の取得経路を Suno Studio の Multitrack export に置き換える。playlist 追加後に collection id 名の空 project を作成し、対象 clip をそれぞれ別 track の位置 0 に配置する。配置数を検証してから Export → Multitrack を押し、`chrome.downloads` で ZIP を監視する。実画面では `blob:https://suno.com/...` と `https://suno-ai--studio-bounce-prod-web.modal.run/...` の両経路を確認したため、前者は origin を、後者は exact hostname を検証する。旧 Download all 用の `suno-ai--bulk-download-prod-web.modal.run` は信頼対象から削除する。`POST /collections/<id>/downloaded` の 4 フィールド契約は維持し、`format` は `"wav"` 固定とする。
 
 旧形式選択経路は廃止する。Studio が利用できない Premier 以外のアカウント、project 作成失敗、配置数不一致、Export 無効時は自動突破せず理由を表示して停止する。作成済み project は復旧用に残す。
 

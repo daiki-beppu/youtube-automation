@@ -12,8 +12,10 @@ playlist 追加完了後、拡張は以下の手順で ZIP export を実行す�
 2. project 名を collection id に変更し、Library の All Songs を開く
 3. 対象 clip をそれぞれ別 track の位置 0 へドラッグ＆ドロップする
 4. In Project の配置数が対象 clip 数と一致することを検証する
-5. Export → Multitrack を押し、WAV を格納した `blob:https://suno.com/...` の ZIP を開始する
+5. Export → Multitrack を押し、WAV を格納した ZIP を開始する。実画面では `blob:https://suno.com/...` または `https://suno-ai--studio-bounce-prod-web.modal.run/...` が download item URL になる
 6. `chrome.downloads` API で ZIP 完了を監視する
+
+download watcher は `blob:` の場合は origin が `https://suno.com` と一致するものだけを許可し、HTTPS の場合は Studio export 専用の `suno-ai--studio-bounce-prod-web.modal.run` を exact hostname で許可する。旧 Download all 用の `suno-ai--bulk-download-prod-web.modal.run` や任意の `modal.run` subdomain は許可しない。
 
 Suno Studio は Premier プラン限定。Studio を開けない、project を作れない、配置数が一致しない、
 または Multitrack が無効な場合は export せず、overlay に具体的な理由を表示して `ERROR` で停止する。
