@@ -298,6 +298,7 @@ class TestFalKeyRegistered:
             with pytest.raises(ConfigError, match="FAL_KEY"):
                 get_secret("FAL_KEY")
 
+
 # ---------- Issue #110: 帯域モニタリング用シークレット ----------
 
 
