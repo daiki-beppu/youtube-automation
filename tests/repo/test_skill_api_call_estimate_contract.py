@@ -86,6 +86,7 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-audio-studio": "ローカル音源の一覧表示・HTTP Range 配信のみ",
     "yt-automation-update": "バージョン pin bump / git 操作のみ",
     "yt-channel": "ローカルの workspace channel 列挙のみ",
+    "yt-channel-export": "ローカルの workspace channel コピーと config 検証のみ",
     "yt-channel-import": "ローカルの channel repository コピーと config 検証のみ",
     "yt-channel-init": "ローカルの config 雛形生成のみ",
     "yt-workspace-guard": "ローカルの workspace チャンネル境界判定のみ",
