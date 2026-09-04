@@ -101,6 +101,11 @@ interface DownloadFailedPayload {
 
 type StartDownloadResult = { ok: true } | { ok: false; message: string };
 
+/** background → runner: 成功時は close 責務を渡すため Studio tab の id を返す。 */
+type StartStudioExportResult =
+  | { ok: true; studioTabId: number }
+  | { ok: false; message: string };
+
 /** overlay → runner: ダウンロードのみ再実行するペイロード (#1251)。 */
 export interface RetryDownloadPayload {
   collectionId: string;
@@ -150,7 +155,9 @@ interface ProtocolMap {
    *  content script は chrome.downloads API にアクセスできないため background に委譲する。 */
   startDownload(): StartDownloadResult;
   /** runner → background: Studio tab を開いて Multitrack export を開始する。 */
-  startStudioExport(payload: StudioExportRequest): StartDownloadResult;
+  startStudioExport(payload: StudioExportRequest): StartStudioExportResult;
+  /** runner → background: ZIP 完了・失敗・中断のいずれでも Studio tab を閉じる。 */
+  closeStudioExport(payload: { studioTabId: number }): void;
   /** background → Studio content: project 作成・clip 配置・Multitrack export を実行する。 */
   performStudioExport(payload: StudioExportRequest): StartDownloadResult;
   /** runner → background: Studio export 起動前後の失敗時に chrome.downloads watcher を解除する (#1217)。 */

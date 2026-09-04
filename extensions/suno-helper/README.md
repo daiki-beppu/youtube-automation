@@ -94,7 +94,7 @@ build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/suno-helpe
 3. 拡張アイコンからポップアップを開き、**ローカル配信元** で動的検出されたチャンネル名つき候補を選ぶ。初回表示・配信元選択・collection 選択の各タイミングで一覧と prompts が自動取得される。
 4. `ready` な collection を checkbox で 1 件以上選び、prompts の自動取得後に **異常値の曲を再生成する** を選んでから実行する。1 件なら従来どおり現在の entry 選択を使い、2 件以上なら server 一覧順で各 collection の全 pattern を直列実行する。既定の ON は duration guard NG の entry を最大 2 回再生成する。OFF は追加生成せず、NG を警告表示したうえで生成済み全 clip を playlist / download 候補に残す。
 5. 各パターンで Style/Lyrics を注入 → Generate 押下 → 生成完了検知 → 次へ、を自動で繰り返す。
-6. 全件完了後、対象 clip を playlist へ追加し、Suno Studio に collection id 名の project を作る。各 clip を別 track の位置 0 に配置して件数を検証し、**Export → Multitrack** の WAV ZIP を監視して `POST /collections/<id>/downloaded` へ通知する。Studio は Premier プランが必要で、利用できない場合は理由を表示して停止する。
+6. 全件完了後、対象 clip を playlist へ追加し、Suno Studio に collection id 名の project を作る。各 clip を別 track の位置 0 に配置して件数を検証し、**Export → Multitrack** の WAV ZIP を監視して `POST /collections/<id>/downloaded` へ通知する。Studio 用に開いたタブは ZIP 完了・失敗・中断のいずれでも自動で閉じる（project 自体は Studio に残す）。Studio は Premier プランが必要で、利用できない場合は理由を表示して停止する。
 7. captcha challenge は waiting-captcha 表示で解消（多くは自動 verify）を待って続行する。entry 単位の一時的な失敗は Balanced 固定の上限で自動リトライし、上限超過分はスキップして完走する（#948）。スキップされた entry は一覧表示され、**失敗分のみ再実行** で再投入できる。
 
 prompt entry に `duration_sec` がある場合は、各 Generate 前に Duration の **Custom** を選択し、Suno UI の slider が公開する最小値・最大値の範囲内で指定秒数を注入する。selector 不在、範囲外、操作不受理、読戻し不一致は entry をエラー停止し、overlay に原因を表示する。`duration_sec` がない entry では Auto / Custom と slider の現在状態を変更しない。

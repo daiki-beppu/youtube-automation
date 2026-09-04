@@ -2,7 +2,10 @@ import type { DownloadSummary } from "../../shared/api";
 import type { ProgressPayload } from "../../shared/constants";
 import { PHASE } from "../../shared/constants";
 import { onMessage, sendMessage } from "./messaging";
-import { requestStudioMultitrackExport } from "./studio-export";
+import {
+  closeStudioExportTab,
+  requestStudioMultitrackExport,
+} from "./studio-export";
 
 type DownloadResult =
   | { ok: true; filename: string }
@@ -148,8 +151,12 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
   ): Promise<string | null> {
     const downloadPromise = waitForDownloadComplete();
     let watcherActive = true;
+    let studioTabId: number | null = null;
     try {
-      await requestStudioMultitrackExport({ collectionId, clipIds });
+      studioTabId = await requestStudioMultitrackExport({
+        collectionId,
+        clipIds,
+      });
       const downloadResult = await downloadPromise;
       if (deps.isAborted()) return null;
       if (!downloadResult) {
@@ -163,6 +170,11 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     } finally {
       if (watcherActive) {
         await cancelDownloadWatcher();
+      }
+      // ZIP は download 完了時点でディスクに書き終わっているため、成功・失敗・中断の
+      // いずれでもここで Studio tab を閉じる（Studio project 自体は仕様通り残す）。
+      if (typeof studioTabId === "number") {
+        await closeStudioExportTab(studioTabId);
       }
     }
   }

@@ -77,6 +77,7 @@ async function loadBackground(opts?: {
   migrationError?: Error;
   studioExportResult?: { ok: boolean; message?: string };
   studioTabId?: number;
+  tabsRemoveError?: Error;
 }) {
   vi.resetModules();
 
@@ -109,6 +110,9 @@ async function loadBackground(opts?: {
   const tabsCreate = vi.fn(() =>
     Promise.resolve({ id: opts?.studioTabId ?? 73 })
   );
+  const tabsRemove = opts?.tabsRemoveError
+    ? vi.fn(() => Promise.reject(opts.tabsRemoveError))
+    : vi.fn(() => Promise.resolve());
   vi.stubGlobal("browser", {
     runtime: {
       onInstalled: {
@@ -121,7 +125,11 @@ async function loadBackground(opts?: {
     },
     notifications: { create: notificationCreate },
     action: { onClicked: { addListener: vi.fn() } },
-    tabs: { create: tabsCreate, onUpdated: { addListener: vi.fn() } },
+    tabs: {
+      create: tabsCreate,
+      remove: tabsRemove,
+      onUpdated: { addListener: vi.fn() },
+    },
     storage: {
       session: {
         get: browserSessionGet,
@@ -329,6 +337,7 @@ async function loadBackground(opts?: {
     installedListeners,
     notificationCreate,
     tabsCreate,
+    tabsRemove,
     sessionStore,
     browserSessionGet,
     browserSessionSet,
@@ -546,8 +555,9 @@ async function flushPromises(): Promise<void> {
 // startDownload ----------------------------------------------------------------
 
 describe('background onMessage("startStudioExport")', () => {
-  it("Studio tab を作成して content script に export を依頼する", async () => {
-    const { handlers, sentMessages, tabsCreate } = await loadBackground();
+  it("Studio tab を作成して content script に export を依頼し tab id を返す", async () => {
+    const { handlers, sentMessages, tabsCreate, tabsRemove } =
+      await loadBackground();
     const request = { collectionId: "collection-a", clipIds: ["clip-a"] };
 
     const result = await handlers.get("startStudioExport")!({
@@ -555,22 +565,26 @@ describe('background onMessage("startStudioExport")', () => {
       sender: { tab: { id: 42 } },
     });
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, studioTabId: 73 });
     expect(tabsCreate).toHaveBeenCalledWith({ url: "https://suno.com/studio" });
     expect(sentMessages).toContainEqual({
       type: "performStudioExport",
       data: request,
       tabId: 73,
     });
+    // ZIP は Studio tab が生成するため、成功時はここで閉じない（runner が完了後に閉じる）。
+    expect(tabsRemove).not.toHaveBeenCalled();
   });
 
-  it("Studio 側の Premier エラーをそのまま返す", async () => {
+  it("Studio 側の Premier エラーをそのまま返し Studio tab を閉じる", async () => {
     const failure = {
       ok: false,
       message:
         "Studio の Multitrack export が利用できません。Premier プランを確認してください",
     };
-    const { handlers } = await loadBackground({ studioExportResult: failure });
+    const { handlers, tabsRemove } = await loadBackground({
+      studioExportResult: failure,
+    });
 
     await expect(
       handlers.get("startStudioExport")!({
@@ -578,6 +592,37 @@ describe('background onMessage("startStudioExport")', () => {
         sender: { tab: { id: 42 } },
       })
     ).resolves.toEqual(failure);
+    expect(tabsRemove).toHaveBeenCalledWith(73);
+  });
+});
+
+describe('background onMessage("closeStudioExport")', () => {
+  it("Given 成功した export When closeStudioExport Then Studio tab を閉じる", async () => {
+    const { handlers, tabsRemove } = await loadBackground();
+
+    await handlers.get("closeStudioExport")!({
+      data: { studioTabId: 73 },
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(tabsRemove).toHaveBeenCalledWith(73);
+  });
+
+  it("Given tab close が失敗する When closeStudioExport Then throw せず warn に留める", async () => {
+    const { handlers } = await loadBackground({
+      tabsRemoveError: new Error("No tab with id: 73"),
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await expect(
+      handlers.get("closeStudioExport")!({
+        data: { studioTabId: 73 },
+        sender: { tab: { id: 42 } },
+      })
+    ).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 });
 

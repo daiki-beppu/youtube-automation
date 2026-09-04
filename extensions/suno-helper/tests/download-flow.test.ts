@@ -9,8 +9,11 @@ const messagingMocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
 }));
 
+const STUDIO_TAB_ID = 73;
+
 const studioExportMocks = vi.hoisted(() => ({
-  requestStudioMultitrackExport: vi.fn(async () => undefined),
+  requestStudioMultitrackExport: vi.fn(async () => 73),
+  closeStudioExportTab: vi.fn(async () => undefined),
 }));
 
 vi.mock("../lib/messaging", () => ({
@@ -24,6 +27,7 @@ vi.mock("../lib/messaging", () => ({
 vi.mock("../lib/studio-export", () => ({
   requestStudioMultitrackExport:
     studioExportMocks.requestStudioMultitrackExport,
+  closeStudioExportTab: studioExportMocks.closeStudioExportTab,
 }));
 
 const CONTEXT = {
@@ -82,6 +86,7 @@ function arrangePartialDownloadSuccess(): void {
   studioExportMocks.requestStudioMultitrackExport.mockImplementationOnce(
     async () => {
       dispatchDownloadComplete();
+      return STUDIO_TAB_ID;
     }
   );
 }
@@ -97,7 +102,7 @@ describe("download flow", () => {
       return { ok: true };
     });
     studioExportMocks.requestStudioMultitrackExport.mockResolvedValue(
-      undefined
+      STUDIO_TAB_ID
     );
   });
 
@@ -143,6 +148,7 @@ describe("download flow", () => {
     studioExportMocks.requestStudioMultitrackExport.mockImplementationOnce(
       async () => {
         aborted = true;
+        return STUDIO_TAB_ID;
       }
     );
     const flow = createSubject(() => aborted);
@@ -246,6 +252,7 @@ describe("download flow", () => {
     studioExportMocks.requestStudioMultitrackExport.mockImplementationOnce(
       async () => {
         dispatchDownloadComplete();
+        return STUDIO_TAB_ID;
       }
     );
     const flow = createSubject(() => false);
@@ -286,6 +293,7 @@ describe("download flow", () => {
     studioExportMocks.requestStudioMultitrackExport.mockImplementationOnce(
       async () => {
         dispatchDownloadComplete();
+        return STUDIO_TAB_ID;
       }
     );
     const flow = createSubject(() => false);
@@ -293,6 +301,64 @@ describe("download flow", () => {
     await expect(
       flow.performDownload(CONTEXT, "collection", 2, 2, CLIP_IDS)
     ).rejects.toThrow(`${serverError} (phase=downloading)`);
+  });
+
+  it("download 成功時に Studio tab を閉じる", async () => {
+    arrangePartialDownloadSuccess();
+    const flow = createSubject(() => false);
+
+    await flow.performDownload(CONTEXT, "collection", 28, 56, CLIP_IDS);
+
+    expect(studioExportMocks.closeStudioExportTab).toHaveBeenCalledWith(
+      STUDIO_TAB_ID
+    );
+  });
+
+  it("timeout しても Studio tab を閉じる", async () => {
+    const flow = createSubject(() => false);
+    const result = flow.performDownload(CONTEXT, "collection", 2, 2, CLIP_IDS);
+    const rejection = expect(result).rejects.toThrow(
+      "Studio Multitrack export がタイムアウトしました"
+    );
+
+    await vi.advanceTimersByTimeAsync(660_000);
+    await rejection;
+
+    expect(studioExportMocks.closeStudioExportTab).toHaveBeenCalledWith(
+      STUDIO_TAB_ID
+    );
+  });
+
+  it("abort しても Studio tab を閉じる", async () => {
+    let aborted = false;
+    studioExportMocks.requestStudioMultitrackExport.mockImplementationOnce(
+      async () => {
+        aborted = true;
+        return STUDIO_TAB_ID;
+      }
+    );
+    const flow = createSubject(() => aborted);
+    const result = flow.performDownload(CONTEXT, "collection", 2, 2, CLIP_IDS);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await result;
+
+    expect(studioExportMocks.closeStudioExportTab).toHaveBeenCalledWith(
+      STUDIO_TAB_ID
+    );
+  });
+
+  it("export 開始に失敗したときは background 側の close に任せる", async () => {
+    studioExportMocks.requestStudioMultitrackExport.mockRejectedValueOnce(
+      new Error("Studio の Multitrack export が利用できません")
+    );
+    const flow = createSubject(() => false);
+
+    await expect(
+      flow.performDownload(CONTEXT, "collection", 2, 2, CLIP_IDS)
+    ).rejects.toThrow("Studio の Multitrack export が利用できません");
+
+    expect(studioExportMocks.closeStudioExportTab).not.toHaveBeenCalled();
   });
 
   it("既に downloading phase がある失敗理由を重複して付与しない", async () => {

@@ -47,6 +47,14 @@ export default defineBackground(() => {
   };
   const downloadWatcher = installDownloadWatcher({ sendMessage });
 
+  // Studio export 用に開いた tab は成否いずれの経路でも必ず閉じる。閉じ忘れると
+  // 複数 collection の直列実行や retryDownload の再試行ごとに Studio tab が積み上がる。
+  const closeStudioExportTab = async (studioTabId: number): Promise<void> => {
+    await browser.tabs.remove(studioTabId).catch((error: unknown) => {
+      console.warn("[suno-helper] Studio tab を閉じられませんでした:", error);
+    });
+  };
+
   installSunoContentScriptRecovery({
     addTabUpdatedListener: (listener) =>
       browser.tabs.onUpdated.addListener(listener),
@@ -170,22 +178,40 @@ export default defineBackground(() => {
         message: "Studio tab を開けませんでした",
       } as const;
     }
+    const studioTabId = tab.id;
     const deadline = Date.now() + 30_000;
     let lastError: unknown;
     while (Date.now() < deadline) {
       try {
-        const result = await sendMessage("performStudioExport", data, tab.id);
-        return result;
+        const result = await sendMessage(
+          "performStudioExport",
+          data,
+          studioTabId
+        );
+        if (!result.ok) {
+          // export を開始できなかった Studio tab は残しても再利用できないため即座に閉じる。
+          await closeStudioExportTab(studioTabId);
+          return result;
+        }
+        // 成功時の tab は blob ZIP の生成元なので閉じない。ZIP 完了後に runner が
+        // closeStudioExport を送るまで責務を渡す。
+        return { ok: true, studioTabId } as const;
       } catch (error) {
         lastError = error;
         await new Promise((resolve) => setTimeout(resolve, 200));
       }
     }
+    await closeStudioExportTab(studioTabId);
     const detail = lastError instanceof Error ? `: ${lastError.message}` : "";
     return {
       ok: false,
       message: `Studio を開けませんでした${detail}`,
     } as const;
+  });
+
+  onMessage("closeStudioExport", async ({ data, sender }) => {
+    requireRelayTab(sender, "closeStudioExport");
+    await closeStudioExportTab(data.studioTabId);
   });
 
   onMessage("cancelDownload", async ({ sender }) => {

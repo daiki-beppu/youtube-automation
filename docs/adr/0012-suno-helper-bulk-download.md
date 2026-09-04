@@ -8,7 +8,9 @@ accepted (2026-06-23、#1143 レビューで改訂 2026-06-29)。
 
 ZIP の取得経路を Suno Studio の Multitrack export に置き換える。playlist 追加後に collection id 名の空 project を作成し、対象 clip をそれぞれ別 track の位置 0 に配置する。配置数を検証してから Export → Multitrack を押し、`blob:https://suno.com/...` の ZIP を `chrome.downloads` で監視する。`POST /collections/<id>/downloaded` の 4 フィールド契約は維持し、`format` は `"wav"` 固定とする。
 
-旧形式選択経路は廃止する。Studio が利用できない Premier 以外のアカウント、project 作成失敗、配置数不一致、Export 無効時は自動突破せず理由を表示して停止する。作成済み project は復旧用に残す。以下の本文は当初決定の履歴として保持する。
+旧形式選択経路は廃止する。Studio が利用できない Premier 以外のアカウント、project 作成失敗、配置数不一致、Export 無効時は自動突破せず理由を表示して停止する。作成済み project は復旧用に残す。
+
+Studio 用に開いた tab は ZIP の生成元なので export 成功時点では閉じられない。background は成功時に tab id を runner へ返して close 責務を渡し、runner は download 完了・失敗・中断のいずれでもその tab を閉じる。export を開始できなかった経路では background が自分で閉じる。無人実行で複数 collection を直列処理しても Studio tab が積み上がらないようにするための契約。以下の本文は当初決定の履歴として保持する。
 
 Suno AI が一括ダウンロード機能（multi-select → "..." → Download all → フォーマット選択モーダル → ZIP ダウンロード）を追加したため、suno-helper Chrome 拡張の責務を「UI 自動生成 + playlist 作成 + 一括ダウンロード + ZIP パス通知」に拡張する。ダウンロード方式は Bridge fetch 傍受ではなく、DOM 操作 + `chrome.downloads` API + collection-serve への ZIP パス通知を採用する。現行 extension flow は playlist URL を捕捉しない。
 

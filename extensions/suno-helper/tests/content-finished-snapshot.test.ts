@@ -181,8 +181,10 @@ async function loadContentScript(
           data: { filename: overrides.downloadFilename },
         });
       }
+      return 73;
     }),
     performStudioMultitrackExport: vi.fn(() => Promise.resolve()),
+    closeStudioExportTab: vi.fn(() => Promise.resolve()),
   }));
 
   vi.doMock("../../shared/api", async () => ({

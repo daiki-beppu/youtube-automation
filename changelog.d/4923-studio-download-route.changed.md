@@ -1,1 +1,2 @@
 - suno-helper のダウンロードを Suno Studio の Multitrack export に変更し、WAV ZIP を自動取得するようにしました。形式選択と旧一括ダウンロード経路は廃止しました。
+- Studio export 用に開いたタブを ZIP 完了・失敗・中断のいずれでも自動で閉じるようにし、複数 collection の連続実行でタブが増え続けないようにしました。

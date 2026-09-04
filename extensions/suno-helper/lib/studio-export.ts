@@ -419,11 +419,22 @@ export function performStudioMultitrackExport(
   return exportStudioMultitrack(request, createBrowserStudioExportDeps());
 }
 
+/** 開いた Studio tab の id を返す。呼び出し側は ZIP 完了後に必ず closeStudioExportTab で閉じる。 */
 export async function requestStudioMultitrackExport(
   request: StudioExportRequest
-): Promise<void> {
+): Promise<number> {
   const result = await sendMessage("startStudioExport", request);
   if (!result?.ok) {
     throw new Error(result?.message ?? "Studio export を開始できませんでした");
   }
+  return result.studioTabId;
+}
+
+/** tab の close 失敗は download 結果を左右しないため warn に留める。 */
+export async function closeStudioExportTab(studioTabId: number): Promise<void> {
+  await sendMessage("closeStudioExport", { studioTabId }).catch(
+    (error: unknown) => {
+      console.warn("[suno-helper] closeStudioExport 中継失敗:", error);
+    }
+  );
 }

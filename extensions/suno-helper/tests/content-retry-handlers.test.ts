@@ -249,6 +249,7 @@ async function loadContentScript(overrides?: {
   vi.doMock("../lib/studio-export", () => ({
     requestStudioMultitrackExport: studioExportMock,
     performStudioMultitrackExport: vi.fn(() => Promise.resolve()),
+    closeStudioExportTab: vi.fn(() => Promise.resolve()),
   }));
 
   vi.doMock("../../shared/api", async () => ({

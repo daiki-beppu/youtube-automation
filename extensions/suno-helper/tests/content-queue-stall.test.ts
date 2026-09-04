@@ -222,8 +222,9 @@ async function loadContentScriptWithStalledCompletion(options: {
   }));
 
   vi.doMock("../lib/studio-export", () => ({
-    requestStudioMultitrackExport: vi.fn(() => Promise.resolve()),
+    requestStudioMultitrackExport: vi.fn(() => Promise.resolve(73)),
     performStudioMultitrackExport: vi.fn(() => Promise.resolve()),
+    closeStudioExportTab: vi.fn(() => Promise.resolve()),
   }));
 
   vi.doMock("../../shared/api", async () => ({
