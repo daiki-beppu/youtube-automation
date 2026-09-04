@@ -33,13 +33,16 @@ def normalize_suno_name_for_lookup(value: str) -> str:
 
 
 def suno_name_lookup_candidates(name: str) -> tuple[str, ...]:
-    """Return full and derived aliases in most-specific-first order."""
+    """Return full and derived aliases in most-specific-first order.
+
+    Both prompt names and downloaded filename stems flow through here, so this
+    only strips conventions that never occur inside a real song title.  Filename
+    conventions that a title could legitimately start with belong to
+    :func:`suno_filename_lookup_candidates`.
+    """
     stripped_name = name.strip()
     prefix_match = _SUNO_TRACK_PREFIX_RE.match(stripped_name)
-    if prefix_match is not None:
-        base = prefix_match.group(1).strip()
-    else:
-        base, _ = split_suno_studio_track_prefix(stripped_name)
+    base = prefix_match.group(1).strip() if prefix_match is not None else stripped_name
     candidates = [base]
     dash_positions = [index for index, char in enumerate(base) if unicodedata.category(char) == "Pd"]
     candidates.extend(base[index + 1 :].strip() for index in dash_positions)
@@ -49,8 +52,27 @@ def suno_name_lookup_candidates(name: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(candidate for candidate in candidates if candidate))
 
 
+def suno_filename_lookup_candidates(stem: str) -> tuple[str, ...]:
+    """Return lookup candidates for a downloaded audio filename stem.
+
+    Studio Multitrack members carry a ``<track number> `` prefix that is not part
+    of the prompt name.  The unstripped stem stays first so a title that itself
+    begins with a number (``3 AM``) keeps matching its own entry, and the
+    stripped aliases only act as a fallback.
+    """
+    candidates = list(suno_name_lookup_candidates(stem))
+    base, track_number = split_suno_studio_track_prefix(stem)
+    if track_number is not None:
+        candidates.extend(suno_name_lookup_candidates(base))
+    return tuple(dict.fromkeys(candidate for candidate in candidates if candidate))
+
+
 def split_suno_studio_track_prefix(stem: str) -> tuple[str, int | None]:
-    """Split Studio Multitrack's ``<track number> <title>`` prefix."""
+    """Split a filename stem's Studio Multitrack ``<track number> <title>`` prefix.
+
+    Only ever call this on filename stems: prompt names may legitimately start
+    with ``<number> `` and must keep their prefix.
+    """
     stripped_stem = stem.strip()
     match = _SUNO_STUDIO_TRACK_PREFIX_RE.match(stripped_stem)
     if match is None:

@@ -132,3 +132,59 @@ def test_extract_rejects_studio_tracks_exceeding_entry_variants_without_partial_
         )
 
     assert not (tmp_path / "02-Individual-music").exists()
+
+
+def test_extract_keeps_numeric_leading_titles_matching_their_own_entry(tmp_path: Path) -> None:
+    """Given 数字始まりの曲名 entry と、その残りに一致する別 entry がある Download all ZIP
+    When prompts と照合して展開する
+    Then 数字 prefix を Studio トラック番号と誤認せず、各ファイルを自分の entry へ配置する。
+    """
+    prompts_dir = tmp_path / "20-documentation"
+    prompts_dir.mkdir()
+    (prompts_dir / "suno-prompts.json").write_text("[]", encoding="utf-8")
+    entries = [{"name": "3 AM"}, {"name": "AM"}]
+    archive = tmp_path / "download.zip"
+    with zipfile.ZipFile(archive, "w") as zipped:
+        zipped.writestr("3 AM.mp3", b"three-am")
+        zipped.writestr("AM.mp3", b"am")
+
+    placed_count = extract_and_rename_music(
+        tmp_path,
+        str(archive),
+        prompt_entries_reader=lambda _collection_dir: entries,
+    )
+
+    music_dir = tmp_path / "02-Individual-music"
+    assert placed_count == 2
+    assert {path.name: path.read_bytes() for path in music_dir.iterdir()} == {
+        "01a-3 AM.mp3": b"three-am",
+        "02a-AM.mp3": b"am",
+    }
+
+
+def test_extract_orders_studio_tracks_by_numeric_track_number(tmp_path: Path) -> None:
+    """Given 同一曲名を持つ Studio のトラック 2 と 10
+    When prompts と照合して展開する
+    Then ファイル名の辞書順ではなくトラック番号の昇順で a / b variant へ配置する。
+    """
+    prompts_dir = tmp_path / "20-documentation"
+    prompts_dir.mkdir()
+    (prompts_dir / "suno-prompts.json").write_text("[]", encoding="utf-8")
+    entries = [{"name": "灰色のまま五時"}]
+    archive = tmp_path / "studio.zip"
+    with zipfile.ZipFile(archive, "w") as zipped:
+        zipped.writestr("10 灰色のまま五時.wav", b"track-10")
+        zipped.writestr("2 灰色のまま五時.wav", b"track-2")
+
+    placed_count = extract_and_rename_music(
+        tmp_path,
+        str(archive),
+        prompt_entries_reader=lambda _collection_dir: entries,
+    )
+
+    music_dir = tmp_path / "02-Individual-music"
+    assert placed_count == 2
+    assert {path.name: path.read_bytes() for path in music_dir.iterdir()} == {
+        "01a-灰色のまま五時.wav": b"track-2",
+        "01b-灰色のまま五時.wav": b"track-10",
+    }

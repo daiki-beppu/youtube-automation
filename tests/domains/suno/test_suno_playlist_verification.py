@@ -749,6 +749,45 @@ def test_cli_renames_studio_track_number_prefix_before_verification(tmp_path, mo
     assert f"RENAMED: 0 {entry}.wav -> 01a-{entry}.wav" in err
 
 
+def test_cli_orders_studio_track_number_prefixes_numerically(tmp_path, monkeypatch, capsys):
+    """Given 同一 entry の Studio トラック 2 と 10 が music directory にある
+    When --music-dir で CLI main を実行する
+    Then ファイル名の辞書順ではなくトラック番号の昇順で a / b variant へリネームする。
+    """
+    entry = "灰色のまま五時"
+    _write_prompts_json(tmp_path, [entry])
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / f"10 {entry}.wav").touch()
+    (music_dir / f"2 {entry}.wav").touch()
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert code == 0
+    assert f"{entry}: 2 clip(s)" in out
+    assert f"RENAMED: 2 {entry}.wav -> 01a-{entry}.wav" in err
+    assert f"RENAMED: 10 {entry}.wav -> 01b-{entry}.wav" in err
+
+
+def test_cli_keeps_numeric_leading_title_intact(tmp_path, monkeypatch, capsys):
+    """Given 数字始まりの曲名 entry と、その 2 clip の非正準形ファイルがある
+    When --music-dir で CLI main を実行する
+    Then 数字 prefix を Studio トラック番号と誤認せず曲名を保ったままリネームする。
+    """
+    _write_prompts_json(tmp_path, ["3 AM"])
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / "3 AM.mp3").touch()
+    (music_dir / "3 AM (1).mp3").touch()
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert code == 0
+    assert "3 AM: 2 clip(s)" in out
+    assert "RENAMED: 3 AM.mp3 -> 01a-3 AM.mp3" in err
+    assert "RENAMED: 3 AM (1).mp3 -> 01b-3 AM.mp3" in err
+
+
 def test_cli_renames_noncanonical_file_into_free_variant_next_to_canonical_clip(tmp_path, monkeypatch, capsys):
     """Given 正準形 a variant が既にあり、同一 entry の非正準形ファイルが 1 件ある
     When --music-dir で CLI main を実行する
