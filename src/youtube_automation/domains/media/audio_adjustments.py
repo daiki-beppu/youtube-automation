@@ -31,7 +31,11 @@ _NESTED_FIELDS: dict[str, dict[str, tuple[type[object], float | None, float | No
         "TP": (float, -9, 0),
     },
     "limiter": {"enabled": (bool, None, None), "limit": (float, 0.01, 1)},
-    "trim_silence": {"enabled": (bool, None, None), "threshold_db": (float, -100, 0)},
+    "trim_silence": {
+        "enabled": (bool, None, None),
+        "trailing": (bool, None, None),
+        "threshold_db": (float, -100, 0),
+    },
     "tail_fade_guard": {"enabled": (bool, None, None), "fade_sec": (float, 0, 60)},
 }
 _BOOLEAN_FIELDS = frozenset({"volume_smoothing"})

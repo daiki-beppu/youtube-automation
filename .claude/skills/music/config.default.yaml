@@ -591,7 +591,8 @@ master:
       bitrate: "192k"             # libmp3lame 出力ビットレート (未指定なら audio.bitrate)
       codec: "libmp3lame"
       trim_silence:
-        enabled: true             # 冒頭無音を silenceremove でカット
+        enabled: true             # 冒頭・末尾無音を silenceremove でカット
+        trailing: true            # false で末尾カットだけを無効化
         threshold_db: -50
       eq:
         enabled: true             # 350Hz のもやつき / 8kHz 以上のシャリつきを軽く抑える

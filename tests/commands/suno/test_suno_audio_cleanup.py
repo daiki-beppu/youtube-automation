@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import threading
 from pathlib import Path
@@ -16,11 +17,17 @@ from youtube_automation.commands.suno.suno_audio_cleanup import (
     build_filter,
     cleanup_collection,
     collect_audio_files,
+    probe_trimmed_duration,
     process_file,
     resolve_cleanup_config,
     resolve_max_workers,
 )
 from youtube_automation.core.errors import ConfigError
+
+
+@pytest.fixture(autouse=True)
+def _reuse_input_duration_unless_duration_probe_is_under_test(monkeypatch) -> None:
+    monkeypatch.setattr(mod, "probe_trimmed_duration", lambda path, _cfg: mod.probe_duration(path))
 
 
 def _make_collection(tmp_path: Path, names: list[str]) -> Path:
@@ -37,6 +44,7 @@ def test_resolve_cleanup_config_defaults_disabled() -> None:
     assert cfg.enabled is False
     assert cfg.target_lufs == -14.0
     assert cfg.backup_originals is True
+    assert cfg.trim_silence_trailing is True
 
 
 def test_resolve_cleanup_config_accepts_overrides() -> None:
@@ -72,6 +80,15 @@ def test_apply_cleanup_overrides_changes_only_explicit_track_values() -> None:
     assert resolved.limiter is False
     assert resolved.harshness_gain_db == defaults.harshness_gain_db
     assert resolved.bitrate == defaults.bitrate
+
+
+def test_trailing_silence_can_be_disabled_per_track() -> None:
+    defaults = CleanupConfig(enabled=True)
+
+    resolved = apply_cleanup_overrides(defaults, {"trim_silence": {"trailing": False}})
+
+    assert resolved.trim_silence is True
+    assert resolved.trim_silence_trailing is False
 
 
 def test_resolve_cleanup_config_rejects_bad_shape() -> None:
@@ -172,13 +189,86 @@ def test_main_passes_jobs_to_cleanup_collection(monkeypatch) -> None:
 
 def test_build_filter_contains_expected_ffmpeg_steps() -> None:
     filt = build_filter(CleanupConfig(enabled=True), duration_sec=120)
-    assert "silenceremove" in filt
+    leading = "silenceremove=start_periods=1:start_duration=0.2:start_threshold=-50dB"
+    assert filt.startswith(f"{leading},areverse,{leading},areverse,")
     assert "equalizer=f=350" in filt
     assert "equalizer=f=8000" in filt
     assert "dynaudnorm" in filt
     assert "alimiter=limit=0.95" in filt
     assert "loudnorm=I=-14" in filt
     assert "afade=t=out:st=117:d=3" in filt
+
+
+def test_build_filter_trailing_opt_out_keeps_leading_trim() -> None:
+    filt = build_filter(CleanupConfig(trim_silence_trailing=False))
+
+    assert filt.startswith("silenceremove=start_periods=1:start_duration=0.2:start_threshold=-50dB,")
+    assert "areverse" not in filt
+
+
+def test_build_filter_disabled_trim_has_no_leading_or_trailing_trim() -> None:
+    filt = build_filter(CleanupConfig(trim_silence=False))
+
+    assert "silenceremove" not in filt
+    assert "areverse" not in filt
+
+
+def test_probe_trimmed_duration_reads_ffmpeg_progress(monkeypatch, tmp_path: Path) -> None:
+    source = tmp_path / "track.wav"
+    source.write_bytes(b"audio")
+
+    def fake_run(cmd, capture_output, text):
+        assert cmd[cmd.index("-af") + 1].count("areverse") == 2
+        assert ["-f", "null", "-"] == cmd[cmd.index("-f") : cmd.index("-f") + 3]
+        return subprocess.CompletedProcess(cmd, 0, stdout="out_time_us=57000000\nprogress=end\n", stderr="")
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+
+    assert probe_trimmed_duration(source, CleanupConfig()) == 57.0
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is required")
+def test_trailing_trim_preserves_mid_track_silence(tmp_path: Path) -> None:
+    source = tmp_path / "track.wav"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=2",
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=r=44100:cl=mono:d=3",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=2",
+            "-f",
+            "lavfi",
+            "-i",
+            "anullsrc=r=44100:cl=mono:d=5",
+            "-filter_complex",
+            "[0:a][1:a][2:a][3:a]concat=n=4:v=0:a=1",
+            str(source),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    cfg = CleanupConfig(
+        backup_originals=False,
+        adaptive_eq=False,
+        volume_smoothing=False,
+        limiter=False,
+        loudnorm=False,
+        tail_fade_guard=False,
+    )
+
+    assert process_file(source, cfg, apply=True, force=False, quiet=True) is True
+    output_duration = mod.probe_duration(source)
+    assert 6.0 < output_duration < 8.0
 
 
 def test_collect_audio_files_uses_supported_extensions(tmp_path: Path) -> None:
@@ -562,6 +652,29 @@ def test_process_file_apply_backs_up_original_and_replaces(tmp_path: Path, monke
     assert changed is True
     assert backup.read_bytes() == b"audio"
     assert source.read_bytes() == b"cleaned"
+
+
+def test_process_file_positions_fade_from_trimmed_duration(tmp_path: Path, monkeypatch) -> None:
+    collection = _make_collection(tmp_path, ["01-a.mp3"])
+    source = collection / "02-Individual-music" / "01-a.mp3"
+    commands: list[list[str]] = []
+
+    monkeypatch.setattr(mod, "probe_duration", lambda _path: 120)
+    monkeypatch.setattr(mod, "probe_trimmed_duration", lambda _path, _cfg: 60)
+    monkeypatch.setattr(mod.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+
+    def fake_run(cmd, capture_output, text):
+        commands.append(cmd)
+        Path(cmd[-1]).write_bytes(b"cleaned")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+
+    process_file(source, CleanupConfig(enabled=True), apply=True, force=False, quiet=True)
+
+    audio_filter = commands[0][commands[0].index("-af") + 1]
+    assert "afade=t=out:st=57:d=3" in audio_filter
+    assert "st=117" not in audio_filter
 
 
 @pytest.mark.parametrize(
