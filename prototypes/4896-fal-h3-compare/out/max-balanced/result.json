@@ -1,0 +1,12 @@
+{
+  "video": {
+    "url": "https://v3b.fal.media/files/b/0aa90ac9/6DvPMHtPRTjZGp1TYwgei_minimax-h3.mp4",
+    "content_type": "video/mp4",
+    "file_name": "6DvPMHtPRTjZGp1TYwgei_minimax-h3.mp4",
+    "file_size": 10162822
+  },
+  "expanded_prompt": "How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the 8.00-second mark of the target video.\n\nintegrated_multimodal_description: [Shot 1] Cinematic, Static Shot anchored to <Picture 1>. A distinguished mature Black DJ with trimmed white hair and beard stands composed behind a dual-deck DJ controller in an expansive desert night festival setting. Warm, directional golden light illuminates his features, casting subtle flickering highlights across his dark embroidered tunic. Thin layers of atmospheric haze and fine golden dust drift slowly through the background spotlight beam and over the silhouettes of the distant crowd and rugged hills. The DJ maintains steady, focused eye contact toward the camera with minimal micro-movements, his fingers lightly resting on the mixer knobs as lighting levels gently pulse. The atmospheric haze continuously shifts before settling into the precise composition of <Picture 2>.\n\noverall_soundscape: A low, resonant desert night breeze blends with the muted, distant roar of a festival crowd and subtle tactile clicks from DJ controller faders.\n\nnon_diegetic_music: A deep, rolling Afro House sub-bassline pulses steadily under restrained percussion and hypnotic wooden shaker rhythms.",
+  "timings": {
+    "inference": 5.725056977011263
+  }
+}

@@ -1,0 +1,813 @@
+{
+  "generated_at": "2026-09-04T06:59:02+00:00",
+  "prompt": "Locked cinematic Afro House cover-art scene. Subtle gold light flicker, slow haze in a dark club or desert-night atmosphere, no rain, no cafe, no jazz bar, no new objects. Preserve composition and text readability.",
+  "seed": 4896,
+  "uploads": {
+    "original": {
+      "file_url": "https://v3b.fal.media/files/b/0aa90ad9/BUhTFqGNuQrpYkrW_FfbU_main.png",
+      "initiate_keys": [
+        "file_url",
+        "upload_url"
+      ],
+      "put_status": 200,
+      "upload_sec": 2.55,
+      "bytes": 1962684
+    },
+    "resized": {
+      "file_url": "https://v3b.fal.media/files/b/0aa90ac2/oXdyZ0sRCFYQI86kjVnOY_main-1344x768.png",
+      "initiate_keys": [
+        "file_url",
+        "upload_url"
+      ],
+      "put_status": 200,
+      "upload_sec": 1.83,
+      "bytes": 1351728
+    }
+  },
+  "baseline": {
+    "name": "veo-fast-1080p",
+    "engine": "veo-3.1-fast-generate-001",
+    "note": "既存の承認済み loop.mp4（再生成なし）",
+    "probe_raw": {
+      "duration_sec": 8.0,
+      "size_bytes": 7568461,
+      "bit_rate": 7568461,
+      "streams": [
+        {
+          "type": "video",
+          "codec": "h264",
+          "width": 1920,
+          "height": 1080,
+          "fps": "24/1",
+          "bit_rate": "7267261"
+        },
+        {
+          "type": "audio",
+          "codec": "aac",
+          "sample_rate": "48000",
+          "channels": 2,
+          "bit_rate": "256312"
+        }
+      ]
+    },
+    "probe_final": {
+      "duration_sec": 6.5,
+      "size_bytes": 3977640,
+      "bit_rate": 4895556,
+      "streams": [
+        {
+          "type": "video",
+          "codec": "h264",
+          "width": 1920,
+          "height": 1080,
+          "fps": "24/1",
+          "bit_rate": "4892222"
+        }
+      ]
+    },
+    "cost_usd_normal": 0.8
+  },
+  "runs": [
+    {
+      "name": "turbo-balanced",
+      "engine": "turbo",
+      "mode": "balanced",
+      "image": "original",
+      "endpoint": "minimax/h3-max-turbo/image-to-video",
+      "payload": {
+        "prompt": "Locked cinematic Afro House cover-art scene. Subtle gold light flicker, slow haze in a dark club or desert-night atmosphere, no rain, no cafe, no jazz bar, no new objects. Preserve composition and text readability.",
+        "image_url": "https://v3b.fal.media/files/b/0aa90ad9/BUhTFqGNuQrpYkrW_FfbU_main.png",
+        "end_image_url": "https://v3b.fal.media/files/b/0aa90ad9/BUhTFqGNuQrpYkrW_FfbU_main.png",
+        "duration": 8,
+        "resolution": "768P",
+        "prompt_expansion_mode": "balanced",
+        "seed": 4896
+      },
+      "submitted_at": "2026-09-04T06:56:25+00:00",
+      "request_id": "01a06b34-5216-7721-a31e-29527d6bac62",
+      "response_url": "https://queue.fal.run/minimax/h3-max-turbo/requests/01a06b34-5216-7721-a31e-29527d6bac62",
+      "status_url": "https://queue.fal.run/minimax/h3-max-turbo/requests/01a06b34-5216-7721-a31e-29527d6bac62/status",
+      "cancel_url": "https://queue.fal.run/minimax/h3-max-turbo/requests/01a06b34-5216-7721-a31e-29527d6bac62/cancel",
+      "queue_position": 0,
+      "submit_sec": 0.6,
+      "submit_headers": {
+        "x-fal-request-id": "01a06b34-5216-7721-a31e-29527d6bac62"
+      },
+      "poll_history": [
+        {
+          "t": 0.53,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 3.09,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 5.71,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 8.32,
+          "status": "COMPLETED",
+          "queue_position": null
+        }
+      ],
+      "metrics": {
+        "inference_time": 6.74399995803833
+      },
+      "logs": [],
+      "completed_wall_sec": 8.92,
+      "result_completed_at": "2026-09-04T06:56:34+00:00",
+      "result_keys": [
+        "expanded_prompt",
+        "timings",
+        "video"
+      ],
+      "expanded_prompt": "How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the 8.00-second mark of the target video.\n\nintegrated_multimodal_description: [Shot 1] Cinematic, live-action shot. The scene opens with <Picture 1>, featuring a distinguished older Black man (S1) with a short, well-groomed white beard and hair, wearing a high-collared black garment with gold embroidery along the neckline. He stands behind a professional DJ mixer, his right hand resting firmly on the knobs and faders. The background is a vast, dark desert night atmosphere under a black sky, where a massive, dimly lit crowd stretches toward jagged mountain silhouettes. To the right, a powerful golden spotlight beams down from the upper corner, illuminating floating dust particles and a subtle haze. The camera remains in a Static Shot, maintaining the composition of the cover art. As the shot progresses, a subtle golden light flicker pulses across S1's face and the metallic surfaces of the DJ equipment, synchronized with a rhythmic beat. A slow, ethereal haze drifts lazily across the mid-ground, softening the distant lights of the desert festival. S1 remains stoic, staring intensely into the lens with a steady gaze, his expression unwavering. The atmospheric lighting shifts slightly in intensity, creating a breathing effect of gold and shadow. By the end of the 8-second duration, the subtle movements of the haze and the light pulses converge back to the exact composition and state of <Picture 2>.\n\noverall_soundscape: A deep, thumping kick drum of Afro House music vibrates through the air, accompanied by the distant, muffled roar of a massive crowd. There are subtle, high-frequency metallic clicks and the tactile sound of a DJ's hand shifting a fader on a mixer.\n\nnon_diegetic_music: A polished Afro House track featuring a heavy, rhythmic 4/4 bass drum, melodic synth stabs, and percussive shakers, maintaining a steady, mid-tempo dance energy throughout the duration.",
+      "timings": {
+        "inference": 3.5584127879992593
+      },
+      "video": {
+        "url": "https://v3b.fal.media/files/b/0aa90ac2/3vumpGTlXvgvJlPR3LXmP_minimax-h3.mp4",
+        "content_type": "video/mp4",
+        "file_name": "3vumpGTlXvgvJlPR3LXmP_minimax-h3.mp4",
+        "file_size": 11348197
+      },
+      "download_sec": 4.6,
+      "total_submit_to_file_sec": 14.04,
+      "probe_raw": {
+        "duration_sec": 8.0,
+        "size_bytes": 11348197,
+        "bit_rate": 11348197,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "h264",
+            "width": 1344,
+            "height": 768,
+            "fps": "24/1",
+            "bit_rate": "11129910"
+          },
+          {
+            "type": "audio",
+            "codec": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "bit_rate": "198792"
+          }
+        ]
+      },
+      "probe_final": {
+        "duration_sec": 6.5,
+        "size_bytes": 6862543,
+        "bit_rate": 8446206,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "h264",
+            "width": 1920,
+            "height": 1080,
+            "fps": "24/1",
+            "bit_rate": "8442742"
+          }
+        ]
+      },
+      "cost_usd_normal": 0.32,
+      "cost_usd_promo": 0.08,
+      "static_hint_kept": {
+        "locked": false,
+        "static": true,
+        "fixed camera": false,
+        "no camera movement": false,
+        "still": false,
+        "preserve composition": false,
+        "no new objects": false
+      }
+    },
+    {
+      "name": "turbo-quality",
+      "engine": "turbo",
+      "mode": "quality",
+      "image": "original",
+      "endpoint": "minimax/h3-max-turbo/image-to-video",
+      "payload": {
+        "prompt": "Locked cinematic Afro House cover-art scene. Subtle gold light flicker, slow haze in a dark club or desert-night atmosphere, no rain, no cafe, no jazz bar, no new objects. Preserve composition and text readability.",
+        "image_url": "https://v3b.fal.media/files/b/0aa90ad9/BUhTFqGNuQrpYkrW_FfbU_main.png",
+        "end_image_url": "https://v3b.fal.media/files/b/0aa90ad9/BUhTFqGNuQrpYkrW_FfbU_main.png",
+        "duration": 8,
+        "resolution": "768P",
+        "prompt_expansion_mode": "quality",
+        "seed": 4896
+      },
+      "submitted_at": "2026-09-04T06:56:43+00:00",
+      "request_id": "01a06b34-9824-7823-9d6b-bf431772c3b6",
+      "response_url": "https://queue.fal.run/minimax/h3-max-turbo/requests/01a06b34-9824-7823-9d6b-bf431772c3b6",
+      "status_url": "https://queue.fal.run/minimax/h3-max-turbo/requests/01a06b34-9824-7823-9d6b-bf431772c3b6/status",
+      "cancel_url": "https://queue.fal.run/minimax/h3-max-turbo/requests/01a06b34-9824-7823-9d6b-bf431772c3b6/cancel",
+      "queue_position": 0,
+      "submit_sec": 0.51,
+      "submit_headers": {
+        "x-fal-request-id": "01a06b34-9824-7823-9d6b-bf431772c3b6"
+      },
+      "poll_history": [
+        {
+          "t": 0.54,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 3.15,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 5.77,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 8.3,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 10.86,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 13.47,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 16.08,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 18.69,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 21.32,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 23.86,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 26.4,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 29.01,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 31.64,
+          "status": "COMPLETED",
+          "queue_position": null
+        }
+      ],
+      "metrics": {
+        "inference_time": 30.02900004386902
+      },
+      "logs": [],
+      "completed_wall_sec": 32.15,
+      "result_completed_at": "2026-09-04T06:57:16+00:00",
+      "result_keys": [
+        "expanded_prompt",
+        "timings",
+        "video"
+      ],
+      "expanded_prompt": "How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the 8.00-second mark of the target video.\n\nintegrated_multimodal_description: [Shot 1] This is a live-action, cinematic shot. An older Black man with a silver-white beard and cropped hair, dressed in a dark, textured tunic with gold-threaded trim, stands behind a professional DJ console in a sprawling desert-night venue. The scene is enveloped in a low-hanging, atmospheric haze, illuminated by flickering, warm golden stage lights. The camera holds a static, focused position on the DJ. In the first seconds, the man subtly adjusts a fader on the console, his fingers moving with precise, practiced rhythm against the knobs. As he works, his expression remains cool and composed, his gaze fixed directly into the lens. The background reveals a vast, dark desert landscape silhouette under a night sky, with a distant, bright golden spotlight beam cutting diagonally across the frame. Midway through, the subtle golden light in the background pulses, creating a soft, rhythmic flickering effect that enhances the depth of the haze. He continues to gently manipulate the deck controls, his hand sliding across the surface as the ambient glow subtly shifts intensity around him. Toward the end of the clip, he maintains his steady, confident posture, his hand lingering on the mixer as the scene settles into a vibrant, pulsing rhythm of light and shadow, landing perfectly on his stoic, commanding presence.\n\noverall_soundscape: A low, bass-heavy ambient hum resonates in the foreground, establishing the deep, rhythmic essence of an Afro House club setting. This deep rumble is punctuated by the sharp, metallic click of mixer knobs and the rhythmic sliding of the fader as he manipulates the console. Faint, distant echoes of an excited crowd murmur in the background, creating a sense of space that stretches out into the desert air. As the light flickers, a subtle, rhythmic \"thump\" of a kick drum begins to swell, growing more pronounced. The sound of a soft, airy hiss from the stage haze machines adds texture to the environment, blending with the steady, pulsing electronic beat that builds in intensity as the clip nears its conclusion.\n\nnon_diegetic_music: A deep, hypnotic Afro House track with a steady, bass-driven rhythm begins at low volume and gradually swells in clarity, anchored by a prominent, rhythmic bassline and subtle, shimmering percussion.",
+      "timings": {
+        "inference": 3.2259232790675014
+      },
+      "video": {
+        "url": "https://v3b.fal.media/files/b/0aa90ac6/rmqkODzpz-TD4L_RcZFVH_minimax-h3.mp4",
+        "content_type": "video/mp4",
+        "file_name": "rmqkODzpz-TD4L_RcZFVH_minimax-h3.mp4",
+        "file_size": 10870977
+      },
+      "download_sec": 1.58,
+      "total_submit_to_file_sec": 34.26,
+      "probe_raw": {
+        "duration_sec": 8.0,
+        "size_bytes": 10870977,
+        "bit_rate": 10870977,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "h264",
+            "width": 1344,
+            "height": 768,
+            "fps": "24/1",
+            "bit_rate": "10657010"
+          },
+          {
+            "type": "audio",
+            "codec": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "bit_rate": "194472"
+          }
+        ]
+      },
+      "probe_final": {
+        "duration_sec": 6.5,
+        "size_bytes": 7381666,
+        "bit_rate": 9085127,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "h264",
+            "width": 1920,
+            "height": 1080,
+            "fps": "24/1",
+            "bit_rate": "9081667"
+          }
+        ]
+      },
+      "cost_usd_normal": 0.32,
+      "cost_usd_promo": 0.08,
+      "static_hint_kept": {
+        "locked": false,
+        "static": true,
+        "fixed camera": false,
+        "no camera movement": false,
+        "still": false,
+        "preserve composition": false,
+        "no new objects": false
+      }
+    },
+    {
+      "name": "max-balanced",
+      "engine": "max",
+      "mode": "balanced",
+      "image": "original",
+      "endpoint": "minimax/h3-max/image-to-video",
+      "payload": {
+        "prompt": "Locked cinematic Afro House cover-art scene. Subtle gold light flicker, slow haze in a dark club or desert-night atmosphere, no rain, no cafe, no jazz bar, no new objects. Preserve composition and text readability.",
+        "image_url": "https://v3b.fal.media/files/b/0aa90ad9/BUhTFqGNuQrpYkrW_FfbU_main.png",
+        "end_image_url": "https://v3b.fal.media/files/b/0aa90ad9/BUhTFqGNuQrpYkrW_FfbU_main.png",
+        "duration": 8,
+        "resolution": "768P",
+        "prompt_expansion_mode": "balanced",
+        "seed": 4896
+      },
+      "submitted_at": "2026-09-04T06:57:22+00:00",
+      "request_id": "01a06b35-2f0c-72a1-ba11-241bcf1b1c1b",
+      "response_url": "https://queue.fal.run/minimax/h3-max/requests/01a06b35-2f0c-72a1-ba11-241bcf1b1c1b",
+      "status_url": "https://queue.fal.run/minimax/h3-max/requests/01a06b35-2f0c-72a1-ba11-241bcf1b1c1b/status",
+      "cancel_url": "https://queue.fal.run/minimax/h3-max/requests/01a06b35-2f0c-72a1-ba11-241bcf1b1c1b/cancel",
+      "queue_position": 0,
+      "submit_sec": 0.63,
+      "submit_headers": {
+        "x-fal-request-id": "01a06b35-2f0c-72a1-ba11-241bcf1b1c1b"
+      },
+      "poll_history": [
+        {
+          "t": 0.52,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 3.04,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 5.59,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 8.21,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 10.83,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 13.45,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 16.07,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 18.88,
+          "status": "COMPLETED",
+          "queue_position": null
+        }
+      ],
+      "metrics": {
+        "inference_time": 17.677000045776367
+      },
+      "logs": [],
+      "completed_wall_sec": 19.51,
+      "result_completed_at": "2026-09-04T06:57:42+00:00",
+      "result_keys": [
+        "expanded_prompt",
+        "timings",
+        "video"
+      ],
+      "expanded_prompt": "How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the 8.00-second mark of the target video.\n\nintegrated_multimodal_description: [Shot 1] Cinematic, Static Shot anchored to <Picture 1>. A distinguished mature Black DJ with trimmed white hair and beard stands composed behind a dual-deck DJ controller in an expansive desert night festival setting. Warm, directional golden light illuminates his features, casting subtle flickering highlights across his dark embroidered tunic. Thin layers of atmospheric haze and fine golden dust drift slowly through the background spotlight beam and over the silhouettes of the distant crowd and rugged hills. The DJ maintains steady, focused eye contact toward the camera with minimal micro-movements, his fingers lightly resting on the mixer knobs as lighting levels gently pulse. The atmospheric haze continuously shifts before settling into the precise composition of <Picture 2>.\n\noverall_soundscape: A low, resonant desert night breeze blends with the muted, distant roar of a festival crowd and subtle tactile clicks from DJ controller faders.\n\nnon_diegetic_music: A deep, rolling Afro House sub-bassline pulses steadily under restrained percussion and hypnotic wooden shaker rhythms.",
+      "timings": {
+        "inference": 5.725056977011263
+      },
+      "video": {
+        "url": "https://v3b.fal.media/files/b/0aa90ac9/6DvPMHtPRTjZGp1TYwgei_minimax-h3.mp4",
+        "content_type": "video/mp4",
+        "file_name": "6DvPMHtPRTjZGp1TYwgei_minimax-h3.mp4",
+        "file_size": 10162822
+      },
+      "download_sec": 2.48,
+      "total_submit_to_file_sec": 22.49,
+      "probe_raw": {
+        "duration_sec": 8.0,
+        "size_bytes": 10162822,
+        "bit_rate": 10162822,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "h264",
+            "width": 1344,
+            "height": 768,
+            "fps": "24/1",
+            "bit_rate": "9948523"
+          },
+          {
+            "type": "audio",
+            "codec": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "bit_rate": "194814"
+          }
+        ]
+      },
+      "probe_final": {
+        "duration_sec": 6.5,
+        "size_bytes": 6401259,
+        "bit_rate": 7878472,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "h264",
+            "width": 1920,
+            "height": 1080,
+            "fps": "24/1",
+            "bit_rate": "7875027"
+          }
+        ]
+      },
+      "cost_usd_normal": 0.64,
+      "cost_usd_promo": 0.16,
+      "static_hint_kept": {
+        "locked": false,
+        "static": true,
+        "fixed camera": false,
+        "no camera movement": false,
+        "still": false,
+        "preserve composition": false,
+        "no new objects": false
+      }
+    },
+    {
+      "name": "max-quality",
+      "engine": "max",
+      "mode": "quality",
+      "image": "original",
+      "lifecycle_sec": 86400,
+      "endpoint": "minimax/h3-max/image-to-video",
+      "payload": {
+        "prompt": "Locked cinematic Afro House cover-art scene. Subtle gold light flicker, slow haze in a dark club or desert-night atmosphere, no rain, no cafe, no jazz bar, no new objects. Preserve composition and text readability.",
+        "image_url": "https://v3b.fal.media/files/b/0aa90ad9/BUhTFqGNuQrpYkrW_FfbU_main.png",
+        "end_image_url": "https://v3b.fal.media/files/b/0aa90ad9/BUhTFqGNuQrpYkrW_FfbU_main.png",
+        "duration": 8,
+        "resolution": "768P",
+        "prompt_expansion_mode": "quality",
+        "seed": 4896
+      },
+      "submitted_at": "2026-09-04T06:57:48+00:00",
+      "request_id": "01a06b35-9620-77e2-97a8-51b073e4f7b9",
+      "response_url": "https://queue.fal.run/minimax/h3-max/requests/01a06b35-9620-77e2-97a8-51b073e4f7b9",
+      "status_url": "https://queue.fal.run/minimax/h3-max/requests/01a06b35-9620-77e2-97a8-51b073e4f7b9/status",
+      "cancel_url": "https://queue.fal.run/minimax/h3-max/requests/01a06b35-9620-77e2-97a8-51b073e4f7b9/cancel",
+      "queue_position": 0,
+      "submit_sec": 0.58,
+      "submit_headers": {
+        "x-fal-request-id": "01a06b35-9620-77e2-97a8-51b073e4f7b9"
+      },
+      "poll_history": [
+        {
+          "t": 0.51,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 3.04,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 5.59,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 8.2,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 10.73,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 13.28,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 15.9,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 18.52,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 21.14,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 23.77,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 26.39,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 29.0,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 31.63,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 34.25,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 36.87,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 39.49,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 42.12,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 44.73,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 47.36,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 49.98,
+          "status": "COMPLETED",
+          "queue_position": null
+        }
+      ],
+      "metrics": {
+        "inference_time": 47.69700002670288
+      },
+      "logs": [],
+      "completed_wall_sec": 50.56,
+      "result_completed_at": "2026-09-04T06:58:39+00:00",
+      "result_keys": [
+        "expanded_prompt",
+        "timings",
+        "video"
+      ],
+      "expanded_prompt": "How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the 8.00-second mark of the target video.\n\nintegrated_multimodal_description: [Shot 1] This is a live-action, cinematic shot. In the foreground, an older man with a stark white beard and hair, dressed in a black high-collared jacket with gold embroidery, stands attentively at a large DJ mixing deck. The background reveals a dark desert-night festival atmosphere, densely packed with a distant crowd and lit by warm gold practical lights and a prominent diagonal beam on the right. The camera holds a static shot throughout the clip to preserve a locked, cover-art composition. Early on, a slow, atmospheric haze drifts across the dark sky, while the gold light beam on the right flickers subtly. Deep, rhythmic Afro House music is already playing from t=0 through the unseen stage speakers. Approaching the middle of the clip, the DJ's right hand, which rests on the mixer, makes a minor, deliberate adjustment, his fingers rolling slightly over a knob. His intense, serious gaze remains locked forward without breaking focus. Later, the warm gold lights illuminating the distant crowd pulse gently in time with the music, and the haze continues to swirl slowly in the midground. By the end of the clip, the DJ's hand relaxes back into its exact starting position on the deck, perfectly matching the final frame's still composition.\n\noverall_soundscape: A low, continuous rumble of desert wind and ambient atmosphere establishes the dark outdoor setting. This is immediately anchored by the heavy, rhythmic thud of the Afro House bassline dominating the foreground. As the DJ moves his hand, a faint, tactile click of a plastic knob is distinctly heard over the music. The track continues to drive forward, accompanied by the subtle, muffled roar of the distant crowd swaying to the beat, which transitions into a steady, hypnotic groove that carries through to the end of the clip.\n\nnon_diegetic_music: N/A",
+      "timings": {
+        "inference": 5.605323424999369
+      },
+      "video": {
+        "url": "https://v3b.fal.media/files/b/0aa90acf/rnWjkWtKEPz1Ptf-7yTBX_minimax-h3.mp4",
+        "content_type": "video/mp4",
+        "file_name": "rnWjkWtKEPz1Ptf-7yTBX_minimax-h3.mp4",
+        "file_size": 11266265
+      },
+      "download_sec": 2.76,
+      "total_submit_to_file_sec": 53.84,
+      "probe_raw": {
+        "duration_sec": 8.0,
+        "size_bytes": 11266265,
+        "bit_rate": 11266265,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "h264",
+            "width": 1344,
+            "height": 768,
+            "fps": "24/1",
+            "bit_rate": "11052414"
+          },
+          {
+            "type": "audio",
+            "codec": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "bit_rate": "194366"
+          }
+        ]
+      },
+      "probe_final": {
+        "duration_sec": 6.5,
+        "size_bytes": 6715498,
+        "bit_rate": 8265228,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "h264",
+            "width": 1920,
+            "height": 1080,
+            "fps": "24/1",
+            "bit_rate": "8261768"
+          }
+        ]
+      },
+      "cost_usd_normal": 0.64,
+      "cost_usd_promo": 0.16,
+      "static_hint_kept": {
+        "locked": true,
+        "static": true,
+        "fixed camera": false,
+        "no camera movement": false,
+        "still": true,
+        "preserve composition": false,
+        "no new objects": false
+      }
+    },
+    {
+      "name": "turbo-balanced-resized",
+      "engine": "turbo",
+      "mode": "balanced",
+      "image": "resized",
+      "endpoint": "minimax/h3-max-turbo/image-to-video",
+      "payload": {
+        "prompt": "Locked cinematic Afro House cover-art scene. Subtle gold light flicker, slow haze in a dark club or desert-night atmosphere, no rain, no cafe, no jazz bar, no new objects. Preserve composition and text readability.",
+        "image_url": "https://v3b.fal.media/files/b/0aa90ac2/oXdyZ0sRCFYQI86kjVnOY_main-1344x768.png",
+        "end_image_url": "https://v3b.fal.media/files/b/0aa90ac2/oXdyZ0sRCFYQI86kjVnOY_main-1344x768.png",
+        "duration": 8,
+        "resolution": "768P",
+        "prompt_expansion_mode": "balanced",
+        "seed": 4896
+      },
+      "submitted_at": "2026-09-04T06:58:46+00:00",
+      "request_id": "01a06b36-7764-7fb0-a826-792d57444e4a",
+      "response_url": "https://queue.fal.run/minimax/h3-max-turbo/requests/01a06b36-7764-7fb0-a826-792d57444e4a",
+      "status_url": "https://queue.fal.run/minimax/h3-max-turbo/requests/01a06b36-7764-7fb0-a826-792d57444e4a/status",
+      "cancel_url": "https://queue.fal.run/minimax/h3-max-turbo/requests/01a06b36-7764-7fb0-a826-792d57444e4a/cancel",
+      "queue_position": 0,
+      "submit_sec": 0.55,
+      "submit_headers": {
+        "x-fal-request-id": "01a06b36-7764-7fb0-a826-792d57444e4a"
+      },
+      "poll_history": [
+        {
+          "t": 0.57,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 3.14,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 5.83,
+          "status": "IN_PROGRESS",
+          "queue_position": null
+        },
+        {
+          "t": 8.39,
+          "status": "COMPLETED",
+          "queue_position": null
+        }
+      ],
+      "metrics": {
+        "inference_time": 7.447000026702881
+      },
+      "logs": [],
+      "completed_wall_sec": 8.95,
+      "result_completed_at": "2026-09-04T06:58:55+00:00",
+      "result_keys": [
+        "expanded_prompt",
+        "timings",
+        "video"
+      ],
+      "expanded_prompt": "How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the 8.00-second mark of the target video.\n\nintegrated_multimodal_description: [Shot 1] This is a cinematic, live-action shot. The scene opens on <Picture 1>, featuring a dignified older man (S1) with a short, well-groomed white beard and hair, wearing a high-collared black jacket with intricate gold embroidery along the placket. He is positioned in a medium close-up, his right hand resting firmly on a professional DJ mixer with various knobs and faders, and two platters visible on either side. The setting is a dark, vast outdoor environment at night, with a massive, dimly lit crowd filling the mid-ground and jagged desert mountains silhouetted against a black sky in the background. To the right, a powerful golden spotlight cuts through the air from a high angle, casting a sharp beam of light. Throughout the shot, the camera remains in a Static Shot, preserving the exact composition of the cover art. Subtle, rhythmic flickers of gold light pulse across S1's face and the metallic surfaces of the DJ equipment, synchronized with an unheard beat. A thin, translucent layer of golden haze drifts slowly across the frame from left to right, adding depth and atmospheric texture to the dark void. S1 maintains a steady, intense gaze toward the camera, his expression stoic and focused, with no lip movement or speech. The lighting remains high-contrast, with deep blacks and rich golden highlights. The visual state evolves gradually, maintaining absolute consistency in subject and environment, eventually converging on the identical composition and lighting seen in <Picture 2> by the end of the 8-second duration.\n\noverall_soundscape: A deep, resonant atmospheric drone of a large outdoor crowd, characterized by a low-frequency murmur and distant cheering. The physical sound of a finger subtly adjusting a metallic knob on the mixer is audible, paired with the faint, electrical hum of high-powered stage lighting.\n\nnon_diegetic_music: A sophisticated Afro House track featuring a steady, driving 4/4 kick drum, syncopated wooden percussion, and a deep, melodic synth bassline that pulses rhythmically.",
+      "timings": {
+        "inference": 3.5539538109951536
+      },
+      "video": {
+        "url": "https://v3b.fal.media/files/b/0aa90ae7/hl3ecakbPBLiugL6u8tWc_minimax-h3.mp4",
+        "content_type": "video/mp4",
+        "file_name": "hl3ecakbPBLiugL6u8tWc_minimax-h3.mp4",
+        "file_size": 11211360
+      },
+      "download_sec": 2.79,
+      "total_submit_to_file_sec": 12.26,
+      "probe_raw": {
+        "duration_sec": 8.0,
+        "size_bytes": 11211360,
+        "bit_rate": 11211360,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "h264",
+            "width": 1344,
+            "height": 768,
+            "fps": "24/1",
+            "bit_rate": "10994857"
+          },
+          {
+            "type": "audio",
+            "codec": "aac",
+            "sample_rate": "32000",
+            "channels": 2,
+            "bit_rate": "197008"
+          }
+        ]
+      },
+      "probe_final": {
+        "duration_sec": 6.5,
+        "size_bytes": 6723076,
+        "bit_rate": 8274555,
+        "streams": [
+          {
+            "type": "video",
+            "codec": "h264",
+            "width": 1920,
+            "height": 1080,
+            "fps": "24/1",
+            "bit_rate": "8271095"
+          }
+        ]
+      },
+      "cost_usd_normal": 0.32,
+      "cost_usd_promo": 0.08,
+      "static_hint_kept": {
+        "locked": false,
+        "static": true,
+        "fixed camera": false,
+        "no camera movement": false,
+        "still": false,
+        "preserve composition": false,
+        "no new objects": false
+      }
+    }
+  ]
+}

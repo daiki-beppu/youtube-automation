@@ -1,0 +1,12 @@
+{
+  "video": {
+    "url": "https://v3b.fal.media/files/b/0aa90ac2/3vumpGTlXvgvJlPR3LXmP_minimax-h3.mp4",
+    "content_type": "video/mp4",
+    "file_name": "3vumpGTlXvgvJlPR3LXmP_minimax-h3.mp4",
+    "file_size": 11348197
+  },
+  "expanded_prompt": "How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the 8.00-second mark of the target video.\n\nintegrated_multimodal_description: [Shot 1] Cinematic, live-action shot. The scene opens with <Picture 1>, featuring a distinguished older Black man (S1) with a short, well-groomed white beard and hair, wearing a high-collared black garment with gold embroidery along the neckline. He stands behind a professional DJ mixer, his right hand resting firmly on the knobs and faders. The background is a vast, dark desert night atmosphere under a black sky, where a massive, dimly lit crowd stretches toward jagged mountain silhouettes. To the right, a powerful golden spotlight beams down from the upper corner, illuminating floating dust particles and a subtle haze. The camera remains in a Static Shot, maintaining the composition of the cover art. As the shot progresses, a subtle golden light flicker pulses across S1's face and the metallic surfaces of the DJ equipment, synchronized with a rhythmic beat. A slow, ethereal haze drifts lazily across the mid-ground, softening the distant lights of the desert festival. S1 remains stoic, staring intensely into the lens with a steady gaze, his expression unwavering. The atmospheric lighting shifts slightly in intensity, creating a breathing effect of gold and shadow. By the end of the 8-second duration, the subtle movements of the haze and the light pulses converge back to the exact composition and state of <Picture 2>.\n\noverall_soundscape: A deep, thumping kick drum of Afro House music vibrates through the air, accompanied by the distant, muffled roar of a massive crowd. There are subtle, high-frequency metallic clicks and the tactile sound of a DJ's hand shifting a fader on a mixer.\n\nnon_diegetic_music: A polished Afro House track featuring a heavy, rhythmic 4/4 bass drum, melodic synth stabs, and percussive shakers, maintaining a steady, mid-tempo dance energy throughout the duration.",
+  "timings": {
+    "inference": 3.5584127879992593
+  }
+}

@@ -1,0 +1,7 @@
+How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot 1) aligns with the 8.00-second mark of the target video.
+
+integrated_multimodal_description: [Shot 1] Cinematic, Static Shot anchored to <Picture 1>. A distinguished mature Black DJ with trimmed white hair and beard stands composed behind a dual-deck DJ controller in an expansive desert night festival setting. Warm, directional golden light illuminates his features, casting subtle flickering highlights across his dark embroidered tunic. Thin layers of atmospheric haze and fine golden dust drift slowly through the background spotlight beam and over the silhouettes of the distant crowd and rugged hills. The DJ maintains steady, focused eye contact toward the camera with minimal micro-movements, his fingers lightly resting on the mixer knobs as lighting levels gently pulse. The atmospheric haze continuously shifts before settling into the precise composition of <Picture 2>.
+
+overall_soundscape: A low, resonant desert night breeze blends with the muted, distant roar of a festival crowd and subtle tactile clicks from DJ controller faders.
+
+non_diegetic_music: A deep, rolling Afro House sub-bassline pulses steadily under restrained percussion and hypnotic wooden shaker rhythms.

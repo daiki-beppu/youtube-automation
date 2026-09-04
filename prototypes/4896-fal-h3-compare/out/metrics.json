@@ -1,0 +1,98 @@
+{
+  "veo-fast-1080p": {
+    "frames": 156,
+    "seam_yavg": {
+      "seam": 0.666977,
+      "median": 1.00948,
+      "p95": 1.58358,
+      "max": 1.86925,
+      "n": 311
+    },
+    "drift_ssim": {
+      "min": 0.929707,
+      "mean": 0.9511787243589743,
+      "argmin_sec": 3.58
+    },
+    "first_vs_input_ssim": 0.89256
+  },
+  "turbo-balanced": {
+    "frames": 156,
+    "seam_yavg": {
+      "seam": 1.49808,
+      "median": 2.11247,
+      "p95": 3.71359,
+      "max": 4.04742,
+      "n": 311
+    },
+    "drift_ssim": {
+      "min": 0.797981,
+      "mean": 0.8846268333333334,
+      "argmin_sec": 3.67
+    },
+    "first_vs_input_ssim": 0.806127
+  },
+  "turbo-quality": {
+    "frames": 156,
+    "seam_yavg": {
+      "seam": 1.52408,
+      "median": 3.31161,
+      "p95": 5.92175,
+      "max": 6.68093,
+      "n": 311
+    },
+    "drift_ssim": {
+      "min": 0.644081,
+      "mean": 0.8103091666666666,
+      "argmin_sec": 3.46
+    },
+    "first_vs_input_ssim": 0.809018
+  },
+  "max-balanced": {
+    "frames": 156,
+    "seam_yavg": {
+      "seam": 1.10136,
+      "median": 2.35393,
+      "p95": 4.28268,
+      "max": 4.81827,
+      "n": 311
+    },
+    "drift_ssim": {
+      "min": 0.798182,
+      "mean": 0.8869807628205129,
+      "argmin_sec": 3.29
+    },
+    "first_vs_input_ssim": 0.811884
+  },
+  "max-quality": {
+    "frames": 156,
+    "seam_yavg": {
+      "seam": 0.920262,
+      "median": 1.91515,
+      "p95": 2.9925,
+      "max": 3.49021,
+      "n": 311
+    },
+    "drift_ssim": {
+      "min": 0.774785,
+      "mean": 0.8551348782051281,
+      "argmin_sec": 3.83
+    },
+    "first_vs_input_ssim": 0.80839
+  },
+  "turbo-balanced-resized": {
+    "frames": 156,
+    "seam_yavg": {
+      "seam": 1.01932,
+      "median": 1.73484,
+      "p95": 2.98283,
+      "max": 3.5614,
+      "n": 311
+    },
+    "drift_ssim": {
+      "min": 0.828892,
+      "mean": 0.8872241858974359,
+      "argmin_sec": 2.71
+    },
+    "first_vs_input_ssim": 0.814065
+  }
+}
