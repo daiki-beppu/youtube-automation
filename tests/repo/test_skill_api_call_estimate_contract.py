@@ -88,6 +88,7 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-channel": "ローカルの workspace channel 列挙のみ",
     "yt-channel-export": "ローカルの workspace channel コピーと config 検証のみ",
     "yt-channels": "ローカルの channel registry と Git pin の読み取りのみ",
+    "yt-session-start": "ローカルの git 状態確認と yt-automation-update への委譲のみ",
     "yt-channel-import": "ローカルの channel repository コピーと config 検証のみ",
     "yt-channel-init": "ローカルの config 雛形生成のみ",
     "yt-workspace-guard": "ローカルの workspace チャンネル境界判定のみ",

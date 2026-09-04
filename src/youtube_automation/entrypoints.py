@@ -98,6 +98,7 @@ yt_channel_seed = _make_entrypoint("youtube_automation.commands.channel.channel_
 yt_channel_settings = _make_entrypoint("youtube_automation.commands.channel.channel_settings")
 yt_channel_status = _make_entrypoint("youtube_automation.commands.channel.channel_status")
 yt_channels = _make_entrypoint("youtube_automation.commands.system.channels")
+yt_session_start = _make_entrypoint("youtube_automation.commands.system.session_start")
 yt_changelog_compile = _make_entrypoint("youtube_automation.commands.system.changelog_compile")
 yt_workspace_status = _make_entrypoint("youtube_automation.commands.channel.workspace_status")
 yt_workspace_guard = _make_entrypoint("youtube_automation.commands.channel.workspace_guard")

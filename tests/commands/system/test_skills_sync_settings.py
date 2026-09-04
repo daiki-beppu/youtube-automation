@@ -174,6 +174,12 @@ def test_distributed_settings_template_excludes_workspace_guard() -> None:
     assert "yt-workspace-guard" not in (REPO_ROOT / ".claude/settings.template.json").read_text(encoding="utf-8")
 
 
+def test_distributed_settings_template_includes_session_update() -> None:
+    settings = json.loads((REPO_ROOT / ".claude" / "settings.template.json").read_text(encoding="utf-8"))
+    hooks = settings["hooks"]["SessionStart"]
+    assert hooks == [{"hooks": [{"type": "command", "command": "uv run yt-session-start", "timeout": 120}]}]
+
+
 def test_distributed_settings_include_background_progress_hook(tmp_path, monkeypatch) -> None:
     target = tmp_path / "downstream" / ".claude" / "settings.json"
 
