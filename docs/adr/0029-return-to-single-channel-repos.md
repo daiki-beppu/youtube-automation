@@ -6,7 +6,7 @@ accepted (2026-09-03, wayfinder map #4871 / 起草 #4879)。**ADR-0022（マル�
 
 - 削除リリースは **first-party 7 チャンネルの export 完了 + workspace リポジトリの archive** をゲートにし、版数では切らない（§移行計画）
 - amended (2026-09-04, #4902): 逆移行 runbook の残論点（dogfood 対象の選定 #4878 / 独立リポジトリの GitHub 新設手順 #4880 / channel registry からの workspace エントリ登録解除 #4889）の確定を §移行計画へ同期した。#4880 で警告リリースを A3 / A4 に縮小して B7 を追加し、終着点を「ADR と CHANGELOG 以外に workspace の痕跡を残さない」に再定義している（§Decision 9）
-- 実装 issue は起票後にここへ追記する
+- 実装 issue: epic [#4905](https://github.com/daiki-beppu/youtube-automation/issues/4905)（2026-09-04 起票）。sub-issue 16 件 = 前提 minor（`yt-channel-export` #4906 / registry 置換 #4907 / A3 #4908 / A4 #4909）+ トラッキング #4910 + fan-out 系（`apply --commit` #4911 / `yt-channels list` #4912 / `yt-channels update` #4913 / `yt-session-start` #4914）+ 削除 major（B1 #4915 → B2 #4916 → B3 #4917 → B4 #4918 → B5 #4919 → B6 #4920 → B7 #4921）。依存の正は各 issue の blockedBy
 
 ## Context
 
@@ -62,7 +62,7 @@ workspace が達成したものは記録しておく。`yt-skills sync` / automa
   - B6 docs / site 撤去（`architecture.md` 用語集の `workspace` / `channel slug` と、棚卸し #4873 で「残す」に分類した物のうち workspace の語を含む物の全消し）、`migration` fragment、`docs/upgrades/<version>.md`
   - B7 `yt-channel-export`・逆移行ガイド・`channel_registry` の workspace パス定義の削除（stack 末尾。7 チャンネルの export 完了 + workspace archive 後にしか消せない物）
 - **ADR-0022 の扱い**: Status を `superseded (2026-09-03) by ADR-0029` にし、本文冒頭に反転 / 維持の一覧を ⚠️ 注記で置く。本文は履歴として不変
-- 実装 issue の起票は本 ADR 確定後の別 effort（wayfinder map #4871 の Out of scope）
+- 実装 issue は epic #4905 の sub-issue 群（§Status）。wayfinder map #4871 は 2026-09-04 に close 済み
 
 ## Consequences
 
