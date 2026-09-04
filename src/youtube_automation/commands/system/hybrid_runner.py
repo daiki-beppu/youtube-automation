@@ -10,6 +10,7 @@ from pathlib import Path
 from youtube_automation.application.hybrid_runner import MediaHandoffRequest, SandwichRequest, run_sandwich
 from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.configuration import workspace_channels
+from youtube_automation.configuration.loader import load_config_from_path
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.infrastructure.hybrid_resources import SystemHybridResourceProbe
 from youtube_automation.infrastructure.media_store.local import LocalMediaStore
@@ -20,7 +21,7 @@ from youtube_automation.infrastructure.notifications.discord import create_disco
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--channel-dir", type=Path, default=Path.cwd())
-    parser.add_argument("--channel-slug", required=True)
+    parser.add_argument("--channel-slug")
     parser.add_argument("--collection", required=True)
     parser.add_argument("--collection-dir", required=True)
     parser.add_argument("--agent", choices=("claude", "codex"), default="claude")
@@ -55,11 +56,13 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _resolve_channel_dir(repository: Path, channel_slug: str) -> Path:
+def _resolve_channel_dir(repository: Path, channel_slug: str | None) -> Path:
     root = repository.resolve()
     channels = workspace_channels(root)
     if not channels:
         return root
+    if channel_slug is None:
+        raise ConfigError("workspace では --channel-slug が必要です")
     try:
         return channels[channel_slug].resolve()
     except KeyError as exc:
@@ -96,9 +99,10 @@ def run(args: argparse.Namespace) -> int:
         else None
     )
     resolved_channel_dir = _resolve_channel_dir(args.channel_dir, args.channel_slug)
+    channel_slug = args.channel_slug or load_config_from_path(resolved_channel_dir).meta.channel_short
     request = SandwichRequest(
         channel_dir=resolved_channel_dir,
-        channel=args.channel_slug,
+        channel=channel_slug,
         collection=args.collection,
         agent=args.agent,
         prompt=args.prompt,
