@@ -273,3 +273,51 @@ def test_failed_update_preserves_cause_before_retry_hint(tmp_path: Path, monkeyp
     )
     assert main(["update", "--registry", str(registry), "--tag", "v5.7.0", "--json"]) == 1
     assert cause in json.loads(capsys.readouterr().out)["channels"][0]["detail"]
+
+
+def test_selected_channels_keep_registry_order_and_deduplicate(tmp_path: Path, monkeypatch, capsys) -> None:
+    first, second, third = [tmp_path / name for name in ("first", "second", "third")]
+    for channel in (first, second, third):
+        _tag_channel(channel)
+    registry = _registry(tmp_path / "channels.json", [first, second, third])
+    calls = []
+
+    def fake_run(command, *, cwd, **kwargs):
+        calls.append(cwd)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr("youtube_automation.commands.system.channels.subprocess.run", fake_run)
+    assert (
+        main(
+            [
+                "update",
+                "--registry",
+                str(registry),
+                "--tag",
+                "v5.7.0",
+                "--dry-run",
+                "--json",
+                "--channel",
+                str(third),
+                "--channel",
+                str(first),
+                "--channel",
+                str(third),
+            ]
+        )
+        == 0
+    )
+    assert calls == [first, third]
+    assert json.loads(capsys.readouterr().out)["summary"]["total"] == 2
+
+
+def test_unregistered_selection_is_not_reported_as_registry_failure(tmp_path: Path, monkeypatch, capsys) -> None:
+    channel = tmp_path / "tag"
+    _tag_channel(channel)
+    registry = _registry(tmp_path / "channels.json", [channel])
+    monkeypatch.setattr(
+        "youtube_automation.commands.system.channels.subprocess.run",
+        lambda *args, **kwargs: pytest.fail("invalid selection must not start an update"),
+    )
+    assert main(["update", "--registry", str(registry), "--channel", str(tmp_path / "other")]) == 1
+    assert "更新対象の指定が不正" in capsys.readouterr().err

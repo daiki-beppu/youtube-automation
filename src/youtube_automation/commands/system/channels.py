@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
 import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -101,7 +102,7 @@ def _selected_channels(channels: list[Path], selected: list[Path] | None) -> lis
             raise ConfigError(f"--channel は registry 内の path に限定されます: {requested}")
         if match not in result:
             result.append(match)
-    return result
+    return [channel for channel in channels if channel in result]
 
 
 def _run_command(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -180,7 +181,12 @@ def _update_one(path: Path, args: argparse.Namespace) -> ChannelUpdate:
 
 
 def _run_update(args: argparse.Namespace) -> int:
-    channels = _selected_channels(load_channel_registry(args.registry), args.channel)
+    registered = load_channel_registry(args.registry)
+    try:
+        channels = _selected_channels(registered, args.channel)
+    except ConfigError as error:
+        print(f"[error] 更新対象の指定が不正です: {error}", file=sys.stderr)
+        return 1
     cwd = Path.cwd()
     channels.sort(key=lambda channel: _same_path(channel, cwd))
     results = [_update_one(channel, args) for channel in channels]
