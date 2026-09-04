@@ -1,0 +1,1 @@
+- suno-helper にダウンロード実行 Switch と unattended の `--skip-download` を追加し、Premier でないアカウントでも playlist 追加で完了できるようにした（#4924）。

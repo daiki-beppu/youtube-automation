@@ -131,6 +131,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       collectionId: "collection-a",
       runMode: "queue",
       regenerateDurationOutliers: true,
+      downloadEnabled: true,
       overrides,
     });
 
@@ -141,6 +142,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       collectionId: "collection-a",
       runMode: "queue",
       regenerateDurationOutliers: true,
+      downloadEnabled: true,
       indices: undefined,
       submittedClipIds: ["clip-a", "clip-b"],
       submittedClipIdsAreDurationFiltered: true,
@@ -183,6 +185,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       collectionId: "collection-a",
       runMode: "serial",
       regenerateDurationOutliers: true,
+      downloadEnabled: true,
       overrides,
     });
 
@@ -193,6 +196,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       collectionId: "collection-a",
       runMode: "serial",
       regenerateDurationOutliers: true,
+      downloadEnabled: true,
       indices: [0, 2],
       submittedClipIds: ["clip-a", "clip-c"],
       submittedClipIdsAreDurationFiltered: true,
@@ -252,6 +256,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       range: undefined,
       collectionId: "collection-a",
       runMode: "queue",
+      downloadEnabled: true,
       overrides: undefined,
     });
 
@@ -273,6 +278,7 @@ describe("submitted clip ID resume wiring: failed-only rerun / playlist-only res
       range: undefined,
       collectionId: "collection-a",
       runMode: "serial" as const,
+      downloadEnabled: true,
     };
 
     expect(

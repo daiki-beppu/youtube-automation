@@ -192,6 +192,7 @@ describe("collection queue state (#2029)", () => {
       collectionQueueId: "queue-1",
       runMode: "queue",
       regenerateDurationOutliers: true,
+      downloadEnabled: true,
       overrides: undefined,
     });
 

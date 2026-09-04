@@ -27,6 +27,7 @@ const REQUEST: UnattendedRunRequest = {
   baseUrl: "http://rjn.localhost:7873",
   collectionId: COLLECTION.id,
   entryIndices: [0, 1, 2, 3, 4],
+  skipDownload: false,
   limits: {
     maxEntries: 2,
     maxConcurrentGenerations: 3,
@@ -75,9 +76,41 @@ describe("assertUnattendedRunRequest", () => {
       assertUnattendedRunRequest({ ...REQUEST, downloadFormat: "mp3" })
     ).toEqual(REQUEST);
   });
+
+  it("treats an omitted skipDownload as false and accepts an explicit skip", () => {
+    expect(assertUnattendedRunRequest(REQUEST).skipDownload).toBe(false);
+    expect(
+      assertUnattendedRunRequest({ ...REQUEST, skipDownload: true })
+        .skipDownload
+    ).toBe(true);
+  });
 });
 
 describe("planUnattendedRun", () => {
+  it("completes a skip-download request from the durable playlist checkpoint", () => {
+    expect(
+      planUnattendedRun({
+        request: { ...REQUEST, skipDownload: true },
+        collection: {
+          ...COLLECTION,
+          suno_playlist_url: "https://suno.com/playlist/known",
+        },
+        entryCount: 5,
+        resumeState: {
+          collectionId: COLLECTION.id,
+          failedIndex: 5,
+          total: 5,
+          timestamp: Date.now(),
+          submittedClipIds: Array.from(
+            { length: 10 },
+            (_, index) => `clip-${index}`
+          ),
+          playlistExpectedClipCount: 10,
+        },
+      })
+    ).toEqual({ kind: "complete", reason: "playlist-created" });
+  });
+
   it("caps work and carries the remaining entries to the next scheduled run", () => {
     expect(
       planUnattendedRun({

@@ -39,6 +39,7 @@ async function loadContentScript(
 
   const handlers = new Map<string, Handler>();
   const progressMessages: ProgressMessage[] = [];
+  const sentMessages: Array<{ type: string; payload: unknown }> = [];
   let lastMultiSelectIds: string[] = [];
 
   const writeFinishedSnapshotMock = overrides?.writeFinishedSnapshotError
@@ -56,6 +57,7 @@ async function loadContentScript(
       handlers.set(type, handler);
     }),
     sendMessage: vi.fn((type: string, payload?: unknown) => {
+      sentMessages.push({ type, payload });
       if (type === "progress") {
         progressMessages.push(payload as ProgressMessage);
       }
@@ -208,6 +210,7 @@ async function loadContentScript(
     handlers,
     runHandler,
     progressMessages,
+    sentMessages,
     writeFinishedSnapshotMock,
     readFreshFinishedSnapshotMock,
     clearFinishedSnapshotMock,
@@ -294,6 +297,42 @@ describe("content.ts 完了時リロード前の FINISHED snapshot 退避", () =
       }),
       timestamp: expect.any(Number),
     });
+  });
+
+  it("Given download Switch OFF When 全 entry 完走 Then playlist 完了で FINISHED になり download/post を行わない", async () => {
+    const autoRunClipIds = ["clip-1", "clip-2", "clip-3", "clip-4"];
+    const {
+      runHandler,
+      progressMessages,
+      sentMessages,
+      clearResumeStateForCollectionMock,
+    } = await loadContentScript(autoRunClipIds);
+
+    runHandler({
+      data: {
+        ...partialRunPayload(),
+        range: undefined,
+        downloadEnabled: false,
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({
+          phase: PHASE.FINISHED,
+          message: expect.stringContaining("ダウンロード未実行"),
+        })
+      )
+    );
+    expect(clearResumeStateForCollectionMock).toHaveBeenCalledWith("coll-1");
+    expect(
+      sentMessages.filter(({ type }) =>
+        ["startDownload", "startStudioExport", "postDownloaded"].includes(type)
+      )
+    ).toHaveLength(0);
+    expect(
+      progressMessages.some(({ phase }) => phase === PHASE.DOWNLOADING)
+    ).toBe(false);
   });
 
   it("Given snapshot 退避が失敗 When FINISHED Then リロードを見送る（in-memory snapshot を生かして復元性を守る）", async () => {

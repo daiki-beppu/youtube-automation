@@ -47,6 +47,7 @@ def build_unattended_request(
     max_entries: int,
     max_concurrent_generations: int,
     max_retries: int,
+    skip_download: bool,
     request_id: str | None = None,
 ) -> dict[str, object]:
     collection_id = collection_id.strip()
@@ -72,6 +73,7 @@ def build_unattended_request(
         "requestId": resolved_request_id,
         "baseUrl": _loopback_base_url(base_url),
         "collectionId": collection_id,
+        "skipDownload": skip_download,
         "limits": {
             "maxEntries": _bounded_integer(max_entries, "--max-entries", 1, 100),
             "maxConcurrentGenerations": _bounded_integer(
@@ -138,6 +140,11 @@ def _parser() -> argparse.ArgumentParser:
         help=fallback.format(key="max_concurrent_generations"),
     )
     parser.add_argument("--max-retries", type=int, help=fallback.format(key="max_retries"))
+    parser.add_argument(
+        "--skip-download",
+        action="store_true",
+        help="playlist 追加で完了し、Suno Studio からのダウンロードを行わない",
+    )
     parser.add_argument("--request-id", help="監査用 ID。省略時は UTC 時刻と乱数から生成")
     return parser
 
@@ -166,6 +173,7 @@ def main(argv: list[str] | None = None) -> int:
         max_entries=args.max_entries,
         max_concurrent_generations=args.max_concurrent_generations,
         max_retries=args.max_retries,
+        skip_download=args.skip_download,
         request_id=args.request_id,
     )
     nonce = register_unattended_request(args.base_url, request)

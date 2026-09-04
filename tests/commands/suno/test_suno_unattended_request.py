@@ -31,6 +31,7 @@ def test_build_request_matches_extension_wire_contract() -> None:
         max_entries=2,
         max_concurrent_generations=3,
         max_retries=1,
+        skip_download=True,
         request_id="scheduled-test",
     )
     assert request == {
@@ -39,6 +40,7 @@ def test_build_request_matches_extension_wire_contract() -> None:
         "baseUrl": "http://rjn.localhost:7873/path",
         "collectionId": "20260718-rjn-night-drive-collection",
         "entryIndices": [0, 2],
+        "skipDownload": True,
         "limits": {
             "maxEntries": 2,
             "maxConcurrentGenerations": 3,
@@ -75,6 +77,7 @@ def test_rejects_unsafe_or_unbounded_requests(override: dict[str, object], messa
         "max_entries": 1,
         "max_concurrent_generations": 1,
         "max_retries": 0,
+        "skip_download": False,
         "request_id": "request",
     }
     arguments.update(override)
@@ -159,8 +162,39 @@ def test_cli_uses_skill_config_defaults(capsys: pytest.CaptureFixture[str], monk
     assert envelope["nonce"] == "abcdefghijklmnopqrstuvwxyzABCDEFGH_1234567890"
     request = captured[0]
     assert "downloadFormat" not in request
+    assert request["skipDownload"] is False
     assert request["limits"] == {
         "maxEntries": 10,
         "maxConcurrentGenerations": 3,
         "maxRetries": 2,
     }
+
+
+def test_cli_skip_download_sets_wire_contract(
+    capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    captured: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        suno_unattended_request,
+        "register_unattended_request",
+        lambda _base_url, request: captured.append(request)
+        or "abcdefghijklmnopqrstuvwxyzABCDEFGH_1234567890",
+    )
+
+    assert (
+        main(
+            [
+                "--base-url",
+                "http://localhost:7873",
+                "--collection-id",
+                "collection",
+                "--request-id",
+                "scheduled-test",
+                "--skip-download",
+            ]
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    assert captured[0]["skipDownload"] is True

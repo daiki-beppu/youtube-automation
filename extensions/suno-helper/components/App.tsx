@@ -27,6 +27,7 @@ import {
   RadioGroupItem,
   ScrollArea,
   ServerSourceField,
+  Switch,
 } from "@youtube-automation/ui";
 import { useEffect, useRef, useState } from "react";
 
@@ -72,6 +73,9 @@ export function App() {
     completionSoundSettings,
     completionSoundSettingsLoaded,
     setCompletionSoundEnabled,
+    downloadEnabled,
+    downloadEnabledLoaded,
+    setDownloadEnabled,
     playlistName,
     runModeId,
     setRunMode,
@@ -603,6 +607,24 @@ export function App() {
         onEnabledChange={setCompletionSoundEnabled}
       />
 
+      <section
+        className="flex flex-col gap-1 text-sm"
+        aria-label="ダウンロード設定"
+      >
+        <label className="flex items-center gap-2">
+          <Switch
+            checked={downloadEnabled}
+            disabled={!downloadEnabledLoaded || controlsLocked}
+            data-suno-control="download-enabled"
+            onCheckedChange={(checked) => setDownloadEnabled(checked === true)}
+          />
+          <span className="font-medium">ダウンロードまで実行する</span>
+        </label>
+        <p className="text-xs text-muted-foreground">
+          Suno Studio・Premier 必須
+        </p>
+      </section>
+
       <div className="flex gap-2">
         <Button
           type="button"
@@ -651,17 +673,19 @@ export function App() {
                 Playlist から再開
               </Button>
             )}
-            <Button
-              type="button"
-              onClick={() => void retryDownload()}
-              disabled={!selectedCollectionId}
-              data-suno-control="retry-download"
-              variant="success"
-              size="sm"
-              className="flex-1"
-            >
-              Download から再開
-            </Button>
+            {downloadEnabled && (
+              <Button
+                type="button"
+                onClick={() => void retryDownload()}
+                disabled={!selectedCollectionId}
+                data-suno-control="retry-download"
+                variant="success"
+                size="sm"
+                className="flex-1"
+              >
+                Download から再開
+              </Button>
+            )}
           </div>
         </div>
       )}

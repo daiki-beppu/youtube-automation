@@ -11,18 +11,34 @@ const storageItems = vi.hoisted(() => {
     setValue: vi.fn(),
     removeValue: vi.fn(),
   };
-  return { serverUrl, legacySources, defineItem: vi.fn() };
+  const downloadEnabled = {
+    getValue: vi.fn(),
+    setValue: vi.fn(),
+    removeValue: vi.fn(),
+    fallback: undefined as unknown,
+  };
+  return { serverUrl, legacySources, downloadEnabled, defineItem: vi.fn() };
 });
 
 vi.mock("wxt/utils/storage", () => {
-  storageItems.defineItem.mockImplementation((key: string) => {
-    if (key === "local:sunoServerUrl") return storageItems.serverUrl;
-    return storageItems.legacySources;
-  });
+  storageItems.defineItem.mockImplementation(
+    (key: string, options?: { fallback?: unknown }) => {
+      if (key === "local:sunoServerUrl") return storageItems.serverUrl;
+      if (key === "local:sunoDownloadEnabled") {
+        storageItems.downloadEnabled.fallback = options?.fallback;
+        return storageItems.downloadEnabled;
+      }
+      return storageItems.legacySources;
+    }
+  );
   return { storage: { defineItem: storageItems.defineItem } };
 });
 
-import { migrateServerSourcesStorage, serverUrlItem } from "../lib/storage";
+import {
+  downloadEnabledItem,
+  migrateServerSourcesStorage,
+  serverUrlItem,
+} from "../lib/storage";
 
 describe("Suno server source storage migration", () => {
   beforeEach(() => {
@@ -65,5 +81,12 @@ describe("Suno server source storage migration", () => {
     await expect(migrateServerSourcesStorage()).rejects.toThrow(
       "storage unavailable"
     );
+  });
+});
+
+describe("download preference storage", () => {
+  it("defaults the local download preference to enabled", () => {
+    expect(storageItems.downloadEnabled.fallback).toBe(true);
+    expect(downloadEnabledItem).toBe(storageItems.downloadEnabled);
   });
 });

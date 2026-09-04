@@ -23,6 +23,7 @@ export interface UnattendedRunRequest {
   baseUrl: string;
   collectionId: string;
   entryIndices?: number[];
+  skipDownload?: boolean;
   limits: UnattendedRunLimits;
 }
 
@@ -59,7 +60,7 @@ export interface UnattendedRunState {
 }
 
 export type UnattendedRunPlan =
-  | { kind: "complete"; reason: "already-downloaded" }
+  | { kind: "complete"; reason: "already-downloaded" | "playlist-created" }
   | {
       kind: "manual-intervention";
       reason: UnattendedStopReason;
@@ -150,6 +151,14 @@ function normalizeIndices(value: unknown): number[] | undefined {
   });
 }
 
+function optionalBoolean(value: unknown, field: string): boolean {
+  if (value === undefined) return false;
+  if (typeof value !== "boolean") {
+    throw new Error(`${field} must be boolean`);
+  }
+  return value;
+}
+
 function assertLoopbackBaseUrl(value: unknown): string {
   const raw = nonEmptyString(value, "baseUrl");
   let url: URL;
@@ -219,6 +228,7 @@ export function assertUnattendedRunRequest(
     baseUrl: assertLoopbackBaseUrl(record.baseUrl),
     collectionId: nonEmptyString(record.collectionId, "collectionId"),
     entryIndices: normalizeIndices(record.entryIndices),
+    skipDownload: optionalBoolean(record.skipDownload, "skipDownload"),
     limits: {
       maxEntries: boundedInteger(
         limits.maxEntries,
@@ -271,6 +281,14 @@ export function planUnattendedRun(options: {
     (resume?.failedIndices?.length ?? 0) > 0 ||
     (resume?.remainingIndices?.length ?? 0) > 0 ||
     (resume !== null && resume.failedIndex < entryCount);
+  if (
+    request.skipDownload === true &&
+    typeof collection.suno_playlist_url === "string" &&
+    collection.suno_playlist_url.length > 0 &&
+    !hasPendingResumeEntries
+  ) {
+    return { kind: "complete", reason: "playlist-created" };
+  }
   if (
     hasCompleteUnattendedArtifacts(
       collection,

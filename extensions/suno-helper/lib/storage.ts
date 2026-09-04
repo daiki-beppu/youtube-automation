@@ -21,6 +21,11 @@ export const serverUrlItem = storage.defineItem<string>(
   { fallback: DEFAULT_URL }
 );
 
+export const downloadEnabledItem = storage.defineItem<boolean>(
+  "local:sunoDownloadEnabled",
+  { fallback: true }
+);
+
 const legacyServerSourcesItem = storage.defineItem(
   `local:${SERVER_SOURCES_STORAGE_KEY}`
 );

@@ -44,7 +44,8 @@ browser use から overlay を安定して観測できるよう、操作 panel �
 | `[data-suno-control="collection-queue-dismiss"]`                                                   | 停止・完了した collection queue の破棄操作                                                                |
 | `[data-suno-control="collection-queue-discard-confirmation"]`                                      | 停止中 queue のインライン破棄確認                                                                          |
 | `[data-suno-control="run"]` / `[data-suno-control="stop"]`                                         | 主要操作ボタン                                                                                            |
-| `[data-suno-control="notification-enabled"]`                                                     | OS 通知と固定音をまとめて切り替える shadcn Switch                                                        |
+| `[data-suno-control="notification-enabled"]`                                                       | OS 通知と固定音をまとめて切り替える shadcn Switch                                                        |
+| `[data-suno-control="download-enabled"]`                                                           | Suno Studio からの download 実行を切り替える shadcn Switch（既定 ON）                                    |
 | `[data-suno-control="resume"]` / `[data-suno-control="dismiss-resume"]`                            | 前回中断 resume バナーの再開 / 閉じる                                                                     |
 | `[data-suno-control="adopt-selected-clips"]`                                                       | Suno 上の選択中 clip を採用                                                                               |
 | `[data-suno-control="retry-playlist"]` / `[data-suno-control="retry-download"]`                    | playlist / download phase から再開                                                                        |
@@ -92,16 +93,16 @@ build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/suno-helpe
    ```
 2. Chrome で Suno の **Advanced → More options を開く → Lyrics mode → Write** の順に選ぶ。prompt entry の `lyrics` が非空なら、`[Instrumental]` だけのインスト曲でも suno-helper が Lyrics 欄へ値を注入するため Write が必須。Lyrics 欄を隠す Instrumental mode のままでは実行できない。`lyrics` が真に空の entry だけは Instrumental mode を使える。
 3. 拡張アイコンからポップアップを開き、**ローカル配信元** で動的検出されたチャンネル名つき候補を選ぶ。初回表示・配信元選択・collection 選択の各タイミングで一覧と prompts が自動取得される。
-4. `ready` な collection を checkbox で 1 件以上選び、prompts の自動取得後に **異常値の曲を再生成する** を選んでから実行する。1 件なら従来どおり現在の entry 選択を使い、2 件以上なら server 一覧順で各 collection の全 pattern を直列実行する。既定の ON は duration guard NG の entry を最大 2 回再生成する。OFF は追加生成せず、NG を警告表示したうえで生成済み全 clip を playlist / download 候補に残す。
+4. `ready` な collection を checkbox で 1 件以上選び、prompts の自動取得後に **異常値の曲を再生成する** と **ダウンロードまで実行する** を選んでから実行する。1 件なら従来どおり現在の entry 選択を使い、2 件以上なら server 一覧順で各 collection の全 pattern を直列実行する。download Switch は既定 ON で再読み込み後も保持され、Suno Studio を利用できる Premier プラン向けに playlist 追加後の download まで行う。OFF は playlist 追加で完了し、Suno から手動取得した音源を `02-Individual-music/` へ配置する。
 5. 各パターンで Style/Lyrics を注入 → Generate 押下 → 生成完了検知 → 次へ、を自動で繰り返す。
-6. 全件完了後、対象 clip を playlist へ追加し、Suno Studio に collection id 名の project を作る。各 clip を別 track の位置 0 に配置して件数を検証し、**Export → Multitrack** の WAV ZIP を監視して `POST /collections/<id>/downloaded` へ通知する。Studio 用に開いたタブは ZIP 完了・失敗・中断のいずれでも自動で閉じる（project 自体は Studio に残す）。Studio は Premier プランが必要で、利用できない場合は理由を表示して停止する。
+6. 全件完了後、対象 clip を playlist へ追加する。download Switch が ON なら Suno Studio に collection id 名の project を作り、各 clip を別 track の位置 0 に配置して件数を検証し、**Export → Multitrack** の WAV ZIP を監視して `POST /collections/<id>/downloaded` へ通知する。Studio 用に開いたタブは ZIP 完了・失敗・中断のいずれでも自動で閉じる（project 自体は Studio に残す）。Studio は Premier プランが必要で、利用できない場合は理由を表示して停止する。OFF なら Studio 操作と `/downloaded` 通知を行わず `FINISHED` になる。
 7. captcha challenge は waiting-captcha 表示で解消（多くは自動 verify）を待って続行する。entry 単位の一時的な失敗は Balanced 固定の上限で自動リトライし、上限超過分はスキップして完走する（#948）。スキップされた entry は一覧表示され、**失敗分のみ再実行** で再投入できる。
 
 prompt entry に `duration_sec` がある場合は、各 Generate 前に Duration の **Custom** を選択し、Suno UI の slider が公開する最小値・最大値の範囲内で指定秒数を注入する。selector 不在、範囲外、操作不受理、読戻し不一致は entry をエラー停止し、overlay に原因を表示する。`duration_sec` がない entry では Auto / Custom と slider の現在状態を変更しない。
 
 通知は初期状態で ON。最終 `FINISHED` は OS 通知と明るい3音上昇音、`ERROR` はエラー概要付き OS 通知と短い2音下降ベルで知らせる。手動 `STOPPED` と collection queue の途中完了では通知しない。Switch の設定は再読み込み後も維持され、旧 preset 設定は enabled を保ったまま自動移行される。OS 通知と Web Audio は独立して試行するため、一方の失敗は run 結果へ影響しない。
 
-複数 collection queue は各 collection の `/downloaded` 完了または失敗結果を extension storage へ保存してから Suno タブを再読み込みする。この境界処理が clip tracker と Suno 内部 multi-select を collection 間で破棄し、次の collection は保存済み index から自動開始する。タブ再読み込みや Stop で中断した queue は同じ current collection から再開でき、全件終了後は summary の **失敗したコレクションだけ再実行** を使う。
+複数 collection queue は各 collection の `/downloaded` 完了（download Switch OFF では playlist 追加完了）または失敗結果を extension storage へ保存してから Suno タブを再読み込みする。この境界処理が clip tracker と Suno 内部 multi-select を collection 間で破棄し、次の collection は保存済み index から自動開始する。タブ再読み込みや Stop で中断した queue は同じ current collection から再開でき、全件終了後は summary の **失敗したコレクションだけ再実行** を使う。
 
 **異常値の曲を再生成する** を OFF にした run は、duration guard の閾値外 clip も歯抜けにせず playlist と ZIP に含める。overlay の status / console warning で NG を確認し、完了後に対象 playlist を試聴して採否を手動判断する。overlay を閉じて再表示した場合も選択は復元される。entry phase の ERROR / STOPPED は resume バナー、playlist / download phase の中断は **Playlist から再開** / **Download から再開** を使い、いずれも元 run の選択と警告を引き継ぐ。
 
@@ -117,7 +118,9 @@ uv run yt-suno-unattended-request \
   --max-concurrent-generations 3 --max-retries 2
 ```
 
-既ログイン Chrome で出力 URL を開くと、download 済みは no-op、途中 state は未完了 entry または playlist/download から再開する。collection 単位の background lease は別タブ・別要求の重複生成を防ぎ、タブ crash 後は期限切れ lease を回収する。playlist URL と browser download 完了は不可逆操作の直後に checkpoint されるため、再開時に同名 playlist や ZIP を作り直さない。上限を超えた entry は checkpoint に残し、次回 URL 起動で続行する。既存 playlist があるのに clip ID が復元できない場合は重複生成せず停止する。ログイン、可視 CAPTCHA、料金・credit 確認、互換性のない UI も自動突破せず `local:sunoUnattendedRunState` に `manual-intervention` と必要操作を記録する。`completed` は localhost readback で音源、playlist URL、downloaded 状態をすべて確認した場合だけ通知する。同じ情報を Suno ページ root の `data-suno-unattended-request-id` / `-collection-id` / `-status` / `-checkpoint` / `-stop-reason` / `-required-action` に通知し、完了 reload 後も storage から復元するため、scheduler agent は storage API なしで観測できる。手動 overlay からの run はこの契約を付けないため従来挙動のまま。
+Premier でないアカウントでは `--skip-download` を付ける。request は playlist URL の checkpoint で `completed` になり、localhost の downloaded 状態を要求せず、`POST /collections/<id>/downloaded` も行わない。
+
+既ログイン Chrome で出力 URL を開くと、download 済みは no-op、途中 state は未完了 entry または playlist/download から再開する。collection 単位の background lease は別タブ・別要求の重複生成を防ぎ、タブ crash 後は期限切れ lease を回収する。playlist URL と browser download 完了は不可逆操作の直後に checkpoint されるため、再開時に同名 playlist や ZIP を作り直さない。上限を超えた entry は checkpoint に残し、次回 URL 起動で続行する。既存 playlist があるのに clip ID が復元できない場合は重複生成せず停止する。ログイン、可視 CAPTCHA、料金・credit 確認、互換性のない UI も自動突破せず `local:sunoUnattendedRunState` に `manual-intervention` と必要操作を記録する。通常の `completed` は localhost readback で音源、playlist URL、downloaded 状態をすべて確認した場合だけ通知し、`--skip-download` では playlist URL の確認だけを要求する。同じ情報を Suno ページ root の `data-suno-unattended-request-id` / `-collection-id` / `-status` / `-checkpoint` / `-stop-reason` / `-required-action` に通知し、完了 reload 後も storage から復元するため、scheduler agent は storage API なしで観測できる。手動 overlay からの run はこの契約を付けないため従来挙動のまま。
 
 ### in-flight 検知と停止判断（#948）
 

@@ -472,6 +472,34 @@ describe('content onMessage("retryPlaylist"): 正常完了', () => {
     ).toHaveLength(0);
   });
 
+  it("Given download Switch OFF When retryPlaylist Then playlist 完了で FINISHED になり download/post を行わない", async () => {
+    const { handlers, progressMessages, sentMessages, studioExportMock } =
+      await loadContentScript();
+
+    handlers.get("retryPlaylist")!(
+      retryPlaylistMessage({
+        submittedClipIds: ["clip-1", "clip-2"],
+        expectedClipCount: 2,
+        shouldDownload: true,
+        downloadEnabled: false,
+      })
+    );
+
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({
+          phase: PHASE.FINISHED,
+          message: expect.stringContaining("ダウンロード未実行"),
+        })
+      )
+    );
+    expect(studioExportMock).not.toHaveBeenCalled();
+    expect(
+      sentMessages.filter((message) => message.type === "postDownloaded")
+    ).toHaveLength(0);
+    expect(clearResumeStateMock).toHaveBeenCalledWith("coll-1");
+  });
+
   it("Given retryPlaylist に duration NG clip が混在 When 未正規化 payload Then OK clip IDs のみを multi-select する", async () => {
     const { handlers, progressMessages, scrollAndMultiSelectByIdsMock } =
       await loadContentScript({

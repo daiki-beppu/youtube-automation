@@ -60,7 +60,11 @@ import {
   type RunOverrides,
 } from "../lib/run-overrides";
 import { isTerminalPhase, nextItemStates } from "../lib/snapshot";
-import { migrateServerSourcesStorage, serverUrlItem } from "../lib/storage";
+import {
+  downloadEnabledItem,
+  migrateServerSourcesStorage,
+  serverUrlItem,
+} from "../lib/storage";
 import { shouldReportLiveProgressStatus } from "./live-progress-status";
 import {
   buildRestoreState,
@@ -95,6 +99,9 @@ interface RunnerState {
   completionSoundSettings: CompletionSoundSettings;
   completionSoundSettingsLoaded: boolean;
   setCompletionSoundEnabled: (enabled: boolean) => void;
+  downloadEnabled: boolean;
+  downloadEnabledLoaded: boolean;
+  setDownloadEnabled: (enabled: boolean) => void;
   // collection 選択時の playlist 名 (#854)。display only。
   playlistName: string | undefined;
   runModeId: RunModeId;
@@ -267,6 +274,8 @@ export function useSunoRunner(): RunnerState {
   const [regenerateDurationOutliers, setRegenerateDurationOutliers] = useState(
     DEFAULT_REGENERATE_DURATION_OUTLIERS
   );
+  const [downloadEnabled, setDownloadEnabledState] = useState(true);
+  const [downloadEnabledLoaded, setDownloadEnabledLoaded] = useState(false);
   const [
     restoredRegenerateDurationOutliers,
     setRestoredRegenerateDurationOutliers,
@@ -697,6 +706,22 @@ export function useSunoRunner(): RunnerState {
     [reportStorageFailure]
   );
 
+  useEffect(() => {
+    void downloadEnabledItem
+      .getValue()
+      .then(setDownloadEnabledState)
+      .catch(reportStorageFailure)
+      .finally(() => setDownloadEnabledLoaded(true));
+  }, [reportStorageFailure]);
+
+  const setDownloadEnabled = useCallback(
+    (enabled: boolean) => {
+      setDownloadEnabledState(enabled);
+      void downloadEnabledItem.setValue(enabled).catch(reportStorageFailure);
+    },
+    [reportStorageFailure]
+  );
+
   const dismissResume = useCallback(() => {
     setResumeDismissed(true);
   }, []);
@@ -883,6 +908,7 @@ export function useSunoRunner(): RunnerState {
             collectionQueueId: queue.queueId,
             runMode: queue.runMode,
             regenerateDurationOutliers: queue.regenerateDurationOutliers,
+            downloadEnabled,
             durationOutlierWarnings: overrides?.durationOutlierWarnings,
             overrides,
           })
@@ -912,6 +938,7 @@ export function useSunoRunner(): RunnerState {
       setRunning,
       settleRejectedCollectionQueueStart,
       writePausedCollectionQueue,
+      downloadEnabled,
     ]
   );
 
@@ -1222,6 +1249,7 @@ export function useSunoRunner(): RunnerState {
     if (
       resumeCheckedAt === null ||
       !collectionQueueChecked ||
+      !downloadEnabledLoaded ||
       initialFetchStartedRef.current
     ) {
       return;
@@ -1254,6 +1282,7 @@ export function useSunoRunner(): RunnerState {
     discoverSources,
     fetchData,
     collectionQueueChecked,
+    downloadEnabledLoaded,
     reportStorageFailure,
     resumableCollectionId,
     resumeCheckedAt,
@@ -1387,6 +1416,7 @@ export function useSunoRunner(): RunnerState {
             collectionId: selectedCollectionId,
             runMode: runModeId,
             regenerateDurationOutliers,
+            downloadEnabled,
             durationOutlierWarnings: overrides?.durationOutlierWarnings,
             overrides,
           })
@@ -1404,6 +1434,7 @@ export function useSunoRunner(): RunnerState {
       selectedCollectionId,
       runModeId,
       regenerateDurationOutliers,
+      downloadEnabled,
       report,
       reportRunDispatchFailure,
       setRunning,
@@ -1432,6 +1463,7 @@ export function useSunoRunner(): RunnerState {
     const expectedClipCount =
       playlistExpectedClipCountForResume ?? submittedClipIdsForResume.length;
     const shouldDownload =
+      downloadEnabled &&
       resumeBanner !== null &&
       resumeBanner.failedIndex >= resumeBanner.total &&
       !resumeBanner.remainingIndices?.length;
@@ -1460,6 +1492,7 @@ export function useSunoRunner(): RunnerState {
         submittedClipIdsAreDurationFiltered:
           submittedClipIdsAreDurationFilteredForResume,
         shouldDownload,
+        downloadEnabled,
         timingReceipt: persistedResume?.timingReceipt,
       });
       setResumeDismissed(true);
@@ -1486,6 +1519,7 @@ export function useSunoRunner(): RunnerState {
     report,
     setRunning,
     persistedResume?.timingReceipt,
+    downloadEnabled,
   ]);
 
   // バナー承認 = 1-click 自動再開 (#892 要件6)。failedIndex === total（全 entry 投入済み）のときは
@@ -1754,6 +1788,9 @@ export function useSunoRunner(): RunnerState {
     completionSoundSettings,
     completionSoundSettingsLoaded,
     setCompletionSoundEnabled,
+    downloadEnabled,
+    downloadEnabledLoaded,
+    setDownloadEnabled,
     playlistName,
     runModeId,
     setRunMode,
