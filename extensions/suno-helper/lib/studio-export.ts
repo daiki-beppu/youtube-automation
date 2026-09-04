@@ -16,8 +16,9 @@ export interface StudioExportDeps {
   placeClipOnTrackAtStart: (
     clipId: string,
     trackIndex: number
-  ) => Promise<void>;
+  ) => Promise<string>;
   countPlacedClips: () => Promise<number>;
+  readTrackNames: () => Promise<string[]>;
   openExportMenu: () => Promise<void>;
   clickMultitrackExport: () => Promise<void>;
 }
@@ -104,10 +105,39 @@ function setInputValue(input: HTMLInputElement, value: string): void {
     HTMLInputElement.prototype,
     "value"
   )?.set;
-  if (!setter) throw new Error("Studio の project 名入力を更新できません");
+  if (!setter) throw new Error("Studio の入力値を更新できません");
   setter.call(input, value);
   input.dispatchEvent(new Event("input", { bubbles: true }));
   input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function dispatchPointerClick(element: HTMLElement): void {
+  const rect = element.getBoundingClientRect();
+  const common = {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    clientX: rect.left + rect.width / 2,
+    clientY: rect.top + rect.height / 2,
+    button: 0,
+  };
+  const pointer = {
+    ...common,
+    pointerId: 1,
+    pointerType: "mouse",
+    isPrimary: true,
+  };
+  element.dispatchEvent(new PointerEvent("pointerover", pointer));
+  element.dispatchEvent(new PointerEvent("pointerenter", pointer));
+  element.dispatchEvent(new MouseEvent("mouseover", common));
+  element.dispatchEvent(new MouseEvent("mouseenter", common));
+  element.dispatchEvent(
+    new PointerEvent("pointerdown", { ...pointer, buttons: 1 })
+  );
+  element.dispatchEvent(new MouseEvent("mousedown", { ...common, buttons: 1 }));
+  element.dispatchEvent(new PointerEvent("pointerup", pointer));
+  element.dispatchEvent(new MouseEvent("mouseup", common));
+  element.dispatchEvent(new MouseEvent("click", common));
 }
 
 function findLibraryScroller(element: Element): HTMLElement | null {
@@ -186,6 +216,63 @@ function dispatchClipDrop(
   event("dragend", source);
 }
 
+function libraryClipTitle(source: HTMLElement, clipId: string): string {
+  const playButton = source.querySelector<HTMLButtonElement>(
+    'button[aria-label="Play"]'
+  );
+  const title = playButton?.parentElement?.nextElementSibling
+    ?.querySelector<HTMLElement>(":scope > span")
+    ?.textContent?.trim();
+  if (!title) {
+    throw new Error(`Studio Library の clip ${clipId} から曲名を読めません`);
+  }
+  return title;
+}
+
+function trackName(track: HTMLElement): string | null {
+  return (
+    Array.from(track.querySelectorAll<HTMLElement>('[role="button"]'))
+      .find((element) => element.textContent?.trim())
+      ?.textContent?.trim() ?? null
+  );
+}
+
+async function renameTrack(track: HTMLElement, name: string): Promise<void> {
+  const currentName = trackName(track);
+  if (!currentName) throw new Error("Studio の track 名を読めません");
+  const menu = track.querySelector<HTMLButtonElement>(
+    'button.track-menu-reveal[data-context-menu-trigger="true"]'
+  );
+  if (!menu) throw new Error("Studio の track menu が見つかりません");
+  dispatchPointerClick(menu);
+  const renameButton = await waitForElement(
+    () => buttonByName("Rename Track"),
+    "Rename Track ボタン"
+  );
+  dispatchPointerClick(renameButton);
+  const input = await waitForElement(
+    () =>
+      Array.from(document.body.children).find(
+        (element): element is HTMLInputElement =>
+          element instanceof HTMLInputElement &&
+          element.value === currentName &&
+          isVisible(element)
+      ) ?? null,
+    "track 名入力"
+  );
+  setInputValue(input, name);
+  input.dispatchEvent(
+    new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
+  );
+  input.dispatchEvent(
+    new KeyboardEvent("keyup", { key: "Enter", bubbles: true })
+  );
+  await waitForElement(
+    () => (trackName(track) === name ? track : null),
+    `track 名 ${name}`
+  );
+}
+
 function createBrowserStudioExportDeps(): StudioExportDeps {
   return {
     async createEmptyProject() {
@@ -251,13 +338,27 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
       }
       const tracks = await waitForTrackCount(trackIndex + 1);
       const source = await findLibraryClip(clipId);
+      const title = libraryClipTitle(source, clipId);
       dispatchClipDrop(source, tracks[trackIndex], clipId);
+      await renameTrack(tracks[trackIndex], title);
+      return title;
     },
     async countPlacedClips() {
       await clickButtonByName("In Project");
       await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
       return document.querySelectorAll('[draggable="true"][data-clip-id]')
         .length;
+    },
+    async readTrackNames() {
+      return Array.from(
+        document.querySelectorAll<HTMLElement>("[data-track-id]")
+      ).map((track, index) => {
+        const name = trackName(track);
+        if (!name) {
+          throw new Error(`Studio の track ${index + 1} 名を読めません`);
+        }
+        return name;
+      });
     },
     async openExportMenu() {
       await clickButtonByAriaLabel("Export menu");
@@ -287,14 +388,26 @@ export async function exportStudioMultitrack(
   await deps.createEmptyProject();
   await deps.renameProject(request.collectionId);
   await deps.openLibrary();
+  const expectedTrackNames: string[] = [];
   for (const [trackIndex, clipId] of request.clipIds.entries()) {
-    await deps.placeClipOnTrackAtStart(clipId, trackIndex);
+    expectedTrackNames.push(
+      await deps.placeClipOnTrackAtStart(clipId, trackIndex)
+    );
   }
   const placedCount = await deps.countPlacedClips();
   if (placedCount !== request.clipIds.length) {
     throw new Error(
       `Studio track 数が一致しません: expected ${request.clipIds.length}, got ${placedCount}`
     );
+  }
+  const actualTrackNames = await deps.readTrackNames();
+  for (const [index, expectedName] of expectedTrackNames.entries()) {
+    const actualName = actualTrackNames[index];
+    if (actualName !== expectedName) {
+      throw new Error(
+        `Studio track 名が一致しません: track ${index + 1} expected ${expectedName}, got ${actualName}`
+      );
+    }
   }
   await deps.openExportMenu();
   await deps.clickMultitrackExport();

@@ -4,13 +4,26 @@ vi.mock("../lib/messaging", () => ({ sendMessage: vi.fn() }));
 
 import { exportStudioMultitrack } from "../lib/studio-export";
 
-function createDeps(trackCount = 2) {
+const TITLE_BY_CLIP = new Map([
+  ["clip-a", "Song A"],
+  ["clip-b", "Song B"],
+]);
+
+function createDeps(
+  trackCount = 2,
+  trackNames: string[] = ["Song A", "Song B"]
+) {
   return {
     createEmptyProject: vi.fn(async () => undefined),
     renameProject: vi.fn(async () => undefined),
     openLibrary: vi.fn(async () => undefined),
-    placeClipOnTrackAtStart: vi.fn(async () => undefined),
+    placeClipOnTrackAtStart: vi.fn(async (clipId: string) => {
+      const title = TITLE_BY_CLIP.get(clipId);
+      if (!title) throw new Error(`unexpected clip: ${clipId}`);
+      return title;
+    }),
     countPlacedClips: vi.fn(async () => trackCount),
+    readTrackNames: vi.fn(async () => trackNames),
     openExportMenu: vi.fn(async () => undefined),
     clickMultitrackExport: vi.fn(async () => undefined),
   };
@@ -44,6 +57,22 @@ describe("Studio multitrack export", () => {
         deps
       )
     ).rejects.toThrow("Studio track 数が一致しません: expected 2, got 1");
+
+    expect(deps.openExportMenu).not.toHaveBeenCalled();
+    expect(deps.clickMultitrackExport).not.toHaveBeenCalled();
+  });
+
+  it("Given clip 配置後も既定 track 名のまま When export Then 曲名不一致を示して export しない", async () => {
+    const deps = createDeps(2, ["Audio Track", "Audio Track"]);
+
+    await expect(
+      exportStudioMultitrack(
+        { collectionId: "collection-2026", clipIds: ["clip-a", "clip-b"] },
+        deps
+      )
+    ).rejects.toThrow(
+      "Studio track 名が一致しません: track 1 expected Song A, got Audio Track"
+    );
 
     expect(deps.openExportMenu).not.toHaveBeenCalled();
     expect(deps.clickMultitrackExport).not.toHaveBeenCalled();
