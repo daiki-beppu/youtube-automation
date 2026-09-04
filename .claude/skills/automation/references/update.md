@@ -517,7 +517,7 @@ sync 直後に、次の 2 点を Phase 4 へ進む前に判定する。手順は
 
 ## Phase 4: コミット（push は人間）
 
-追従開始時に commit まで一括実行できる場合は、Phase 2 の apply を
+追従開始時に commit まで一括実行できる場合は、Phase 3（Step 3-2）の apply を
 `uv run yt-automation-update apply --commit` として、この Phase の手動 commit を省略する。
 既存の対話 wizard で追加確認や修復を挟んだ場合は、以下の明示的な staging 手順を引き続き使う。
 
@@ -565,7 +565,7 @@ git commit -m "chore: youtube-automation <target_ref> への追従 (#N)"
 - 機械的手順（実行場所判定 / pin 形式判定 / 差分判定 / pin 書き換え / `uv lock` / `yt-skills sync` / smoke check）は `yt-automation-update` CLI に委譲し、AI が sed / uv lock 等を手で再実装しない
 - 人間が答えるべきステップ（上書き判断 / push 判断 / sha pin の bump 先 / `--prune` 付与）を AI が勝手に決めない
 - `--force-sync` / `--prune` 系の破壊的操作は必ず `[HUMAN STEP]` の同意を経る
-- commit / push は CLI の責務外。Phase 4 で AI が commit まで行い、push は人間に依頼する
+- commit は `apply --commit` を使わない場合に Phase 4 で AI が行う。push は CLI の責務外で、人間に依頼する
 - Step 2-3 の抽出セクション境界（`### Added` / `### Changed` / `### Fixed` / `### Removed` / `### Migration`）と Migration セクション必須要素（`所要時間の目安` / `local fix 衝突注意`）を配布先での **入力契約** とする。upstream 側のリリース本文契約が変わったら Step 2-3 も同期更新する
 
 ## Cross References
