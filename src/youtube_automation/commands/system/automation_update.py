@@ -7,7 +7,7 @@ Subcommands:
 設計原則:
     判断が必要な手順（リリース内容の要約 / local fix 上書き判断 / 同意取得）は
     automation-update スキル側に残し、本 CLI は機械的に決まる手順のみを担う。
-    commit / push は責務外（スキル・人間側で実施する）。
+    commit は apply --commit で任意に実行し、push はスキル・人間側で実施する。
 
 Exit codes:
     check : 0 = 既に最新 / 1 = 差分あり（要追従） / 2 = エラー
@@ -30,6 +30,7 @@ from youtube_automation.commands.system.automation_update_refs import (
     _SHA_RE,
     PACKAGE_NAME,
     UPSTREAM_REPO,
+    Pin,
     _canonicalize_name,
     _classify_git_ref,
     _describe_pin,
@@ -160,7 +161,7 @@ def _require_tag_ref(ref: str, *, source: str) -> str:
 def _git_status_porcelain(root: Path) -> str:
     try:
         proc = subprocess.run(
-            ["git", "status", "--porcelain"],
+            ["git", "status", "--porcelain", "--untracked-files=no"],
             cwd=root,
             capture_output=True,
             text=True,
@@ -171,6 +172,79 @@ def _git_status_porcelain(root: Path) -> str:
     if proc.returncode != 0:
         raise _StepFailed(f"git status に失敗しました: {proc.stderr.strip()}")
     return proc.stdout.strip()
+
+
+def _git_status_paths(root: Path) -> set[str]:
+    """Return all paths currently reported by status, including untracked files."""
+    try:
+        proc = subprocess.run(
+            ["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as e:
+        raise _StepFailed(f"git status を起動できません: {e}") from e
+    if proc.returncode != 0:
+        raise _StepFailed(f"git status に失敗しました: {proc.stderr.strip()}")
+
+    records = proc.stdout.split("\0")
+    paths: set[str] = set()
+    index = 0
+    while index < len(records):
+        record = records[index]
+        if not record:
+            index += 1
+            continue
+        status = record[:2]
+        paths.add(record[3:])
+        index += 2 if "R" in status or "C" in status else 1
+    return paths
+
+
+def _commit_apply_changes(root: Path, before_paths: set[str], ref: str) -> None:
+    paths = sorted(_git_status_paths(root) - before_paths)
+    if not paths:
+        raise _StepFailed("apply 前後の git status に commit 対象の差分がありません")
+    commands = [
+        ["git", "add", "--", *paths],
+        ["git", "commit", "-m", f"chore: youtube-automation {ref} への追従"],
+    ]
+    for command in commands:
+        try:
+            proc = subprocess.run(command, cwd=root, capture_output=True, text=True, check=False)
+        except OSError as e:
+            raise _StepFailed(f"{' '.join(command[:2])} を起動できません: {e}") from e
+        if proc.returncode != 0:
+            details = proc.stderr.strip() or proc.stdout.strip()
+            raise _StepFailed(f"exit code {proc.returncode}: {' '.join(command[:2])}\n{details}")
+
+
+def _commit_ref(root: Path, pin: Pin, new_ref: str | None) -> str:
+    """apply 後の commit message に使う追従先 ref を pin 種別から解決する。"""
+    if pin.kind == "branch":
+        locked_sha = _locked_git_sha(root)
+        if locked_sha is None:
+            raise _StepFailed("uv.lock から追従後の git sha を取得できません")
+        return locked_sha[:12]
+    assert new_ref is not None
+    return new_ref if pin.kind == "tag" else new_ref[:12]
+
+
+def _append_optional_step(
+    steps: list[tuple[str, Callable[[], None]]], *, enabled: bool, name: str, action: Callable[[], None]
+) -> None:
+    """条件付き step の組み立てを orchestrator の分岐から分離する。"""
+    if enabled:
+        steps.append((name, action))
+
+
+def _print_apply_success(*, committed: bool) -> None:
+    if committed:
+        print("✓ 追従と commit が完了しました。push は本 CLI の責務外です（スキル / 人間側で実施してください）")
+        return
+    print("✓ 追従が完了しました。commit / push は本 CLI の責務外です（スキル / 人間側で実施してください）")
 
 
 def _run_command(cmd: list[str], cwd: Path) -> int:
@@ -373,6 +447,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
     if new_ref:
         print(f"追従先: {new_ref}")
     hooks_before = _hooks_snapshot(root)
+    status_before: set[str] = set()
 
     def step_worktree() -> None:
         status = _git_status_porcelain(root)
@@ -392,6 +467,9 @@ def cmd_apply(args: argparse.Namespace) -> int:
                 "local fix を手動解消してから再実行してください"
             )
 
+    def step_status_snapshot() -> None:
+        status_before.update(_git_status_paths(root))
+
     def step_rewrite() -> None:
         if pin.kind == "branch":
             print(f"  main 追従 (branch={pin.value}) のため pin 書き換えは不要です")
@@ -410,6 +488,11 @@ def cmd_apply(args: argparse.Namespace) -> int:
     def step_channel_config() -> None:
         print(f"  {_check_channel_config(root)}")
 
+    def step_commit() -> None:
+        commit_ref = _commit_ref(root, pin, new_ref)
+        _commit_apply_changes(root, status_before, commit_ref)
+        print(f"  chore: youtube-automation {commit_ref} への追従")
+
     def run(cmd: list[str]) -> Callable[[], None]:
         def _invoke() -> None:
             print(f"  $ {' '.join(cmd)}")
@@ -424,6 +507,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
     steps: list[tuple[str, Callable[[], None]]] = []
     if not args.allow_dirty:
         steps.append(("git 作業ツリー確認", step_worktree))
+    _append_optional_step(steps, enabled=args.commit, name="commit 対象の事前確認", action=step_status_snapshot)
     steps.append(("yt-skills diff による local fix 確認", step_local_fix_guard))
     steps.append(("pyproject.toml の pin 書き換え", step_rewrite))
     steps.append(("uv lock", run(["uv", "lock", "--upgrade-package", PACKAGE_NAME])))
@@ -449,6 +533,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
         )
     steps.append(("smoke check: yt-skills list", run(["uv", "run", "yt-skills", "list"])))
     steps.append(("smoke check: channel config", step_channel_config))
+    _append_optional_step(steps, enabled=args.commit, name="追従差分を commit", action=step_commit)
 
     total = len(steps)
     for index, (name, action) in enumerate(steps, start=1):
@@ -463,7 +548,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 1
-    print("✓ 追従が完了しました。commit / push は本 CLI の責務外です（スキル / 人間側で実施してください）")
+    _print_apply_success(committed=args.commit)
     hooks_after = _hooks_snapshot(root)
     if args.accept_hooks and hooks_before is not None and hooks_after is not None and hooks_before != hooks_after:
         print(
@@ -533,6 +618,11 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "途中失敗からの再実行時に作業ツリーの clean guard だけを bypass する。それ単独では local fix guard は維持"
         ),
+    )
+    p_apply.add_argument(
+        "--commit",
+        action="store_true",
+        help="apply が新たに作った差分だけを stage し、追従 ref を含むメッセージで commit する",
     )
     p_apply.set_defaults(func=cmd_apply)
 

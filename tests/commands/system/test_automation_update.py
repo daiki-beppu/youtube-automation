@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -845,6 +846,92 @@ def test_apply_dirty_worktree_fails_before_any_command(
     assert commands == []
     # pin も書き換えられていない
     assert 'tag = "v5.5.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
+
+
+def test_git_status_porcelain_ignores_untracked_files(tmp_path: Path) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    (repo / "untracked.txt").write_text("local\n", encoding="utf-8")
+
+    assert automation_update._git_status_porcelain(repo) == ""
+
+    subprocess.run(["git", "add", "pyproject.toml"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "base"],
+        cwd=repo,
+        check=True,
+    )
+    (repo / "pyproject.toml").write_text(INLINE_TABLE_PYPROJECT + "\n# changed\n", encoding="utf-8")
+
+    assert "pyproject.toml" in automation_update._git_status_porcelain(repo)
+
+
+def _init_apply_git_repo(repo: Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "pyproject.toml"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=repo, check=True)
+
+
+def test_apply_commit_commits_only_new_status_paths(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    _init_apply_git_repo(repo)
+    (repo / "existing-untracked.txt").write_text("keep me local\n", encoding="utf-8")
+
+    monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: False)
+    monkeypatch.setattr(automation_update, "_check_channel_config", lambda root: "config/channel/ ロード成功")
+
+    def _run(cmd: list[str], cwd: Path) -> int:
+        if cmd[:4] == ["uv", "run", "yt-skills", "sync"]:
+            generated = cwd / ".claude" / "skills" / "generated.md"
+            generated.parent.mkdir(parents=True)
+            generated.write_text("generated\n", encoding="utf-8")
+        return 0
+
+    monkeypatch.setattr(automation_update, "_run_command", _run)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--commit"]) == 0
+    assert (
+        subprocess.run(
+            ["git", "log", "-1", "--pretty=%s"], cwd=repo, check=True, capture_output=True, text=True
+        ).stdout.strip()
+        == "chore: youtube-automation v5.6.0 への追従"
+    )
+    committed = subprocess.run(
+        ["git", "show", "--pretty=", "--name-only", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.splitlines()
+    assert committed == [".claude/skills/generated.md", "pyproject.toml"]
+    remaining = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout
+    assert "?? existing-untracked.txt\n" in remaining
+    assert ".claude/skills/generated.md" not in remaining
+
+
+def test_apply_commit_failure_keeps_updated_worktree(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    _init_apply_git_repo(repo)
+    hook = repo / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    hook.chmod(0o755)
+    monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: False)
+    monkeypatch.setattr(automation_update, "_check_channel_config", lambda root: "config/channel/ ロード成功")
+    monkeypatch.setattr(automation_update, "_run_command", lambda cmd, cwd: 0)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--commit"]) == 1
+    assert 'tag = "v5.6.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
+    assert subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=no"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
 
 
 def test_apply_local_fix_diff_requires_explicit_sync_decision(

@@ -517,6 +517,10 @@ sync 直後に、次の 2 点を Phase 4 へ進む前に判定する。手順は
 
 ## Phase 4: コミット（push は人間）
 
+追従開始時に commit まで一括実行できる場合は、Phase 2 の apply を
+`uv run yt-automation-update apply --commit` として、この Phase の手動 commit を省略する。
+既存の対話 wizard で追加確認や修復を挟んだ場合は、以下の明示的な staging 手順を引き続き使う。
+
 ### Step 4-1. ステージング
 
 ```bash
