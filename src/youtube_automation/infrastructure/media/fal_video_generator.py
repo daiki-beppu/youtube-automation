@@ -22,9 +22,7 @@ DEFAULT_RESOLUTION = "768P"
 DEFAULT_PROMPT_EXPANSION_MODE = "balanced"
 DEFAULT_TIMEOUT_SEC = 600.0
 DEFAULT_POLL_INTERVAL_SEC = 2.0
-DEFAULT_ALLOWED_MODELS = frozenset(
-    {DEFAULT_MODEL, "minimax/h3-max/image-to-video"}
-)
+DEFAULT_ALLOWED_MODELS = frozenset({DEFAULT_MODEL, "minimax/h3-max/image-to-video"})
 DEFAULT_CANVAS = {"16:9": (1344, 768), "9:16": (768, 1344)}
 _MAX_PROMPT_CHARS = 2000
 _RESOLUTIONS = {"480P", "768P"}
@@ -60,9 +58,17 @@ def _validate_and_resize(image_path: Path, destination: Path, canvas: tuple[int,
 
 
 def _validate(
-    *, model: str, prompt: str, duration_seconds: int, resolution: str,
-    prompt_expansion_mode: str, aspect_ratio: str, allowed_models: set[str] | frozenset[str],
-    canvas: Mapping[str, tuple[int, int]], timeout_sec: float, poll_interval_sec: float,
+    *,
+    model: str,
+    prompt: str,
+    duration_seconds: int,
+    resolution: str,
+    prompt_expansion_mode: str,
+    aspect_ratio: str,
+    allowed_models: set[str] | frozenset[str],
+    canvas: Mapping[str, tuple[int, int]],
+    timeout_sec: float,
+    poll_interval_sec: float,
 ) -> tuple[int, int]:
     if not isinstance(duration_seconds, int) or isinstance(duration_seconds, bool) or not 5 <= duration_seconds <= 15:
         raise ValidationError("fal duration_seconds は 5〜15 の整数である必要があります")
@@ -81,23 +87,48 @@ def _validate(
     return canvas[aspect_ratio]
 
 
-def _submit(image_path: Path, output_path: Path, *, source_image_path: Path | None = None,
-            model: str, prompt: str,
-            duration_seconds: int, resolution: str, prompt_expansion_mode: str,
-            timeout_sec: float, channel_root: Path | None) -> dict[str, object]:
+def _submit(
+    image_path: Path,
+    output_path: Path,
+    *,
+    source_image_path: Path | None = None,
+    model: str,
+    prompt: str,
+    duration_seconds: int,
+    resolution: str,
+    prompt_expansion_mode: str,
+    timeout_sec: float,
+    channel_root: Path | None,
+) -> dict[str, object]:
     file_url = fal_client.upload_file(image_path, timeout=timeout_sec)
-    response = fal_client.submit(model, {
-        "prompt": prompt, "image_url": file_url, "end_image_url": file_url,
-        "duration": duration_seconds, "resolution": resolution,
-        "prompt_expansion_mode": prompt_expansion_mode,
-    }, timeout=timeout_sec)
-    state = {key: _text(response.get(key), f"submit {key}") for key in
-             ("request_id", "response_url", "status_url", "cancel_url")}
-    task_store.save(output_path, source_image_path or image_path,
-                    submitted_at=datetime.now(timezone.utc).isoformat(),
-                    model=model, prompt=prompt, duration_seconds=duration_seconds,
-                    resolution=resolution, prompt_expansion_mode=prompt_expansion_mode,
-                    channel_root=channel_root, **state)
+    response = fal_client.submit(
+        model,
+        {
+            "prompt": prompt,
+            "image_url": file_url,
+            "end_image_url": file_url,
+            "duration": duration_seconds,
+            "resolution": resolution,
+            "prompt_expansion_mode": prompt_expansion_mode,
+        },
+        timeout=timeout_sec,
+    )
+    state = {
+        key: _text(response.get(key), f"submit {key}")
+        for key in ("request_id", "response_url", "status_url", "cancel_url")
+    }
+    task_store.save(
+        output_path,
+        source_image_path or image_path,
+        submitted_at=datetime.now(timezone.utc).isoformat(),
+        model=model,
+        prompt=prompt,
+        duration_seconds=duration_seconds,
+        resolution=resolution,
+        prompt_expansion_mode=prompt_expansion_mode,
+        channel_root=channel_root,
+        **state,
+    )
     return state
 
 
@@ -147,49 +178,84 @@ def _persist(video: bytes, output_path: Path) -> None:
 
 
 def generate_loop_video(
-    image_path: Path, output_path: Path, model: str, prompt: str, *,
-    duration_seconds: int = DEFAULT_DURATION_SECONDS, aspect_ratio: str = "16:9",
+    image_path: Path,
+    output_path: Path,
+    model: str,
+    prompt: str,
+    *,
+    duration_seconds: int = DEFAULT_DURATION_SECONDS,
+    aspect_ratio: str = "16:9",
     resolution: str = DEFAULT_RESOLUTION,
     prompt_expansion_mode: str = DEFAULT_PROMPT_EXPANSION_MODE,
-    timeout_sec: float = DEFAULT_TIMEOUT_SEC, poll_interval_sec: float = DEFAULT_POLL_INTERVAL_SEC,
+    timeout_sec: float = DEFAULT_TIMEOUT_SEC,
+    poll_interval_sec: float = DEFAULT_POLL_INTERVAL_SEC,
     allowed_models: set[str] | frozenset[str] = DEFAULT_ALLOWED_MODELS,
     canvas: Mapping[str, tuple[int, int]] = DEFAULT_CANVAS,
-    upscale_to: tuple[int, int] | None = (1920, 1080), compression: dict | None = None,
+    upscale_to: tuple[int, int] | None = (1920, 1080),
+    compression: dict | None = None,
     channel_root: Path | None = None,
 ) -> bool:
     """入力を canvas 化し、再開可能な fal queue job として生成する。"""
     try:
-        size = _validate(model=model, prompt=prompt, duration_seconds=duration_seconds,
-                         resolution=resolution, prompt_expansion_mode=prompt_expansion_mode,
-                         aspect_ratio=aspect_ratio, allowed_models=allowed_models, canvas=canvas,
-                         timeout_sec=timeout_sec, poll_interval_sec=poll_interval_sec)
+        size = _validate(
+            model=model,
+            prompt=prompt,
+            duration_seconds=duration_seconds,
+            resolution=resolution,
+            prompt_expansion_mode=prompt_expansion_mode,
+            aspect_ratio=aspect_ratio,
+            allowed_models=allowed_models,
+            canvas=canvas,
+            timeout_sec=timeout_sec,
+            poll_interval_sec=poll_interval_sec,
+        )
         root = channel_root or output_path.parent.parent
         prepared = root / "tmp" / "fal-video-inputs" / f"{output_path.stem}.png"
         _validate_and_resize(image_path, prepared, size)
         state = task_store.load(output_path, channel_root=channel_root)
-        if state is not None and task_store.matches(state, image_path, model=model, prompt=prompt,
-                duration_seconds=duration_seconds, resolution=resolution,
-                prompt_expansion_mode=prompt_expansion_mode):
+        if state is not None and task_store.matches(
+            state,
+            image_path,
+            model=model,
+            prompt=prompt,
+            duration_seconds=duration_seconds,
+            resolution=resolution,
+            prompt_expansion_mode=prompt_expansion_mode,
+        ):
             try:
                 result = _poll(state, timeout_sec=timeout_sec, poll_interval_sec=poll_interval_sec)
             except GeneratorError as error:
                 if not _is_expired(error):
                     raise
                 task_store.clear(output_path, channel_root=channel_root)
-                state = _submit(prepared, output_path, source_image_path=image_path,
-                    model=model, prompt=prompt,
-                    duration_seconds=duration_seconds, resolution=resolution,
-                    prompt_expansion_mode=prompt_expansion_mode, timeout_sec=timeout_sec,
-                    channel_root=channel_root)
+                state = _submit(
+                    prepared,
+                    output_path,
+                    source_image_path=image_path,
+                    model=model,
+                    prompt=prompt,
+                    duration_seconds=duration_seconds,
+                    resolution=resolution,
+                    prompt_expansion_mode=prompt_expansion_mode,
+                    timeout_sec=timeout_sec,
+                    channel_root=channel_root,
+                )
                 result = _poll(state, timeout_sec=timeout_sec, poll_interval_sec=poll_interval_sec)
         else:
             if state is not None:
                 task_store.clear(output_path, channel_root=channel_root)
-            state = _submit(prepared, output_path, source_image_path=image_path,
-                model=model, prompt=prompt,
-                duration_seconds=duration_seconds, resolution=resolution,
-                prompt_expansion_mode=prompt_expansion_mode, timeout_sec=timeout_sec,
-                channel_root=channel_root)
+            state = _submit(
+                prepared,
+                output_path,
+                source_image_path=image_path,
+                model=model,
+                prompt=prompt,
+                duration_seconds=duration_seconds,
+                resolution=resolution,
+                prompt_expansion_mode=prompt_expansion_mode,
+                timeout_sec=timeout_sec,
+                channel_root=channel_root,
+            )
             result = _poll(state, timeout_sec=timeout_sec, poll_interval_sec=poll_interval_sec)
         _persist(fal_client.download(_video_url(result), timeout=timeout_sec), output_path)
     except (ConfigError, GeneratorError, ValidationError) as error:
@@ -198,8 +264,7 @@ def generate_loop_video(
 
     crf = int(compression.get("crf", 22)) if compression and compression.get("enabled", True) else 18
     preset = str(compression.get("preset", "slow")) if compression and compression.get("enabled", True) else "slow"
-    if not smooth_loop(output_path, crossfade_sec=0.5, trim_tail_sec=1.0,
-                       scale_to=upscale_to, crf=crf, preset=preset):
+    if not smooth_loop(output_path, crossfade_sec=0.5, trim_tail_sec=1.0, scale_to=upscale_to, crf=crf, preset=preset):
         print("  [Warn]   fal 動画のループ補正に失敗しました（生成済み動画は保持します）")
     expanded = result.get("expanded_prompt")
     if isinstance(expanded, str) and expanded:
@@ -208,11 +273,21 @@ def generate_loop_video(
         (assets / "loop.expanded-prompt.txt").write_text(expanded + "\n", encoding="utf-8")
     metrics = result.get("metrics")
     inference = metrics.get("inference_time") if isinstance(metrics, Mapping) else None
-    entry = cost_tracker.log_generation("video", model=model, quantity=duration_seconds, unit="second",
-        metadata={"request_id": state["request_id"], "endpoint": model,
-                  "prompt_expansion_mode": prompt_expansion_mode, "inference_time_sec": inference,
-                  "resolution": resolution, "aspect_ratio": aspect_ratio,
-                  "output_file": cost_tracker.relative_to_channel_dir(output_path)})
+    entry = cost_tracker.log_generation(
+        "video",
+        model=model,
+        quantity=duration_seconds,
+        unit="second",
+        metadata={
+            "request_id": state["request_id"],
+            "endpoint": model,
+            "prompt_expansion_mode": prompt_expansion_mode,
+            "inference_time_sec": inference,
+            "resolution": resolution,
+            "aspect_ratio": aspect_ratio,
+            "output_file": cost_tracker.relative_to_channel_dir(output_path),
+        },
+    )
     cost_tracker.print_last_report(entry)
     task_store.clear(output_path, channel_root=channel_root)
     return True
