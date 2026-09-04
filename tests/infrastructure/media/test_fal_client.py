@@ -24,9 +24,7 @@ def test_submit_uses_key_auth_and_queue_host(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(fal_client, "get_api_key", Mock(return_value="fal-secret"))
     monkeypatch.setattr(fal_client.requests, "post", post)
 
-    assert fal_client.submit("minimax/h3/image-to-video", {"prompt": "loop"}, timeout=30) == {
-        "request_id": "request-1"
-    }
+    assert fal_client.submit("minimax/h3/image-to-video", {"prompt": "loop"}, timeout=30) == {"request_id": "request-1"}
     post.assert_called_once_with(
         "https://queue.fal.run/minimax/h3/image-to-video",
         json={"prompt": "loop"},
