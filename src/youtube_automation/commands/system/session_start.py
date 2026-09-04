@@ -31,6 +31,20 @@ def _value_after(output: str, prefix: str) -> str | None:
     return None
 
 
+def _tag_notice(check_output: str) -> str:
+    """tag pin の通知文。check が出した最新リリース名をそのまま案内に載せる。"""
+    tag = _value_after(check_output, _LATEST_RELEASE_PREFIX)
+    release = f"新しい release {tag}" if tag else "新しい release"
+    return f"{release} があります。yt-channels update --tag {tag or '<tag>'} で追従してください"
+
+
+def _branch_notice(check_output: str, branch: str) -> str:
+    """main pin の通知文。check が出した upstream HEAD を短縮して載せる。"""
+    head = _value_after(check_output, f"upstream {branch} HEAD: ")
+    upstream = f"上流 {branch} の最新は {head[:7]} です" if head else "上流に更新があります"
+    return f"{upstream}。yt-channels update で追従してください"
+
+
 def _git_output(root: Path, *arguments: str) -> str | None:
     completed = _command(["git", *arguments], root)
     return completed.stdout.strip() if completed.returncode == 0 else None
@@ -90,16 +104,12 @@ def _run(_: argparse.Namespace) -> int:
             if check.returncode != 1:
                 return 0
             if pin.kind == "tag":
-                tag = _value_after(check.stdout, _LATEST_RELEASE_PREFIX)
-                release = f"新しい release {tag}" if tag else "新しい release"
-                print(f"{_PREFIX} {release} があります。yt-channels update --tag {tag or '<tag>'} で追従してください")
+                print(f"{_PREFIX} {_tag_notice(check.stdout)}")
                 return 0
             reason = _gate_reason(root)
             if reason:
-                head = _value_after(check.stdout, f"upstream {pin.value} HEAD: ")
-                upstream = f"上流 {pin.value} の最新は {head[:7]} です" if head else "上流に更新があります"
                 print(f"{_PREFIX} {reason}")
-                print(f"{_PREFIX} {upstream}。yt-channels update で追従してください")
+                print(f"{_PREFIX} {_branch_notice(check.stdout, pin.value)}")
                 return 0
             apply = _command(["uv", "run", "yt-automation-update", "apply", "--commit", "--accept-hooks"], root)
             output = "\n".join((apply.stdout, apply.stderr))
