@@ -1,0 +1,1 @@
+- fal queue 経由で MiniMax H3 動画を安全に生成・再開する video generator を追加
