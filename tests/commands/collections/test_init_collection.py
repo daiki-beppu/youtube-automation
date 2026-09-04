@@ -190,6 +190,7 @@ class TestScaffold:
 
             shutil.rmtree(collection)
 
+
 class TestPlanDraftDirectory:
     """#4754: Phase 1 の企画 draft 公開が先に作ったディレクトリで 2a を止めない。
 

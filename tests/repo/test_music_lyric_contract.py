@@ -139,6 +139,7 @@ def test_music_lyric_state_runs_then_skips_after_outputs_exist(tmp_path: Path) -
     assert after.returncode == 0
     assert json.loads(after.stdout)["decision"] == "skip"
 
+
 def test_music_lyric_state_blocks_lyria_engine(tmp_path: Path) -> None:
     collection = _write_channel(tmp_path, music_engine="lyria", genre_line="soulful female vocals", mode="vocal")
 
@@ -146,6 +147,7 @@ def test_music_lyric_state_blocks_lyria_engine(tmp_path: Path) -> None:
 
     assert result.returncode == 20
     assert json.loads(result.stdout)["reason"] == "music_engine_not_lyric_capable"
+
 
 def test_music_lyric_state_blocks_instrumental_collection(tmp_path: Path) -> None:
     collection = _write_channel(tmp_path, music_engine="suno", genre_line="ambient instrumental", mode="instrumental")

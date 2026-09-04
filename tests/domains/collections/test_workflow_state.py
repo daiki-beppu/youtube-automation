@@ -496,6 +496,7 @@ def test_music_engine_accessor_reads_canonical_and_legacy_shapes(
 
     assert read(state_path).music_engine == "lyria"
 
+
 def test_music_planning_exposes_non_negative_expected_file_count(tmp_path: Path) -> None:
     state_path = tmp_path / "workflow-state.json"
     _write(state_path, {"planning": {"music": {"expected_file_count": 4}}})

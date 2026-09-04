@@ -907,6 +907,7 @@ def test_load_all_sections(tmp_path, monkeypatch):
     assert config.shorts.release.start_sec == 20
     assert config.shorts.release.duration_sec == 30
 
+
 def test_shorts_section_missing_defaults_to_disabled(tmp_path, monkeypatch):
     """shorts.json を 1 ファイルも置かない場合、enabled=False（オプトイン）で全 default が返る."""
     ch = _setup_channel(tmp_path, _minimal_sections())  # shorts.json なし

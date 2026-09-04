@@ -174,6 +174,7 @@ def test_batch_manifest_validator_accepts_complete_exact_matrix(
     assert json.loads(capsys.readouterr().out) == {"status": "valid", "batch_id": "batch-20260806"}
     assert json.loads(manifest_path.read_text(encoding="utf-8")) == original
 
+
 @pytest.mark.parametrize(
     ("case", "mutate"),
     [
