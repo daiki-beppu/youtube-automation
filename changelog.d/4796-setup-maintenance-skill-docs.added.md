@@ -1,1 +1,0 @@
-- setup・extension・automation・skill-feedback のサイト向け手書き解説を追加

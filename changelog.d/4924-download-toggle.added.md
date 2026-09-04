@@ -1,1 +1,0 @@
-- suno-helper にダウンロード実行 Switch、選択中 clip から Studio export だけを行うボタン、unattended の `--skip-download` を追加し、Premier でないアカウントでも playlist 追加で完了できるようにした（#4924）。

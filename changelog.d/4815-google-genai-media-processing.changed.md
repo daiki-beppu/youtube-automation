@@ -1,1 +1,0 @@
-- google-genai の下限を 2.20 へ引き上げ、agentic media processing API を利用できるようにした（#4815）。

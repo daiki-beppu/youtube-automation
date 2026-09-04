@@ -7,6 +7,82 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.7.2] - 2026-09-04
+
+### Added
+
+- skill 詳細ページに手書き解説のサンドイッチ合成とビルド時の鮮度検証を追加
+- 制作ワークフローの `wf-new`、`wf-next`、`wf-status` に、用途と実行例を逆引きできるサイト向け手書き解説を追加
+- 公開サイトに thumbnail・video・short スキルの手書き解説を追加
+- 公開・運用に関する 4 スキルのサイト向け手書き解説を追加
+- 分析・戦略カテゴリ 4 スキルのサイト向け手書き解説を追加し、各 mode の使い分けと停止時の対処を逆引きできるようにした（#4795）。
+- setup・extension・automation・skill-feedback のサイト向け手書き解説を追加
+- アップデートタブから全バージョンのアップグレードガイド、workspace 移行、high-CPM ローカライズ移行へ到達できるようにした（#4802）。
+- OAuth token と権限の使い分けを運用者向けに整理し、「はじめる」タブから公開した（#4803）。
+- 動画解析に、全尺をモデル主導で探索する Gemini agentic processing モードを追加しました。
+- `yt-generate-lyria-master` に `--loop` を追加し、少数の Lyria セグメント生成と反復マスター結合を単一コマンドで実行できるようにした（#4828）。
+- `yt-generate-lyria-master` のマスター結合で `config/channel/audio.json` の `audio.target_duration_max` を検証するようにし、`--allow-duration-outside-target` で明示的に上限を超えられるようにした（#4828）。
+- 逆移行ガイド `docs/migration/workspace-to-single-repo.md` を追加した。export・凍結 3 層・初回 commit の等式検証・GitHub 新設と旧リポジトリ削除・dogfood の 1 周と合格条件・残り 6 チャンネルの smoke check・切り戻し・完了判定を 1 チャンネル分の手順として書く（#4902）。
+- Suno Studio Multitrack ZIP の数字 prefix 付き WAV を曲名へ照合し、同一 entry のトラックを a / b variant へ順番に配置できるようにした（#4922）。
+- suno-helper にダウンロード実行 Switch、選択中 clip から Studio export だけを行うボタン、unattended の `--skip-download` を追加し、Premier でないアカウントでも playlist 追加で完了できるようにした（#4924）。
+- `yt-suno-audio-cleanup` が既定で末尾のパディング無音も除去し、トリム後の実尺を基準に fade-out guard を適用するようにした
+
+### Changed
+
+- skill 骨格ページを description のリード文と、発動フレーズ・前後工程・成果物・API call 数・前提のリファレンス構成へ刷新
+- 公開対象 skill の手書き解説を必須化し、欠落や新規 skill の追加し忘れをサイトビルドで検出するようにしました。
+- 公開ドキュメントの Orama 検索を日本語トークナイズへ切り替え、UI chrome も日本語化した（#4799）。
+- 公開リリースノートを `/releases/` 配下へ移し、従来 URL から恒久リダイレクトするようにした（#4800）。
+- 公開ドキュメントを「はじめる」「ガイド」「スキル」「アップデート」の読者タスク別タブに分け、タブごとに専用サイドバーを表示するようにした（#4801）。
+- タブ導入前の operator doc の旧 URL（`/tool-setup` など全 17 route）を新 route へ 301 リダイレクトし、既存の外部リンク・ブックマークを保つようにした（#4801）。
+- ガイドを読者タスク別の5群へ再編し、ライブ配信の healthcheck 手順を公開した（#4804）。
+- スキル索引を制作ワークフロー順の8群へ再編し、「できることから探す」と同じタブへ常設した（#4805）。
+- 公開ドキュメントの Claude 利用手順をデスクトップアプリ前提に統一し、利用者が直接入力するターミナルコマンドを AI エージェント向けプロンプトへ置き換えました。
+- トップページを日本語検索、読者タスク別4入口、最新リリースに絞った全幅レイアウトへ刷新した（#4806）。
+- 動画解析の既定クリップ窓を冒頭 30 秒に絞り、フック評価に集中しながら Gemini の動画入力コストを削減
+- google-genai の下限を 2.20 へ引き上げ、agentic media processing API を利用できるようにした（#4815）。
+- `generate_videos.sh` の shell 契約テストで stub command を同一 shell 内から呼び、検出力を維持したまま実行時間を短縮
+- ADR-0013 に、channel registry が dashboard 専用の読み取りファイルから fan-out と channel export が共有する台帳へ広がる Amendment を追記した（#4879）。
+- 用語集の dogfood を撤回済み cutover 計画専用の定義から first-party での 1 周実走という一般定義へ戻した（#4879）。
+- ADR-0029 に逆移行手段・廃止の仕方の Considered Options と、workspace の達成事項・first-party 固有物・ディスク二重化の記述を補った（#4879）。
+- 動画生成の shell 契約テストで source 対応 stub の生成処理とパス正規化処理を共通化
+- 動画生成の shell 契約テストで sourceable stub とパス正規化の共通処理を集約し、レビューで指摘された重複を解消
+- ADR-0029 の移行計画節に #4878 / #4880 / #4889 の決定を同期した。dogfood チャンネル 002ch、1 周の定義と合格条件、fix-forward 既定と 14 日上限、残り 6 チャンネルの展開順、完了条件 5 点、registry の同位置置換、GitHub 新設と旧リポジトリ削除、警告リリースの A3 / A4 への縮小と B7 の追加を載せた（#4902）。
+- 用語集に旧チャンネルリポジトリ・dogfood チャンネル・フルライフサイクル 1 周・凍結・smoke check を追加し、channel export と channel registry の定義に registry の同位置置換を足した（#4902）。
+- ADR-0029 の Status と移行計画節に実装 epic #4905 と sub-issue 16 件（前提 minor / トラッキング / fan-out 系 / 削除 major B1〜B7）の対応を追記した（#4905）。
+- suno-helper のダウンロードを Suno Studio の Multitrack export に変更し、WAV ZIP を自動取得するようにしました。形式選択と旧一括ダウンロード経路は廃止しました。
+- Studio export 用に開いたタブを ZIP 完了・失敗・中断のいずれでも自動で閉じるようにし、複数 collection の連続実行でタブが増え続けないようにしました。
+
+### Fixed
+
+- `title.theme_scenes` にテーマ slug と照合できる任意のキーワードを設定可能にし、アクティビティとシーンのフォールバックが常に既定値へ落ちる問題を修正した（#4826）。
+- analytics の analysis JSON validator が `yt-document-render` を `uv run` 経由で実行し、仮想環境を activate していない標準運用でも完走するようにした（#4827）。
+- チャンネル設定の apply 直後に localizations の伝播遅延が残っても push 失敗と誤判定せず、待機後に再確認する手順を追加した（#4829）。
+- `/setup --regenerate` が検証済みの `channel-direction.json` + `.html` pair を確認し、JSON 正本だけから設定を再生成する契約へ修正
+- progress hook が Claude のプロジェクト外の作業ディレクトリから実行されても Bash をブロックしないよう修正
+
+### Migration
+
+所要時間の目安: 5〜15 分
+
+Python module 移動: なし
+互換 facade: 対象なし
+
+local fix 衝突注意:
+
+- `/music`（Suno Studio Multitrack export、ダウンロード省略、Lyria loop 結合）
+- `/video`（動画解析の agentic processing と既定 30 秒窓）
+- `/setup`（設定再生成時の JSON 正本参照）
+- `/automation`（公開ドキュメントと skill 解説の同期）
+
+サマリ:
+
+- Suno の取得経路が Studio Multitrack ZIP へ移行し、ダウンロード実行の切替と末尾パディング無音の除去に対応した。Suno を利用するチャンネルは `/music` の local fix と運用手順を確認する。
+- 動画解析に Gemini agentic processing を追加し、既定クリップ窓を冒頭 30 秒へ短縮した。既存の長尺解析を前提とする local fix があれば確認する。
+- `google-genai` の下限が 2.20 へ上がるため、更新時に依存同期を行う。
+- 公開サイトの導線・検索・skill 解説・リリースノート URL を再編した。下流の配布 skill は `/automation --update` で同期する。
+- Python module の facade 無し移動および CLI entry point の撤去・改名はない。
+
 ## [5.7.1] - 2026-09-02
 
 ### Added
@@ -2953,6 +3029,7 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.7.2]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.7.2
 [5.7.1]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.7.1
 [5.7.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.7.0
 [5.6.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.6.0

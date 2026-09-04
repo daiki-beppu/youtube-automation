@@ -1,1 +1,0 @@
-- ADR-0029 の Status と移行計画節に実装 epic #4905 と sub-issue 16 件（前提 minor / トラッキング / fan-out 系 / 削除 major B1〜B7）の対応を追記した（#4905）。
