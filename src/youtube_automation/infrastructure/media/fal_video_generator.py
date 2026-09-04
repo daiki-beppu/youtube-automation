@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import os
 import time
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Mapping
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -14,7 +14,7 @@ from youtube_automation.core.errors import ConfigError, GeneratorError, Validati
 from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.infrastructure.media import fal_client
 from youtube_automation.infrastructure.media import fal_video_task_store as task_store
-from youtube_automation.infrastructure.media.veo_generator import smooth_loop
+from youtube_automation.infrastructure.media.veo_generator import resolve_smooth_codec, smooth_loop
 
 DEFAULT_MODEL = "minimax/h3-max-turbo/image-to-video"
 DEFAULT_DURATION_SECONDS = 5
@@ -133,8 +133,7 @@ def _submit(
 
 
 def _is_expired(error: GeneratorError) -> bool:
-    message = str(error)
-    return "status=404" in message or "status=410" in message
+    return error.status_code in {404, 410}
 
 
 def _poll(state: Mapping[str, object], *, timeout_sec: float, poll_interval_sec: float) -> dict[str, object]:
@@ -209,9 +208,26 @@ def generate_loop_video(
             timeout_sec=timeout_sec,
             poll_interval_sec=poll_interval_sec,
         )
-        root = channel_root or output_path.parent.parent
-        prepared = root / "tmp" / "fal-video-inputs" / f"{output_path.stem}.png"
+        collection_root = output_path.parent.parent
+        prepared = collection_root / "tmp" / "fal-video-inputs" / f"{output_path.stem}.png"
         _validate_and_resize(image_path, prepared, size)
+
+        def submit_and_poll() -> tuple[dict[str, object], dict[str, object]]:
+            submitted = _submit(
+                prepared,
+                output_path,
+                source_image_path=image_path,
+                model=model,
+                prompt=prompt,
+                duration_seconds=duration_seconds,
+                resolution=resolution,
+                prompt_expansion_mode=prompt_expansion_mode,
+                timeout_sec=timeout_sec,
+                channel_root=channel_root,
+            )
+            polled = _poll(submitted, timeout_sec=timeout_sec, poll_interval_sec=poll_interval_sec)
+            return submitted, polled
+
         state = task_store.load(output_path, channel_root=channel_root)
         if state is not None and task_store.matches(
             state,
@@ -228,47 +244,22 @@ def generate_loop_video(
                 if not _is_expired(error):
                     raise
                 task_store.clear(output_path, channel_root=channel_root)
-                state = _submit(
-                    prepared,
-                    output_path,
-                    source_image_path=image_path,
-                    model=model,
-                    prompt=prompt,
-                    duration_seconds=duration_seconds,
-                    resolution=resolution,
-                    prompt_expansion_mode=prompt_expansion_mode,
-                    timeout_sec=timeout_sec,
-                    channel_root=channel_root,
-                )
-                result = _poll(state, timeout_sec=timeout_sec, poll_interval_sec=poll_interval_sec)
+                state, result = submit_and_poll()
         else:
             if state is not None:
                 task_store.clear(output_path, channel_root=channel_root)
-            state = _submit(
-                prepared,
-                output_path,
-                source_image_path=image_path,
-                model=model,
-                prompt=prompt,
-                duration_seconds=duration_seconds,
-                resolution=resolution,
-                prompt_expansion_mode=prompt_expansion_mode,
-                timeout_sec=timeout_sec,
-                channel_root=channel_root,
-            )
-            result = _poll(state, timeout_sec=timeout_sec, poll_interval_sec=poll_interval_sec)
+            state, result = submit_and_poll()
         _persist(fal_client.download(_video_url(result), timeout=timeout_sec), output_path)
     except (ConfigError, GeneratorError, ValidationError) as error:
         print(f"  [ERROR]  {error}")
         return False
 
-    crf = int(compression.get("crf", 22)) if compression and compression.get("enabled", True) else 18
-    preset = str(compression.get("preset", "slow")) if compression and compression.get("enabled", True) else "slow"
+    crf, preset = resolve_smooth_codec(compression)
     if not smooth_loop(output_path, crossfade_sec=0.5, trim_tail_sec=1.0, scale_to=upscale_to, crf=crf, preset=preset):
         print("  [Warn]   fal 動画のループ補正に失敗しました（生成済み動画は保持します）")
     expanded = result.get("expanded_prompt")
     if isinstance(expanded, str) and expanded:
-        assets = root / "10-assets"
+        assets = collection_root / "10-assets"
         assets.mkdir(parents=True, exist_ok=True)
         (assets / "loop.expanded-prompt.txt").write_text(expanded + "\n", encoding="utf-8")
     metrics = result.get("metrics")

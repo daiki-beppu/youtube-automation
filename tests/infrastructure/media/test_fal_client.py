@@ -113,6 +113,7 @@ def test_errors_do_not_expose_api_key_or_payload(monkeypatch: pytest.MonkeyPatch
     assert secret not in str(exc_info.value)
     assert body_text not in str(exc_info.value)
     assert "status=422" in str(exc_info.value)
+    assert exc_info.value.status_code == 422
 
 
 def test_json_decode_error_does_not_expose_response_body(monkeypatch: pytest.MonkeyPatch) -> None:
