@@ -2648,8 +2648,8 @@ export default defineContentScript({
         emitProgress({ phase: PHASE.STOPPED, total });
         return;
       }
-      // 生成物を得られなかった entry が残る partial complete。完了分の playlist 追加・download は
-      // 実行済み。失敗 entry を再実行導線へ渡すため resume state を保持する。
+      // 生成物を得られなかった entry が残る partial complete。完了分の playlist 追加と、
+      // 設定に応じた download 処理は完了済み。失敗 entry を再実行導線へ渡すため resume state を保持する。
       if (
         stalledEntryIndices.length > 0 ||
         generationFailedEntryIndices.length > 0
@@ -2670,7 +2670,10 @@ export default defineContentScript({
         emitProgress({
           phase: PHASE.FINISHED,
           total,
-          message: `${details.join(" / ")}。完了分の playlist 追加とダウンロードは実行済みです。「失敗分のみ再実行」で残りを生成できます。`,
+          message: `${details.join(" / ")}。完了分の playlist 追加は実行済みです。${
+            downloadCompletionMessage(options.downloadEnabled).message ??
+            "ダウンロードは実行済みです。"
+          }「失敗分のみ再実行」で残りを生成できます。`,
         });
         return;
       }
