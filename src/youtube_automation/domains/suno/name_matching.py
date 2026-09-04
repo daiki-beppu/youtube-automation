@@ -60,10 +60,13 @@ def suno_filename_lookup_candidates(stem: str) -> tuple[str, ...]:
     begins with a number (``3 AM``) keeps matching its own entry, and the
     stripped aliases only act as a fallback.
     """
-    candidates = list(suno_name_lookup_candidates(stem))
+    stem_candidates = suno_name_lookup_candidates(stem)
     base, track_number = split_suno_studio_track_prefix(stem)
-    if track_number is not None:
-        candidates.extend(suno_name_lookup_candidates(base))
+    if track_number is None:
+        return stem_candidates
+
+    base_candidates = suno_name_lookup_candidates(base)
+    candidates = [stem_candidates[0], *base_candidates, *stem_candidates[1:]]
     return tuple(dict.fromkeys(candidate for candidate in candidates if candidate))
 
 
