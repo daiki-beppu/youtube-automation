@@ -45,6 +45,7 @@ export interface RunPayloadInput {
   collectionQueueId?: string;
   runMode: RunModeId;
   regenerateDurationOutliers?: boolean;
+  downloadEnabled: boolean;
   durationOutlierWarnings?: Record<number, string>;
   overrides: RunOverrides | undefined;
 }
@@ -64,6 +65,7 @@ export function buildRunPayload(input: RunPayloadInput): RunPayload {
       input.overrides?.regenerateDurationOutliers ??
       input.regenerateDurationOutliers ??
       DEFAULT_REGENERATE_DURATION_OUTLIERS,
+    downloadEnabled: input.downloadEnabled,
     indices: input.overrides?.indices,
     submittedClipIds: input.overrides?.submittedClipIds,
     submittedClipIdsAreDurationFiltered:

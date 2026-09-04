@@ -105,6 +105,7 @@ describe("queue-runner: production ロジック (#1586)", () => {
       range: undefined,
       collectionId: "queue-smoke",
       runMode: "queue",
+      downloadEnabled: true,
       overrides: undefined,
     });
     const submittedIndexes: number[] = [];

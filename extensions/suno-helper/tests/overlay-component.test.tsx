@@ -70,7 +70,11 @@ const runner = vi.hoisted(() => ({
   canRun: false,
   isRunning: false,
   completionSoundSettings: { enabled: true },
+  completionSoundSettingsLoaded: true,
   setCompletionSoundEnabled: vi.fn(),
+  downloadEnabled: true,
+  downloadEnabledLoaded: true,
+  setDownloadEnabled: vi.fn(),
   playlistName: "",
   runModeId: "serial",
   setRunMode: vi.fn(),
@@ -84,6 +88,7 @@ const runner = vi.hoisted(() => ({
   retryPlaylist: vi.fn(),
   retryDownload: vi.fn(),
   adoptSelectedClips: vi.fn(),
+  downloadOnly: vi.fn(),
   run: vi.fn(),
   stop: vi.fn(),
 }));
@@ -161,7 +166,10 @@ describe("Overlay shell", () => {
       itemStates: [],
       canRun: false,
       collectionQueue: null,
+      downloadEnabled: true,
+      downloadEnabledLoaded: true,
     });
+    runner.setDownloadEnabled.mockClear();
     runner.runCollectionQueue.mockClear();
     runner.resumeCollectionQueue.mockClear();
     runner.discardCollectionQueue.mockClear();
@@ -253,6 +261,35 @@ describe("Overlay shell", () => {
       minimized: false,
       hidden: false,
     });
+  });
+
+  it("download Switch は既定 ON で、OFF を永続化し Download 再開を隠す", async () => {
+    Object.assign(runner, {
+      selectedCollectionId: "collection",
+      playlistName: "playlist",
+      downloadEnabled: true,
+    });
+    await act(async () => root.render(createElement(Overlay)));
+
+    const toggle = container.querySelector<HTMLElement>(
+      '[data-suno-control="download-enabled"]'
+    )!;
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    expect(
+      container.querySelector('[data-suno-control="retry-download"]')
+    ).not.toBeNull();
+
+    await act(async () => toggle.click());
+    expect(runner.setDownloadEnabled).toHaveBeenCalledWith(false);
+
+    runner.downloadEnabled = false;
+    await act(async () => root.render(createElement(Overlay)));
+    expect(
+      container.querySelector('[data-suno-control="retry-download"]')
+    ).toBeNull();
+    expect(
+      container.querySelector('[data-suno-control="download-only"]')
+    ).not.toBeNull();
   });
 
   it("challenge履歴を総件数と直近5件で表示する", async () => {

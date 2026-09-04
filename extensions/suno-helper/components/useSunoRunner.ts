@@ -60,7 +60,11 @@ import {
   type RunOverrides,
 } from "../lib/run-overrides";
 import { isTerminalPhase, nextItemStates } from "../lib/snapshot";
-import { migrateServerSourcesStorage, serverUrlItem } from "../lib/storage";
+import {
+  downloadEnabledItem,
+  migrateServerSourcesStorage,
+  serverUrlItem,
+} from "../lib/storage";
 import { shouldReportLiveProgressStatus } from "./live-progress-status";
 import {
   buildRestoreState,
@@ -95,6 +99,9 @@ interface RunnerState {
   completionSoundSettings: CompletionSoundSettings;
   completionSoundSettingsLoaded: boolean;
   setCompletionSoundEnabled: (enabled: boolean) => void;
+  downloadEnabled: boolean;
+  downloadEnabledLoaded: boolean;
+  setDownloadEnabled: (enabled: boolean) => void;
   // collection 選択時の playlist 名 (#854)。display only。
   playlistName: string | undefined;
   runModeId: RunModeId;
@@ -111,8 +118,9 @@ interface RunnerState {
   rerunFailed: () => void;
   // playlist / download 単独再実行 (#1251)。失敗フォールバック用。
   retryPlaylist: () => Promise<void>;
-  retryDownload: () => Promise<void>;
-  adoptSelectedClips: () => Promise<void>;
+  retryDownload: (clipIdsOverride?: string[]) => Promise<void>;
+  adoptSelectedClips: () => Promise<string[] | undefined>;
+  downloadOnly: () => Promise<void>;
   // overrides.range があればそれを使う (#892 要件6)。
   // overrides.indices はチェック選択や失敗分再実行の部分実行対象。指定時は range より優先される。
   run: (overrides?: RunOverrides) => Promise<void>;
@@ -267,6 +275,8 @@ export function useSunoRunner(): RunnerState {
   const [regenerateDurationOutliers, setRegenerateDurationOutliers] = useState(
     DEFAULT_REGENERATE_DURATION_OUTLIERS
   );
+  const [downloadEnabled, setDownloadEnabledState] = useState(true);
+  const [downloadEnabledLoaded, setDownloadEnabledLoaded] = useState(false);
   const [
     restoredRegenerateDurationOutliers,
     setRestoredRegenerateDurationOutliers,
@@ -697,6 +707,22 @@ export function useSunoRunner(): RunnerState {
     [reportStorageFailure]
   );
 
+  useEffect(() => {
+    void downloadEnabledItem
+      .getValue()
+      .then(setDownloadEnabledState)
+      .catch(reportStorageFailure)
+      .finally(() => setDownloadEnabledLoaded(true));
+  }, [reportStorageFailure]);
+
+  const setDownloadEnabled = useCallback(
+    (enabled: boolean) => {
+      setDownloadEnabledState(enabled);
+      void downloadEnabledItem.setValue(enabled).catch(reportStorageFailure);
+    },
+    [reportStorageFailure]
+  );
+
   const dismissResume = useCallback(() => {
     setResumeDismissed(true);
   }, []);
@@ -883,6 +909,7 @@ export function useSunoRunner(): RunnerState {
             collectionQueueId: queue.queueId,
             runMode: queue.runMode,
             regenerateDurationOutliers: queue.regenerateDurationOutliers,
+            downloadEnabled,
             durationOutlierWarnings: overrides?.durationOutlierWarnings,
             overrides,
           })
@@ -912,6 +939,7 @@ export function useSunoRunner(): RunnerState {
       setRunning,
       settleRejectedCollectionQueueStart,
       writePausedCollectionQueue,
+      downloadEnabled,
     ]
   );
 
@@ -1222,6 +1250,7 @@ export function useSunoRunner(): RunnerState {
     if (
       resumeCheckedAt === null ||
       !collectionQueueChecked ||
+      !downloadEnabledLoaded ||
       initialFetchStartedRef.current
     ) {
       return;
@@ -1254,6 +1283,7 @@ export function useSunoRunner(): RunnerState {
     discoverSources,
     fetchData,
     collectionQueueChecked,
+    downloadEnabledLoaded,
     reportStorageFailure,
     resumableCollectionId,
     resumeCheckedAt,
@@ -1387,6 +1417,7 @@ export function useSunoRunner(): RunnerState {
             collectionId: selectedCollectionId,
             runMode: runModeId,
             regenerateDurationOutliers,
+            downloadEnabled,
             durationOutlierWarnings: overrides?.durationOutlierWarnings,
             overrides,
           })
@@ -1404,6 +1435,7 @@ export function useSunoRunner(): RunnerState {
       selectedCollectionId,
       runModeId,
       regenerateDurationOutliers,
+      downloadEnabled,
       report,
       reportRunDispatchFailure,
       setRunning,
@@ -1432,6 +1464,7 @@ export function useSunoRunner(): RunnerState {
     const expectedClipCount =
       playlistExpectedClipCountForResume ?? submittedClipIdsForResume.length;
     const shouldDownload =
+      downloadEnabled &&
       resumeBanner !== null &&
       resumeBanner.failedIndex >= resumeBanner.total &&
       !resumeBanner.remainingIndices?.length;
@@ -1460,6 +1493,7 @@ export function useSunoRunner(): RunnerState {
         submittedClipIdsAreDurationFiltered:
           submittedClipIdsAreDurationFilteredForResume,
         shouldDownload,
+        downloadEnabled,
         timingReceipt: persistedResume?.timingReceipt,
       });
       setResumeDismissed(true);
@@ -1486,6 +1520,7 @@ export function useSunoRunner(): RunnerState {
     report,
     setRunning,
     persistedResume?.timingReceipt,
+    downloadEnabled,
   ]);
 
   // バナー承認 = 1-click 自動再開 (#892 要件6)。failedIndex === total（全 entry 投入済み）のときは
@@ -1538,48 +1573,53 @@ export function useSunoRunner(): RunnerState {
   ]);
 
   // ダウンロードのみ再実行 (#1251)。保存済み clip を Studio export へ渡す。
-  const retryDownload = useCallback(async () => {
-    if (isRunning) {
-      return;
-    }
-    if (!selectedCollectionId) {
-      report(
-        "コレクションを選択してから、ダウンロードを再開してください。",
-        true
-      );
-      return;
-    }
-    if (submittedClipIdsForResume.length === 0) {
-      report(
-        "ダウンロード再開に必要な clip ID がありません。Suno 上で対象曲を選択し、「選択中の曲を採用」を押してから「Download から再開」を再試行してください。",
-        true
-      );
-      return;
-    }
-    setRunning(true);
-    setPhase("downloading");
-    try {
-      const payload = {
-        collectionId: selectedCollectionId,
-        submittedClipIds: submittedClipIdsForResume,
-        expectedClipCount: expectedClipCountForDownloadResume,
-        timingReceipt: persistedResume?.timingReceipt,
-      };
-      await sendMessage("retryDownload", payload);
-      report("ダウンロードを再実行しています…");
-    } catch (err) {
-      reportRunDispatchFailure(err);
-    }
-  }, [
-    isRunning,
-    selectedCollectionId,
-    submittedClipIdsForResume,
-    expectedClipCountForDownloadResume,
-    persistedResume?.timingReceipt,
-    report,
-    reportRunDispatchFailure,
-    setRunning,
-  ]);
+  const retryDownload = useCallback(
+    async (clipIdsOverride?: string[]) => {
+      if (isRunning) {
+        return;
+      }
+      if (!selectedCollectionId) {
+        report(
+          "コレクションを選択してから、ダウンロードを再開してください。",
+          true
+        );
+        return;
+      }
+      const clipIds = clipIdsOverride ?? submittedClipIdsForResume;
+      if (clipIds.length === 0) {
+        report(
+          "ダウンロード再開に必要な clip ID がありません。Suno 上で対象曲を選択し、「選択中の曲を採用」を押してから「Download から再開」を再試行してください。",
+          true
+        );
+        return;
+      }
+      setRunning(true);
+      setPhase("downloading");
+      try {
+        const payload = {
+          collectionId: selectedCollectionId,
+          submittedClipIds: clipIds,
+          expectedClipCount:
+            clipIdsOverride?.length ?? expectedClipCountForDownloadResume,
+          timingReceipt: persistedResume?.timingReceipt,
+        };
+        await sendMessage("retryDownload", payload);
+        report("ダウンロードを再実行しています…");
+      } catch (err) {
+        reportRunDispatchFailure(err);
+      }
+    },
+    [
+      isRunning,
+      selectedCollectionId,
+      submittedClipIdsForResume,
+      expectedClipCountForDownloadResume,
+      persistedResume?.timingReceipt,
+      report,
+      reportRunDispatchFailure,
+      setRunning,
+    ]
+  );
 
   const adoptSelectedClips = useCallback(async () => {
     if (isRunning) {
@@ -1656,6 +1696,7 @@ export function useSunoRunner(): RunnerState {
       report(
         `選択中の曲 ${result.clipIds.length} 件を採用しました。Playlist / Download から再開できます。`
       );
+      return result.clipIds;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setPhase("error");
@@ -1678,6 +1719,12 @@ export function useSunoRunner(): RunnerState {
     report,
     setRunning,
   ]);
+
+  const downloadOnly = useCallback(async () => {
+    const clipIds = await adoptSelectedClips();
+    if (!clipIds) return;
+    await retryDownload(clipIds);
+  }, [adoptSelectedClips, retryDownload]);
 
   // 失敗分のみ再実行 (#948)。failedEntries を indices として run へ渡す。
   // 完走すると content 側が playlist 追加まで実行し resume state を消す。
@@ -1754,6 +1801,9 @@ export function useSunoRunner(): RunnerState {
     completionSoundSettings,
     completionSoundSettingsLoaded,
     setCompletionSoundEnabled,
+    downloadEnabled,
+    downloadEnabledLoaded,
+    setDownloadEnabled,
     playlistName,
     runModeId,
     setRunMode,
@@ -1767,6 +1817,7 @@ export function useSunoRunner(): RunnerState {
     retryPlaylist,
     retryDownload,
     adoptSelectedClips,
+    downloadOnly,
     run,
     stop,
     timingReceipt,

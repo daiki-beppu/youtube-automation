@@ -38,6 +38,7 @@ import {
 } from "../lib/pattern-selection";
 import { buildSelectedEntriesRunOverrides } from "../lib/run-overrides";
 import { CompletionSoundControls } from "./CompletionSoundControls";
+import { DownloadControls } from "./DownloadControls";
 import { PatternList } from "./PatternList";
 import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
 import { RunTimingPanel } from "./RunTimingPanel";
@@ -72,6 +73,9 @@ export function App() {
     completionSoundSettings,
     completionSoundSettingsLoaded,
     setCompletionSoundEnabled,
+    downloadEnabled,
+    downloadEnabledLoaded,
+    setDownloadEnabled,
     playlistName,
     runModeId,
     setRunMode,
@@ -85,6 +89,7 @@ export function App() {
     retryPlaylist,
     retryDownload,
     adoptSelectedClips,
+    downloadOnly,
     run,
     stop,
     timingReceipt,
@@ -603,6 +608,12 @@ export function App() {
         onEnabledChange={setCompletionSoundEnabled}
       />
 
+      <DownloadControls
+        enabled={downloadEnabled}
+        disabled={!downloadEnabledLoaded || controlsLocked}
+        onEnabledChange={setDownloadEnabled}
+      />
+
       <div className="flex gap-2">
         <Button
           type="button"
@@ -638,6 +649,15 @@ export function App() {
           >
             選択中の曲を採用
           </Button>
+          <Button
+            type="button"
+            onClick={() => void downloadOnly()}
+            data-suno-control="download-only"
+            variant="success"
+            size="sm"
+          >
+            ダウンロードのみ実行
+          </Button>
           <div className="flex gap-2">
             {playlistName && (
               <Button
@@ -651,17 +671,19 @@ export function App() {
                 Playlist から再開
               </Button>
             )}
-            <Button
-              type="button"
-              onClick={() => void retryDownload()}
-              disabled={!selectedCollectionId}
-              data-suno-control="retry-download"
-              variant="success"
-              size="sm"
-              className="flex-1"
-            >
-              Download から再開
-            </Button>
+            {downloadEnabled && (
+              <Button
+                type="button"
+                onClick={() => void retryDownload()}
+                disabled={!selectedCollectionId}
+                data-suno-control="retry-download"
+                variant="success"
+                size="sm"
+                className="flex-1"
+              >
+                Download から再開
+              </Button>
+            )}
           </div>
         </div>
       )}

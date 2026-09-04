@@ -13,6 +13,7 @@ interface RunPayload {
   playlistName: string;
   runMode?: "serial" | "queue";
   regenerateDurationOutliers?: boolean;
+  downloadEnabled?: boolean;
   collectionId: string;
 }
 
@@ -292,7 +293,8 @@ const allClipIds = Array.from(clipIdsByEntry.values()).flat();
 
 function runQueue(
   runHandler: RunHandler,
-  runMode: "serial" | "queue" = "queue"
+  runMode: "serial" | "queue" = "queue",
+  downloadEnabled = true
 ): void {
   runHandler({
     data: {
@@ -301,6 +303,7 @@ function runQueue(
       collectionId: "collection-stall",
       runMode,
       regenerateDurationOutliers: false,
+      downloadEnabled,
     },
   });
 }
@@ -359,6 +362,38 @@ describe("content.ts queue mode stall graceful degradation (#1994)", () => {
     );
     expect(clearResumeStateForCollectionMock).not.toHaveBeenCalled();
     expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
+  });
+
+  it("Given download OFF で一部 entry の clip が stall When queue run Then 手動配置の案内を表示する", async () => {
+    const { progressMessages, sentMessages, runHandler } =
+      await loadContentScriptWithStalledCompletion({
+        initialSubmittedIds: allClipIds,
+        clipIdsByEntry: new Map(clipIdsByEntry),
+        completionResult: {
+          timedOut: true,
+          submittedIds: allClipIds,
+          stalledClipIds: ["clip-1b"],
+          message:
+            "生成完了待ちがタイムアウトしました: submitted=6/6, pending=1, 最後の進捗からの経過時間=600000ms",
+        },
+      });
+
+    runQueue(runHandler, "queue", false);
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
+
+    expect(sentMessages).not.toContainEqual(
+      expect.objectContaining({ type: "startDownload" })
+    );
+    const finished = progressMessages.find(
+      (message) => message.phase === PHASE.FINISHED
+    );
+    expect(finished?.message).toContain("ダウンロード未実行");
+    expect(finished?.message).toContain("02-Individual-music/");
+    expect(finished?.message).not.toContain("ダウンロードは実行済み");
   });
 
   it("Given 全 entry の clip が stall When queue run Then playlist 追加せず失敗保留の FINISHED で再実行導線へ委ねる", async () => {

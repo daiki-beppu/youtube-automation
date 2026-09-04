@@ -149,6 +149,15 @@ import {
   type DurationOutlierPolicy,
 } from "../lib/yield-guard";
 
+const DOWNLOAD_SKIPPED_MESSAGE =
+  "ダウンロード未実行。Suno から手動で取得して 02-Individual-music/ へ配置してください。";
+
+function downloadCompletionMessage(
+  downloadEnabled: boolean
+): Pick<ProgressPayload, "message"> {
+  return downloadEnabled ? {} : { message: DOWNLOAD_SKIPPED_MESSAGE };
+}
+
 function advanceRunTimingReceipt(
   receipt: RunTimingReceipt,
   payload: ProgressPayload,
@@ -366,7 +375,9 @@ function assertOptionalIndices(
 }
 
 // fallow-ignore-next-line complexity
-function assertRunPayload(value: unknown): RunPayload {
+function assertRunPayload(value: unknown): RunPayload & {
+  downloadEnabled: boolean;
+} {
   const record = assertRecord(value, "run payload");
   if (!Array.isArray(record.entries)) {
     throw new Error("run.entries must be array");
@@ -402,6 +413,9 @@ function assertRunPayload(value: unknown): RunPayload {
         record.regenerateDurationOutliers,
         "run.regenerateDurationOutliers"
       ) ?? DEFAULT_REGENERATE_DURATION_OUTLIERS,
+    downloadEnabled:
+      assertOptionalBoolean(record.downloadEnabled, "run.downloadEnabled") ??
+      true,
     durationFilter: assertOptionalDurationFilter(
       record.durationFilter,
       "run.durationFilter"
@@ -468,7 +482,28 @@ function assertOptionalDurationOutlierWarnings(
   );
 }
 
-function assertRetryPlaylistPayload(value: unknown): RetryPlaylistPayload {
+function assertRetryDownloadSettings(record: Record<string, unknown>): {
+  downloadEnabled: boolean;
+  shouldDownload: boolean;
+} {
+  const shouldDownload = assertOptionalBoolean(
+    record.shouldDownload,
+    "retryPlaylist.shouldDownload"
+  );
+  const downloadEnabled =
+    assertOptionalBoolean(
+      record.downloadEnabled,
+      "retryPlaylist.downloadEnabled"
+    ) ?? true;
+  return {
+    downloadEnabled,
+    shouldDownload: shouldDownload === true && downloadEnabled,
+  };
+}
+
+function assertRetryPlaylistPayload(value: unknown): RetryPlaylistPayload & {
+  downloadEnabled: boolean;
+} {
   const record = assertRecord(value, "retryPlaylist payload");
   const unattendedRecord =
     record.unattended === undefined
@@ -530,10 +565,7 @@ function assertRetryPlaylistPayload(value: unknown): RetryPlaylistPayload {
       record.submittedClipIdsAreDurationFiltered,
       "retryPlaylist.submittedClipIdsAreDurationFiltered"
     ),
-    shouldDownload: assertOptionalBoolean(
-      record.shouldDownload,
-      "retryPlaylist.shouldDownload"
-    ),
+    ...assertRetryDownloadSettings(record),
     unattended,
   };
 }
@@ -995,6 +1027,17 @@ export default defineContentScript({
       const collection = collections.find(
         (candidate) => candidate.id === unattended.request.collectionId
       );
+      if (unattended.request.skipDownload === true) {
+        if (
+          !collection ||
+          typeof collection.suno_playlist_url !== "string" ||
+          collection.suno_playlist_url.length === 0
+        ) {
+          throw new Error("server readback で playlist URL を確認できません。");
+        }
+        verifiedUnattendedRequests.add(unattended.request.requestId);
+        return;
+      }
       const promptResponse = await sendMessage(
         "fetchCollectionPromptResponse",
         {
@@ -1656,6 +1699,7 @@ export default defineContentScript({
       durationOutlierPolicy: DurationOutlierPolicy;
       collectionQueueId?: string;
       unattended?: RunPayload["unattended"];
+      downloadEnabled: boolean;
     }
 
     // fallow-ignore-next-line complexity
@@ -1724,6 +1768,7 @@ export default defineContentScript({
           : new Set(previousSubmittedClipIds).size +
             order.length * CLIPS_PER_REQUEST;
       const shouldRunDownloadAfterPlaylist =
+        options.downloadEnabled &&
         expectedRawPlaylistClipCount >= total * CLIPS_PER_REQUEST;
       // リトライ上限まで失敗しスキップした entry の 0-based index (#948)。終了時に resume state へ
       // 永続化し、popup の「失敗分のみ再実行」導線が消費する。
@@ -2603,8 +2648,8 @@ export default defineContentScript({
         emitProgress({ phase: PHASE.STOPPED, total });
         return;
       }
-      // 生成物を得られなかった entry が残る partial complete。完了分の playlist 追加・download は
-      // 実行済み。失敗 entry を再実行導線へ渡すため resume state を保持する。
+      // 生成物を得られなかった entry が残る partial complete。完了分の playlist 追加と、
+      // 設定に応じた download 処理は完了済み。失敗 entry を再実行導線へ渡すため resume state を保持する。
       if (
         stalledEntryIndices.length > 0 ||
         generationFailedEntryIndices.length > 0
@@ -2625,7 +2670,10 @@ export default defineContentScript({
         emitProgress({
           phase: PHASE.FINISHED,
           total,
-          message: `${details.join(" / ")}。完了分の playlist 追加とダウンロードは実行済みです。「失敗分のみ再実行」で残りを生成できます。`,
+          message: `${details.join(" / ")}。完了分の playlist 追加は実行済みです。${
+            downloadCompletionMessage(options.downloadEnabled).message ??
+            "ダウンロードは実行済みです。"
+          }「失敗分のみ再実行」で残りを生成できます。`,
         });
         return;
       }
@@ -2661,6 +2709,7 @@ export default defineContentScript({
         phase: PHASE.FINISHED,
         total,
         ...(downloadSummary === undefined ? {} : { downloadSummary }),
+        ...downloadCompletionMessage(options.downloadEnabled),
       });
       // run 一式完了時リロード (#1411 要件2)。playlist 追加で作った multi-select 状態は
       // Suno 内部 state に残り、同一タブの次 run の Cmd+P に混入するためページごと破棄する。
@@ -2697,6 +2746,7 @@ export default defineContentScript({
         playlistExpectedClipCount,
         collectionQueueId,
         unattended,
+        downloadEnabled,
       } = assertRunPayload(data);
       // 手動 run では過去の定期実行 state を更新しない。定期実行だけが明示的に
       // active context を設定し、以降の progress を checkpoint へ反映する。
@@ -2764,6 +2814,7 @@ export default defineContentScript({
         playlistExpectedClipCount,
         collectionQueueId,
         unattended,
+        downloadEnabled,
       }).finally(async () => {
         running = false;
         // queue failure で resume state を消す場合、最後の checkpoint write より後に
@@ -2809,6 +2860,7 @@ export default defineContentScript({
         durationOutlierWarnings,
         submittedClipIdsAreDurationFiltered,
         shouldDownload,
+        downloadEnabled,
         unattended,
         timingReceipt,
       } = assertRetryPlaylistPayload(data);
@@ -2929,7 +2981,11 @@ export default defineContentScript({
               err
             );
           }
-          emitProgress({ phase: PHASE.FINISHED, total: 0 });
+          emitProgress({
+            phase: PHASE.FINISHED,
+            total: 0,
+            ...downloadCompletionMessage(downloadEnabled),
+          });
           // retryPlaylist も playlist 追加で multi-select 状態を作るため完了時にページごと破棄する (#1411)。
           // リロード前に FINISHED snapshot を退避する（runAll の完了経路と同じ）。
           if (
@@ -3232,7 +3288,10 @@ export default defineContentScript({
               progress: {
                 phase: PHASE.FINISHED,
                 total: promptResponse.entries.length,
-                message: "音源は既に download 済みです。",
+                message:
+                  plan.reason === "playlist-created"
+                    ? "playlist 追加済みです。ダウンロードは実行しません。"
+                    : "音源は既に download 済みです。",
               },
               deferredIndices: [],
               now: Date.now(),
@@ -3270,7 +3329,8 @@ export default defineContentScript({
             durationOutlierWarnings: resumeState?.durationOutlierWarnings,
             submittedClipIdsAreDurationFiltered:
               resumeState?.submittedClipIdsAreDurationFiltered,
-            shouldDownload: true,
+            shouldDownload: request.skipDownload !== true,
+            downloadEnabled: request.skipDownload !== true,
             unattended: { request, deferredIndices: [], leaseToken },
           });
           if (!result.ok) throw new Error("suno-helper runner is busy");
@@ -3352,6 +3412,7 @@ export default defineContentScript({
           runMode: resumeState?.runMode ?? "queue",
           regenerateDurationOutliers:
             resumeState?.regenerateDurationOutliers ?? true,
+          downloadEnabled: request.skipDownload !== true,
           durationOutlierWarnings: resumeState?.durationOutlierWarnings,
           indices: plan.indices,
           submittedClipIds: plan.previousSubmittedClipIds,

@@ -47,6 +47,11 @@ const serverSourcesMocks = vi.hoisted(() => ({
   migrateServerSourcesStorage: vi.fn(async () => undefined),
 }));
 
+const downloadEnabledMocks = vi.hoisted(() => ({
+  getValue: vi.fn(async () => true),
+  setValue: vi.fn(async () => undefined),
+}));
+
 const legacySourceState = vi.hoisted(() => ({ present: true }));
 
 const resumeStateMocks = vi.hoisted(() => ({
@@ -80,6 +85,7 @@ vi.mock("wxt/browser", () => ({
 
 vi.mock("../lib/storage", () => ({
   serverUrlItem: storageMocks,
+  downloadEnabledItem: downloadEnabledMocks,
   completionSoundSettingsItem: completionSoundMocks,
   readCompletionSoundSettings: vi.fn(() => completionSoundMocks.getValue()),
   migrateServerSourcesStorage: serverSourcesMocks.migrateServerSourcesStorage,
@@ -388,6 +394,8 @@ describe("Suno popup compatibility check", () => {
     fetchMock = vi.fn();
     storageMocks.getValue.mockResolvedValue("");
     storageMocks.setValue.mockResolvedValue(undefined);
+    downloadEnabledMocks.getValue.mockResolvedValue(true);
+    downloadEnabledMocks.setValue.mockResolvedValue(undefined);
     completionSoundMocks.getValue.mockResolvedValue({
       enabled: true,
     });
@@ -798,6 +806,25 @@ describe("Suno popup compatibility check", () => {
     );
   });
 
+  it("download Switch は既定 ON で保存し、再表示時に OFF を復元する", async () => {
+    const enabled = expectControl(container, "download-enabled");
+    expect(enabled.dataset.slot).toBe("switch");
+    expect(enabled.getAttribute("aria-checked")).toBe("true");
+
+    await act(async () => enabled.click());
+    expect(downloadEnabledMocks.setValue).toHaveBeenCalledWith(false);
+
+    downloadEnabledMocks.getValue.mockResolvedValueOnce(false);
+    await rerenderApp();
+    await waitFor(() =>
+      expect(
+        expectControl(container, "download-enabled").getAttribute(
+          "aria-checked"
+        )
+      ).toBe("false")
+    );
+  });
+
   it("agent 操作用の root 状態属性と主要 control selector を実 DOM に公開する", async () => {
     const entries = [
       { name: "p1", style: "lofi", lyrics: "" },
@@ -906,6 +933,7 @@ describe("Suno popup compatibility check", () => {
     expect(entriesTrigger.getAttribute("aria-expanded")).toBe("false");
     for (const control of [
       "adopt-selected-clips",
+      "download-only",
       "retry-playlist",
       "retry-download",
     ]) {
@@ -915,6 +943,7 @@ describe("Suno popup compatibility check", () => {
       expectControl(container, "adopt-selected-clips"),
       "outline"
     );
+    expectShadcnControl(expectControl(container, "download-only"), "success");
     expectShadcnControl(expectControl(container, "retry-playlist"), "warning");
     expectShadcnControl(expectControl(container, "retry-download"), "success");
     const collectionCheckbox = expectControl(container, "collection-checkbox");
@@ -1204,6 +1233,7 @@ describe("Suno popup compatibility check", () => {
       collectionId: "20260601-clm-theme-a-collection",
       runMode: "serial",
       regenerateDurationOutliers: false,
+      downloadEnabled: true,
       indices: undefined,
       submittedClipIds: undefined,
       submittedClipIdsAreDurationFiltered: undefined,
@@ -1328,6 +1358,7 @@ describe("Suno popup compatibility check", () => {
       collectionId: "20260601-clm-theme-a-collection",
       runMode: "queue",
       regenerateDurationOutliers: true,
+      downloadEnabled: true,
       indices: undefined,
       submittedClipIds: undefined,
       submittedClipIdsAreDurationFiltered: undefined,
@@ -1645,6 +1676,7 @@ describe("Suno popup compatibility check", () => {
       collectionId: "20260601-clm-theme-a-collection",
       runMode: "queue",
       regenerateDurationOutliers: false,
+      downloadEnabled: true,
       indices: undefined,
       submittedClipIds: [],
       submittedClipIdsAreDurationFiltered: false,
@@ -1742,6 +1774,7 @@ describe("Suno popup compatibility check", () => {
       regenerateDurationOutliers: false,
       indices: [1],
       submittedClipIds: ["clip-a", "clip-short"],
+      downloadEnabled: true,
       submittedClipIdsAreDurationFiltered: false,
       playlistExpectedClipCount: 4,
       durationOutlierWarnings: { 0: warning },
@@ -1908,6 +1941,7 @@ describe("Suno popup compatibility check", () => {
       regenerateDurationOutliers: true,
       indices: [0, 2],
       submittedClipIds: undefined,
+      downloadEnabled: true,
       submittedClipIdsAreDurationFiltered: undefined,
       playlistExpectedClipCount: undefined,
     });
@@ -2088,6 +2122,7 @@ describe("Suno popup compatibility check", () => {
       collectionId: "20260602-clm-snapshot-collection",
       runMode: "serial",
       regenerateDurationOutliers: false,
+      downloadEnabled: true,
       indices: undefined,
       submittedClipIds: [],
       submittedClipIdsAreDurationFiltered: false,
@@ -2174,6 +2209,7 @@ describe("Suno popup compatibility check", () => {
       collectionId: "20260603-clm-fresh-collection",
       runMode: "serial",
       regenerateDurationOutliers: true,
+      downloadEnabled: true,
       indices: undefined,
       submittedClipIds: undefined,
       submittedClipIdsAreDurationFiltered: undefined,
@@ -2630,7 +2666,7 @@ describe("Suno popup compatibility check", () => {
     );
   });
 
-  it("選択中 clip 採用後に Download から再開すると retryDownload payload を送る", async () => {
+  it("ダウンロードのみ実行は選択中 clip を採用して retryDownload へ直行する", async () => {
     const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
     const downloadResponse = deferred<unknown>();
     fetchMock
@@ -2673,20 +2709,15 @@ describe("Suno popup compatibility check", () => {
       expect(container.textContent).toContain("1 パターンを取得しました。");
     });
 
-    await act(async () => {
-      buttonByText(container, "選択中の曲を採用").click();
-    });
+    const downloadToggle = expectControl(container, "download-enabled");
+    await act(async () => downloadToggle.click());
     await waitFor(() => {
-      expect(container.textContent).toContain(
-        "選択中の曲 2 件を採用しました。"
-      );
+      expect(downloadToggle.getAttribute("aria-checked")).toBe("false");
+      expectControl(container, "download-only");
     });
-    expectShadcnControl(expectControl(container, "retry-playlist"), "warning");
-    expectShadcnControl(expectControl(container, "retry-download"), "success");
 
-    messagingMocks.sendMessage.mockClear();
     await act(async () => {
-      buttonByText(container, "Download から再開").click();
+      buttonByText(container, "ダウンロードのみ実行").click();
     });
 
     await waitFor(() => {
@@ -2696,6 +2727,10 @@ describe("Suno popup compatibility check", () => {
       expect(panel?.dataset.sunoPhase).toBe("downloading");
       expect(panel?.dataset.sunoRunning).toBe("true");
     });
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith(
+      "adoptSelectedClips",
+      { expectedClipCount: 2 }
+    );
     expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryDownload", {
       collectionId: "20260601-clm-theme-a-collection",
       submittedClipIds: ["clip-a", "clip-b"],
@@ -3103,6 +3138,7 @@ describe("Suno popup compatibility check", () => {
       regenerateDurationOutliers: true,
       durationOutlierWarnings: undefined,
       shouldDownload: true,
+      downloadEnabled: true,
     });
     await act(async () => {
       playlistResponse.resolve({ ok: true });
@@ -3187,6 +3223,7 @@ describe("Suno popup compatibility check", () => {
         0: "duration guard NG (75-180s): clip-b; 再生成 OFF のため全 clip を採用候補として保持します",
       },
       shouldDownload: true,
+      downloadEnabled: true,
     });
 
     await act(async () => {

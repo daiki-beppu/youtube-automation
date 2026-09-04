@@ -42,6 +42,7 @@ export interface RunPayload {
   /** 生成完了待ちの方式。serial は従来挙動、queue は ACK 後に次 entry を投入する。 */
   runMode: RunModeId;
   regenerateDurationOutliers: boolean;
+  downloadEnabled?: boolean;
   durationOutlierWarnings?: Record<number, string>;
   timingReceipt?: RunTimingReceipt;
   /** 任意の部分実行対象の 0-based index 列。チェック選択や失敗分再実行で使う。指定時は range より優先。 */
@@ -75,6 +76,7 @@ export interface RetryPlaylistPayload {
   /** true のとき submittedClipIds は resume 保存時点で OK clip IDs に正規化済み。 */
   submittedClipIdsAreDurationFiltered?: boolean;
   shouldDownload?: boolean;
+  downloadEnabled?: boolean;
   /** 定期実行の playlist/download 再開時だけ付与する checkpoint 契約。 */
   unattended?: {
     request: UnattendedRunRequest;
