@@ -1,0 +1,1 @@
+- `yt-generate-loop-video` に fal.ai のループ動画生成 engine と skill-config による既定 engine 選択を追加。

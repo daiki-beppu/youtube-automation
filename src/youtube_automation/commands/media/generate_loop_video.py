@@ -26,6 +26,18 @@ from pathlib import Path
 
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.media.video_type import VideoType, VideoTypeConfig
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_ALLOWED_MODELS as DEFAULT_FAL_ALLOWED_MODELS,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_CANVAS as DEFAULT_FAL_CANVAS,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_MODEL as DEFAULT_FAL_MODEL,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    generate_loop_video as generate_fal_loop_video,
+)
 from youtube_automation.infrastructure.media.genai_client import create_veo_genai_client
 from youtube_automation.infrastructure.media.minimax_video_generator import (
     DEFAULT_ASPECT_RATIO as DEFAULT_H3_ASPECT_RATIO,
@@ -206,9 +218,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("collection", nargs="?", help="コレクションパス")
     parser.add_argument(
         "--engine",
-        choices=("veo", "omni", "h3"),
-        default="veo",
-        help="動画生成エンジン (default: veo)",
+        choices=("veo", "fal", "omni", "h3"),
+        default=None,
+        help="動画生成エンジン (default: loop.engine、未設定時 veo)",
     )
     parser.add_argument(
         "--prompt",
@@ -352,7 +364,28 @@ def _run_generate(
         _backup_existing_loop(output_path, max_backups=max_backups)
 
     start_time = time.monotonic()
-    if engine == "h3":
+    if engine == "fal":
+        fal_config = engine_config or {}
+        raw_canvas = fal_config.get("canvas", {})
+        canvas = {str(key): tuple(value) for key, value in raw_canvas.items()}
+        upscale = fal_config.get("upscale_to", [1920, 1080])
+        success = generate_fal_loop_video(
+            image_path,
+            output_path,
+            model,
+            prompt,
+            duration_seconds=int(fal_config.get("duration_seconds", 8)),
+            aspect_ratio=str(fal_config.get("aspect_ratio", "16:9")),
+            resolution=str(fal_config.get("resolution", "768P")),
+            prompt_expansion_mode=str(fal_config.get("prompt_expansion_mode", "balanced")),
+            timeout_sec=float(fal_config.get("timeout_seconds", 600)),
+            poll_interval_sec=float(fal_config.get("poll_interval_seconds", 2)),
+            allowed_models=frozenset(fal_config.get("allowed_models", DEFAULT_FAL_ALLOWED_MODELS)),
+            canvas=canvas or DEFAULT_FAL_CANVAS,
+            upscale_to=tuple(upscale) if upscale is not None else None,
+            compression=compression,
+        )
+    elif engine == "h3":
         h3_config = engine_config or {}
         success = generate_h3_loop_video(
             image_path,
@@ -415,12 +448,16 @@ def main():
     parser = _build_parser()
     args = parser.parse_args()
 
+    # `--help` は checkout 外の設定や追加 domain module を解決せず完結させる。
+    from youtube_automation.domains.media.loop_engine import LoopEngineConfig
+
     skill_config = load_config()
     try:
         video_type = VideoTypeConfig.from_mapping(
             skill_config,
             config_path="config/skills/loop-video.yaml::video_type",
         ).video_type
+        configured_engine = LoopEngineConfig.from_mapping(skill_config).engine.value
     except ConfigError as e:
         print(f"[ERROR] {e}", file=sys.stderr)
         sys.exit(1)
@@ -438,15 +475,20 @@ def main():
             file=sys.stderr,
         )
         sys.exit(1)
-    engine_config = skill_config.get(args.engine, {})
+    engine = args.engine or configured_engine
+    engine_config = skill_config.get(engine, {})
     compression_config = skill_config.get("compression", {})
     max_backups = int(skill_config.get("max_backups", DEFAULT_MAX_BACKUPS))
     default_model = {
         "veo": DEFAULT_MODEL,
+        "fal": DEFAULT_FAL_MODEL,
         "omni": DEFAULT_OMNI_MODEL,
         "h3": DEFAULT_H3_MODEL,
-    }[args.engine]
+    }[engine]
     model = args.model or engine_config.get("model", default_model)
+    if engine == "fal" and model not in engine_config.get("allowed_models", DEFAULT_FAL_ALLOWED_MODELS):
+        print("[ERROR] fal model は loop.fal.allowed_models に含まれる必要があります", file=sys.stderr)
+        sys.exit(1)
     prompt = resolve_prompt(args, engine_config, skill_config)
 
     collection_path = _resolve_collection_path(args, parser)
@@ -464,7 +506,7 @@ def main():
         output_path,
         model,
         prompt,
-        engine=args.engine,
+        engine=engine,
         engine_config=engine_config,
         assume_yes=args.yes,
         max_backups=max_backups,

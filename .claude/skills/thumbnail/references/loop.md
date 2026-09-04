@@ -57,6 +57,8 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 ## 前提
 
+既定 engine は GCP に集約できる Veo とする。fal は低コストな opt-in として利用し、fal 生成物の承認が 3 本以上蓄積した場合、または Veo の値上げ・廃止が告知された場合に既定 engine を再評価する。
+
 `config/channel/` が存在すること（`load_config()` でロード可能）。
 
 存在しない場合、ユーザーに確認:
