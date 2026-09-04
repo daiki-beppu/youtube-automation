@@ -199,7 +199,12 @@ class TestMain:
 
     @pytest.mark.parametrize(
         ("cli", "configured_engine", "expected_engine"),
-        [([], None, "veo"), ([], "fal", "fal"), (["--engine", "fal"], "veo", "fal")],
+        [
+            ([], None, "veo"),
+            ([], "fal", "fal"),
+            (["--engine", "fal"], "veo", "fal"),
+            (["--engine", "veo"], "fal", "veo"),
+        ],
     )
     def test_main_selects_engine(self, tmp_path, monkeypatch, cli, configured_engine, expected_engine):
         from youtube_automation.commands.media import generate_short_loop as mod

@@ -7,6 +7,7 @@
 Usage:
     yt-generate-shorts-loop <collection-path>
     yt-generate-shorts-loop <collection-path> --model veo-3.1-lite-generate-preview
+    yt-generate-shorts-loop <collection-path> --engine fal
     yt-generate-shorts-loop <collection-path> -y    # 確認スキップ
 """
 
@@ -37,6 +38,7 @@ from youtube_automation.infrastructure.media.veo_generator import (
 
 SHORT_ASPECT_RATIO = "9:16"
 SHORT_SKILL_NAME = "short"
+ENGINES = ("veo", "fal")
 
 
 def resolve_paths(collection_path: Path) -> tuple[Path, Path]:
@@ -60,13 +62,13 @@ def _build_parser() -> argparse.ArgumentParser:
     # `generate_loop_video.py` と同じく `--model` は preview/GA 切替を許容するため
     # choices で縛らず任意文字列を受ける（未知モデルは Vertex AI 側でエラー）.
     parser = argparse.ArgumentParser(
-        description="Veo 3.1 Shorts (9:16) ループ動画生成",
+        description="Shorts (9:16) ループ動画生成 (Veo / fal)",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("collection", nargs="?", help="コレクションパス (collections/live/<name>/)")
     parser.add_argument(
         "--engine",
-        choices=("veo", "fal"),
+        choices=ENGINES,
         default=None,
         help="動画生成エンジン (default: skill-config の engine、未設定時 veo)",
     )
@@ -74,8 +76,9 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model",
         help=(
-            "Veo モデル名 (default: skill-config の veo.model, fallback: veo-3.1-fast-generate-001)。"
-            " 例: veo-3.1-fast-generate-001 / veo-3.1-generate-001 / veo-3.1-lite-generate-preview"
+            "モデル名 (default: skill-config の <engine>.model,"
+            f" fallback: veo={DEFAULT_MODEL} / fal={DEFAULT_FAL_MODEL})。"
+            " 例: veo-3.1-generate-001 / veo-3.1-lite-generate-preview / minimax/h3-max/image-to-video"
         ),
     )
     parser.add_argument("-y", "--yes", action="store_true", help="確認をスキップ")
@@ -89,8 +92,8 @@ def _resolve_generation_settings(
     """CLI 引数と short 設定から生成パラメータを解決する."""
     skill_cfg = load_skill_config(SHORT_SKILL_NAME)
     engine = args.engine or skill_cfg.get("engine", "veo")
-    if engine not in {"veo", "fal"}:
-        parser.error("skill-config の engine は veo または fal を指定してください")
+    if engine not in ENGINES:
+        parser.error(f"skill-config の engine は {' または '.join(ENGINES)} を指定してください")
     engine_cfg = skill_cfg.get(engine, {})
     default_model = DEFAULT_FAL_MODEL if engine == "fal" else DEFAULT_MODEL
     model = args.model or engine_cfg.get("model", default_model)
