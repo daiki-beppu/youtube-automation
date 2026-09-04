@@ -29,7 +29,7 @@ release 型では JP / EN の 9:16 動画をローカルで生成します。サ
 /short --thumbnail
 ```
 
-`--thumbnail` は collection 型だけで使える一段実行です。9:16 の `short.png` を生成・承認し、必要なら縦型の `short-loop.mp4` に動画化します。content model を切り替えるフラグではないため、release 型で指定すると対象外として停止します。
+`--thumbnail` は collection 型だけで使える一段実行です。9:16 の `short.png` を生成・承認し、必要なら縦型の `short-loop.mp4` に動画化します。ループ生成は Veo が既定で、`yt-generate-shorts-loop --engine fal` による fal.ai も選択できます。content model を切り替えるフラグではないため、release 型で指定すると対象外として停止します。
 
 ## つまずいたら
 

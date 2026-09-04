@@ -69,10 +69,16 @@ open <collection-path>/10-assets/short.png
 
 ## Step 5: ループ動画化する
 
-承認された `short.png` を Veo 3.1 で変換する。
+承認された `short.png` を Veo 3.1（既定）または fal.ai で変換する。
 
 ```bash
 uv run yt-generate-shorts-loop <collection-path> -y
+```
+
+fal.ai を選ぶ場合は `--engine fal` を付ける。入力は 768x1344 に事前リサイズし、最終出力は 1080x1920 へアップスケールする。
+
+```bash
+uv run yt-generate-shorts-loop <collection-path> --engine fal -y
 ```
 
 カスタム動作も指定できる。
@@ -97,7 +103,7 @@ open <collection-path>/10-assets/short-loop.mp4
 
 | 配置 | 責務 |
 |---|---|
-| `.claude/skills/short/config.default.yaml` の `veo` 節 | Veo モデル / デフォルトプロンプト。未定義時は CLI 内蔵値 |
+| `.claude/skills/short/config.default.yaml` の `engine` / `veo` / `fal` | 既定 engine、各モデル / プロンプ / 解像度 |
 | `config/skills/short.yaml` | `yt-generate-shorts-loop` の skill-config 上書き |
 | `config/channel/meta.json` | channel name |
 | `config/channel/audio.json` | CTA に使う target duration |

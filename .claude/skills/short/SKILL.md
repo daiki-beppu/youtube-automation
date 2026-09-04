@@ -92,7 +92,7 @@ generation = load_skill_config("short")[content_type]
 | `uv run yt-upload-shorts <collection-path> --short-num <short-num>` | 指定番号のショートを 1 本投稿し、結果の action を確認 |
 | `uv run yt-shorts-bulk-update-loc --dry-run` | 投稿済み collection Shorts の localization 更新を確認 |
 | `uv run yt-generate-image --aspect-ratio "9:16" --prompt "<text>" --output <collection>/10-assets/short.png -y` | `--thumbnail` の 9:16 画像生成 |
-| `uv run yt-generate-shorts-loop <collection-path> -y` | `short.png` の 9:16 ループ動画化 |
+| `uv run yt-generate-shorts-loop <collection-path> [--engine veo\|fal] -y` | `short.png` の 9:16 ループ動画化 |
 
 ## Instructions
 
@@ -117,7 +117,7 @@ generation = load_skill_config("short")[content_type]
 | thumbnails.set（50 units / 本） | collection 型の投稿本数 | release 型は 0 |
 | videos.update（50 units） | `yt-shorts-bulk-update-loc` の対象 Shorts 数 | `--dry-run` は 0 |
 | Vertex AI Gemini | `--thumbnail` の `short.png` 生成で 1 call | 再生成回数 |
-| Vertex AI Veo 3.1 | `--thumbnail` のループ動画化で 1 call | ループ不要なら 0 |
+| Vertex AI Veo 3.1 / fal.ai | `--thumbnail` のループ動画化で選択 engine に 1 call | ループ不要なら 0 |
 
 - 上限 / 承認: collection 型は `--plan` と `--short-num` で小出しに確認できる。`--thumbnail` の画像・動画生成は各 1 call ごとに承認する。release 型はローカル ffmpeg 生成だけで、投稿 API は呼ばない。
 

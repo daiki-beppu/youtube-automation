@@ -1,0 +1,1 @@
+- `yt-generate-shorts-loop` に fal.ai を使う `--engine fal` と 9:16 用のリサイズ設定を追加。

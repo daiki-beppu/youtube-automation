@@ -65,6 +65,13 @@ class TestBuildParser:
         # Then
         assert args.model == "veo-3.1-lite-generate-preview"
 
+    def test_parser_accepts_fal_engine(self):
+        from youtube_automation.commands.media.generate_short_loop import _build_parser
+
+        args = _build_parser().parse_args(["--engine", "fal"])
+
+        assert args.engine == "fal"
+
 
 # ---------------------------------------------------------------------------
 # 2. パス解決
@@ -189,6 +196,99 @@ class TestMain:
             call = mocks["generate_loop_video"].call_args
             kwargs = call.kwargs
             assert kwargs.get("aspect_ratio") == "9:16"
+
+    @pytest.mark.parametrize(
+        ("cli", "configured_engine", "expected_engine"),
+        [([], None, "veo"), ([], "fal", "fal"), (["--engine", "fal"], "veo", "fal")],
+    )
+    def test_main_selects_engine(self, tmp_path, monkeypatch, cli, configured_engine, expected_engine):
+        from youtube_automation.commands.media import generate_short_loop as mod
+
+        col = tmp_path / "collection"
+        assets = col / "10-assets"
+        assets.mkdir(parents=True)
+        (assets / "short.png").write_bytes(b"image")
+        monkeypatch.setattr(sys, "argv", ["yt-generate-shorts-loop", str(col), *cli, "-y"])
+        config = {"veo": {}, "fal": {}}
+        if configured_engine is not None:
+            config["engine"] = configured_engine
+
+        with patch.multiple(
+            mod,
+            load_skill_config=DEFAULT,
+            create_veo_genai_client=DEFAULT,
+            generate_loop_video=DEFAULT,
+            generate_fal_loop_video=DEFAULT,
+            probe_video=DEFAULT,
+        ) as mocks:
+            mocks["load_skill_config"].return_value = config
+            mocks["generate_loop_video"].return_value = True
+            mocks["generate_fal_loop_video"].return_value = True
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+
+        assert excinfo.value.code == 0
+        if expected_engine == "fal":
+            mocks["generate_fal_loop_video"].assert_called_once()
+            mocks["generate_loop_video"].assert_not_called()
+        else:
+            mocks["generate_loop_video"].assert_called_once()
+            mocks["generate_fal_loop_video"].assert_not_called()
+
+    def test_fal_uses_vertical_canvas_and_upscale(self, tmp_path, monkeypatch):
+        from youtube_automation.commands.media import generate_short_loop as mod
+
+        col = tmp_path / "collection"
+        assets = col / "10-assets"
+        assets.mkdir(parents=True)
+        (assets / "short.png").write_bytes(b"image")
+        monkeypatch.setattr(sys, "argv", ["yt-generate-shorts-loop", str(col), "--engine", "fal", "-y"])
+
+        with patch.multiple(
+            mod,
+            load_skill_config=DEFAULT,
+            generate_fal_loop_video=DEFAULT,
+            probe_video=DEFAULT,
+        ) as mocks:
+            mocks["load_skill_config"].return_value = {
+                "fal": {
+                    "canvas": {"9:16": [768, 1344]},
+                    "upscale_to": [1080, 1920],
+                }
+            }
+            mocks["generate_fal_loop_video"].return_value = True
+            with pytest.raises(SystemExit):
+                mod.main()
+
+        kwargs = mocks["generate_fal_loop_video"].call_args.kwargs
+        assert kwargs["aspect_ratio"] == "9:16"
+        assert kwargs["canvas"] == {"9:16": (768, 1344)}
+        assert kwargs["upscale_to"] == (1080, 1920)
+
+    def test_success_prints_actual_output_dimensions(self, tmp_path, monkeypatch, capsys):
+        from youtube_automation.commands.media import generate_short_loop as mod
+        from youtube_automation.infrastructure.media.probe import VideoProbe
+
+        col = tmp_path / "collection"
+        assets = col / "10-assets"
+        assets.mkdir(parents=True)
+        (assets / "short.png").write_bytes(b"image")
+        monkeypatch.setattr(sys, "argv", ["yt-generate-shorts-loop", str(col), "-y"])
+
+        with patch.multiple(
+            mod,
+            load_skill_config=DEFAULT,
+            create_veo_genai_client=DEFAULT,
+            generate_loop_video=DEFAULT,
+            probe_video=DEFAULT,
+        ) as mocks:
+            mocks["load_skill_config"].return_value = {"veo": {}}
+            mocks["generate_loop_video"].return_value = True
+            mocks["probe_video"].return_value = VideoProbe(7.0, 1080, 1920, "h264")
+            with pytest.raises(SystemExit):
+                mod.main()
+
+        assert "出力実寸: 1080x1920" in capsys.readouterr().out
 
     def test_main_propagates_model_override_via_cli(self, tmp_path, monkeypatch):
         """plan 要件 14-c: `--model` 指定が Veo 呼出に伝搬する."""
