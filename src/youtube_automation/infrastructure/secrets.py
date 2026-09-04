@@ -26,7 +26,6 @@ _SECRET_REFS: dict[str, str] = {
     "CLIENT_SECRETS_JSON": "op://Personal/YouTube_OAuth_Client_Secrets/credential",
     "OPENAI_API_KEY": "op://Personal/OpenAI_API_Key/credential",
     "GEMINI_API_KEY": "op://Personal/Gemini_API_Key/credential",
-    "MINIMAX_API_KEY": "op://Personal/MiniMax_API_Key/credential",
     "FAL_KEY": "op://Personal/fal_API_Key/credential",
     "R2_API_TOKEN": "op://Personal/Cloudflare_R2_API_Token/credential",
     "YOUTUBE_STREAM_KEY": "op://Personal/YouTube/stream_key",

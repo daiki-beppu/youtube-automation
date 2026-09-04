@@ -120,17 +120,6 @@ def test_created_collection_is_pinned_before_replanning(tmp_path: Path, runner: 
     assert decision["action"] == "lyria"
     assert decision["reason"] == "lyria_generation_required"
 
-
-def test_minimax_collection_routes_to_music_generate_without_suno_fallback(tmp_path: Path, runner: ModuleType) -> None:
-    collection = _collection(tmp_path, "20260721-minimax", engine="minimax")
-
-    decision = runner.resolve_action(tmp_path, collection.name, config=_config(runner))
-
-    assert decision["action"] == "minimax"
-    assert decision["reason"] == "minimax_generation_required"
-    assert decision["resume_action"] == "minimax"
-
-
 def test_cloud_executor_is_noop_before_handoff_without_mutating_state(tmp_path: Path, runner: ModuleType) -> None:
     collection = _collection(tmp_path, "20260721-local-owned", engine="suno")
     state_path = collection / "workflow-state.json"

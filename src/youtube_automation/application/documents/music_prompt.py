@@ -26,7 +26,6 @@ ReviewSource = Literal["web", "terminal", "automatic"]
 _FILENAMES = {
     "suno": "suno-prompts.json",
     "lyria": "lyria-prompt.json",
-    "minimax": "minimax-prompt.json",
 }
 
 

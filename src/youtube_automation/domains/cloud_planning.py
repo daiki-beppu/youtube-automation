@@ -14,7 +14,6 @@ from youtube_automation.domains.collections.workflow_state import WorkflowState,
 _PROMPT_FILES = {
     "suno": "suno-prompts",
     "lyria": "lyria-prompt",
-    "minimax": "minimax-prompt",
 }
 
 _CLOUD_PLANNING_SCOPE = (

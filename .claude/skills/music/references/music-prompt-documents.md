@@ -1,6 +1,6 @@
 # Music prompt structured documents
 
-- `書き込む`: `collections/<id>/20-documentation/minimax-prompt.json`, `collections/<id>/20-documentation/minimax-prompt.html`
+- `書き込む`: `collections/<id>/20-documentation/lyria-prompt.json`, `collections/<id>/20-documentation/lyria-prompt.html`
 
 `/music` の prompt 正本は `references/music-prompt.schema.json` に準拠する JSON と、同 basename の HTML pair とする。
 
@@ -16,11 +16,9 @@ Codex / Claudeとも同じCLI契約を使い、製品固有session APIへmessage
 |---|---|---|
 | Suno | `20-documentation/suno-prompts.json` | `20-documentation/suno-prompts.html` |
 | Lyria | `20-documentation/lyria-prompt.json` | `20-documentation/lyria-prompt.html` |
-| MiniMax | `20-documentation/minimax-prompt.json` | `20-documentation/minimax-prompt.html` |
 
-inventory上の正準pathは `collections/<id>/20-documentation/minimax-prompt.json` とし、他engineと同じmusic ownerが公開する。
 
-各 entry は `name`、`style`（Lyria / MiniMax は最終 prompt）、`lyrics`、`options`、`track_role`、`review` を持つ。任意の `title`、`sections`、`quality` も同じcardに表示する。Suno の More Options と Lyria / MiniMax の model / bpm / intensity / mode / reference image / duration は `options` に保存する。生成根拠は root `provenance.source_paths` と必要に応じて `insight_ids` に固定する。album flowとcard内表示順は schema の `x-view` が正本で、HTMLを手編集しない。
+各 entry は `name`、`style`（Lyria は最終 prompt）、`lyrics`、`options`、`track_role`、`review` を持つ。任意の `title`、`sections`、`quality` も同じcardに表示する。Suno の More Options と Lyria の model / bpm / intensity / mode / reference image / duration は `options` に保存する。生成根拠は root `provenance.source_paths` と必要に応じて `insight_ids` に固定する。album flowとcard内表示順は schema の `x-view` が正本で、HTMLを手編集しない。
 
 ## fail-closed publication
 
@@ -31,7 +29,7 @@ inventory上の正準pathは `collections/<id>/20-documentation/minimax-prompt.j
 
 ```bash
 uv run yt-document-migrate <candidate.json> \
-  --target <collection>/20-documentation/<suno-prompts|lyria-prompt|minimax-prompt>.json \
+  --target <collection>/20-documentation/<suno-prompts|lyria-prompt>.json \
   --schema music-prompt.schema.json \
   --workflow-state <collection>/workflow-state.json
 ```

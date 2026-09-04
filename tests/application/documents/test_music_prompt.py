@@ -58,7 +58,6 @@ def _state(path: Path) -> None:
     [
         ("suno", "suno-prompts.json"),
         ("lyria", "lyria-prompt.json"),
-        ("minimax", "minimax-prompt.json"),
     ],
 )
 def test_verified_music_prompt_pair_waits_for_finalized_review(tmp_path: Path, engine: str, filename: str) -> None:

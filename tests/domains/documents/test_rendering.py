@@ -531,7 +531,7 @@ def test_music_prompt_entries_render_as_readable_cards_with_album_flow() -> None
     document = {
         "schema_version": 1,
         "generated_at": "2026-08-16T00:00:00Z",
-        "engine": "minimax",
+        "engine": "lyria",
         "collection_id": "night-drive",
         "provenance": {"producer": "music", "source_paths": ["plan.json"]},
         "entries": [

@@ -132,7 +132,7 @@ def _evaluate_lyric(collection_path: Path) -> tuple[int, dict[str, object]]:
 
     channel_dir = _channel_dir(collection_path)
     youtube_config = _load_mapping(channel_dir / "config" / "channel" / "youtube.json")
-    if youtube_config.get("music_engine") not in {"suno", "minimax"}:
+    if youtube_config.get("music_engine") not in {"suno"}:
         return EXIT_BLOCKED, {
             "step": "lyric",
             "decision": "blocked",
@@ -172,8 +172,8 @@ def _music_engine(collection_path: Path) -> str:
     channel_dir = _channel_dir(collection_path)
     youtube_config = _load_mapping(channel_dir / "config" / "channel" / "youtube.json")
     engine = youtube_config.get("music_engine")
-    if engine not in {"suno", "lyria", "minimax"}:
-        raise ManifestError("config/channel/youtube.json::music_engine must be suno, lyria, or minimax")
+    if engine not in {"suno", "lyria"}:
+        raise ManifestError("config/channel/youtube.json::music_engine must be suno or lyria")
     return engine
 
 
@@ -267,7 +267,7 @@ def _evaluate_generate(collection_path: Path) -> tuple[int, dict[str, object]]:
 
 def _evaluate_master(collection_path: Path) -> tuple[int, dict[str, object]]:
     engine = _music_engine(collection_path)
-    if engine in {"lyria", "minimax"}:
+    if engine == "lyria":
         return EXIT_SKIP, {
             "step": "master",
             "engine": engine,

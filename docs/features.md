@@ -33,7 +33,7 @@
 
 ## 企画・コンテンツ生成
 
-サムネ・音源・動画など制作物の生成。`/music --generate` が `config/channel/youtube.json::music_engine` を読み、Suno UI、Vertex AI Lyria、MiniMax Music API の3経路を自動分岐する。
+サムネ・音源・動画など制作物の生成。`/music --generate` が `config/channel/youtube.json::music_engine` を読み、Suno UI と Vertex AI Lyria の2経路を自動分岐する。
 
 | Skill | なにができるか |
 |---|---|

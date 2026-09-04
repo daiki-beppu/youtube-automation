@@ -496,14 +496,6 @@ def test_music_engine_accessor_reads_canonical_and_legacy_shapes(
 
     assert read(state_path).music_engine == "lyria"
 
-
-def test_music_engine_accepts_minimax_in_owner_schema(tmp_path: Path) -> None:
-    state_path = tmp_path / "workflow-state.json"
-    _write(state_path, {"planning": {"music": {"engine": "minimax"}}})
-
-    assert read(state_path).music_engine == "minimax"
-
-
 def test_music_planning_exposes_non_negative_expected_file_count(tmp_path: Path) -> None:
     state_path = tmp_path / "workflow-state.json"
     _write(state_path, {"planning": {"music": {"expected_file_count": 4}}})
@@ -513,6 +505,14 @@ def test_music_planning_exposes_non_negative_expected_file_count(tmp_path: Path)
     assert state.planning is not None
     assert state.planning.music is not None
     assert state.planning.music.expected_file_count == 4
+
+
+def test_music_engine_rejects_removed_minimax_value(tmp_path: Path) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    _write(state_path, {"planning": {"music": {"engine": "minimax"}}})
+
+    with pytest.raises(WorkflowStateError, match="unsupported workflow-state music engine: minimax"):
+        _engine = read(state_path).music_engine
 
 
 @pytest.mark.parametrize("value", [True, -1, "4", 4.5])

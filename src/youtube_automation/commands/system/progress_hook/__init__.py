@@ -20,7 +20,6 @@ from youtube_automation.commands.system.progress_hook.workflow_state import (
 _STAGE_COMMANDS = {
     "音源生成": (
         "yt-generate-lyria-master",
-        "yt-generate-minimax-master",
         "yt-generate-suno",
         "yt-suno-unattended-request",
     ),

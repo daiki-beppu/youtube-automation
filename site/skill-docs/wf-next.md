@@ -12,7 +12,7 @@
 /wf-next
 ```
 
-active な planning collection が 1 件なら、その phase と成果物から次の作業を決めます。複数ある場合は対象を確認してから進みます。Suno ならダウンロード済み曲のマスター化、Lyria / MiniMax なら音源生成など、`music_engine` に合う経路だけを実行します。
+active な planning collection が 1 件なら、その phase と成果物から次の作業を決めます。複数ある場合は対象を確認してから進みます。Suno ならダウンロード済み曲のマスター化、Lyria なら音源生成など、`music_engine` に合う経路だけを実行します。
 
 ## 最終マスターを確認して動画工程へ進みたいとき
 

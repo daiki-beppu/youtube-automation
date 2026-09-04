@@ -8,31 +8,8 @@
 |---|---|---|
 | `suno` | 下記 Suno 経路。collection server を起動または再利用し、Chrome 拡張で連続生成・playlist 追加・一括 download を行う | `02-Individual-music/` と strict 6 点 |
 | `lyria` | 下記 Lyria 経路。Vertex AI Lyria 3 でセグメント生成・結合を行う | `01-master/master.mp3` |
-| `minimax` | 下記 MiniMax 経路。instrumental は segment生成・結合、vocal は検証済み歌詞から1曲を直接生成する | `01-master/master.mp3` |
 
-値が `suno` / `lyria` / `minimax` 以外、または未設定なら設定不整合として停止する。利用者に別 engine の skill を案内せず、同じ `/music --generate` の入口で自動分岐する。
-
-## MiniMax 経路
-
-`music_engine: minimax` では `.claude/skills/music/config.default.yaml::generate.minimax` と `config/skills/music.yaml::generate.minimax` を deep-merge する。対象 collection のテーマ、creative constraints、採用済み方向性から style prompt と filename slug を決める。`suno-patterns.yaml` が vocal を示す場合は、`/music --lyric` の機械検証と semantic review が成功した1曲分の `20-documentation/suno-lyrics.json` を必須とする。最終prompt、model、segment数、track role、provenance、機械verifyとsemantic reviewを `music-prompt.schema.json` のcandidateへ保存し、writerで `20-documentation/minimax-prompt.json` と同basename HTMLを公開する。
-
-`skip_generation_approval: false` は `uv run yt-music-prompt-select --collection <collection-path>` の永続card表示とbroker承認後だけ生成へ進む。`true` は `--automatic` でHTML/brokerを省略する。どちらも同じdigest再検証finalizerを通し、失敗・差し戻し・stale pairではstateを更新しない。承認後、検証済みJSONの `style` / `name` / `options` だけを次のCLI引数へ写像する。
-
-```bash
-uv run yt-generate-minimax-master \
-  --prompt "<instrumental style prompt>" \
-  --name "<slug>" \
-  --target-duration <minutes> \
-  --model <music-3.0|music-2.6> \
-  --padding-min <minutes> \
-  --collection <collection-path>
-```
-
-vocal の場合は同じ CLI に `--lyrics 20-documentation/suno-lyrics.json` を追加する。CLI は歌詞ファイルを API 呼び出し前に検証し、section tag を含む本文を変更せず `lyrics` に、`is_instrumental: false` を payload に設定する。1回の生成結果を `01-master/master.mp3` へ直接保存し、segment分割・`generate_master` 結合は行わない。
-
-instrumental は従来どおり1 segmentを最大300秒として必要数を算出し、`output_format: hex` / `is_instrumental: true` で逐次生成する。成功ごとに `data/audio_costs.json` へ `unit: song` を記録し、`02-Individual-music/<NN>_<slug>.mp3` をresume可能に保存する。全segmentが揃った場合だけ既存 `generate_master.generate_master()` へ渡し、`01-master/master.mp3` を生成する。vocal / instrumental とも中断時の支払い済みaudioは `tmp/minimax-recovered/<sha256>.mp3` へ退避する。
-
-完了条件は `01-master/master.mp3` が非空で、instrumental は新規segment数、vocal は1件の `unit: song` cost entryが残ること。成功後は owner CLI の `set-asset raw_master '"master.mp3"'` で workflow state を更新する。失敗時は既存segmentを保持し、vocal master は公開せず、同じcommandの再実行で未生成分から再開する。
+値が `suno` / `lyria` 以外、または未設定なら設定不整合として停止する。利用者に別 engine の skill を案内せず、同じ `/music --generate` の入口で自動分岐する。
 
 Suno 経路の server lifecycle は `.claude/skills/extension/references/serve.md` をファイル参照で読み、`--suno` の起動・既存 server 再利用・疎通確認・停止契約をそのまま実行する。`/extension` へ委譲せず、このファイルの手順を複製しない。
 
@@ -371,7 +348,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 ### 選択タイミング（どこで lyria が選ばれるか）
 
-1. **チャンネルのデフォルト** — `/channel-strategy --direction`（方向性検討モード）で `suno` / `lyria` / `minimax` を検討 → `/setup --regenerate` が `config/channel/youtube.json` の `music_engine` に書き込む
+1. **チャンネルのデフォルト** — `/channel-strategy --direction`（方向性検討モード）で `suno` / `lyria` を検討 → `/setup --regenerate` が `config/channel/youtube.json` の `music_engine` に書き込む
 2. **コレクション単位の上書き** — `/wf-new` の `yt-init-collection --music-engine lyria` でコレクション毎に上書き可能（省略時はチャンネル設定を継承）
 3. **このスキルが呼ばれるとき** — `/wf-new` が `workflow-state.json` の `planning.music.engine = "lyria"` を判定して `/music --generate` を自動実行する。手動で `/music --generate <theme>` を叩いた場合もこのスキルに入る
 

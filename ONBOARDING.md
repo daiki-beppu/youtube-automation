@@ -111,12 +111,12 @@ yt-skills sync --asset claude-md --force  # 共通骨格を最新版で上書き
 標準の進め方:
 
 ```bash
-uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --track-count 2 --selected-plan A --music-engine <suno|lyria|minimax>
+uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" --track-count 2 --selected-plan A --music-engine <suno|lyria>
 ```
 
 1. 生成された `collections/planning/YYYYMMDD-<short>-pilot-direction-check-collection/` を対象に `/thumbnail pilot-direction-check` を実行し、`10-assets/main.png` / `10-assets/thumbnail.jpg` を確認する。
 2. `/thumbnail --compare` でベンチマーク競合との 320px 表示を確認する。現行の比較 CLI は `collections/live/*/10-assets/thumbnail.jpg` を収集対象にするため、パイロットサムネを比較に含める場合は一時比較用の `collections/live/_pilot-thumbnail-compare/10-assets/thumbnail.jpg` にコピーし、確認後にその一時ディレクトリを削除する。
-3. `workflow-state.json::music_engine` に合わせて、Suno なら `/music --prompt pilot-direction-check` でプロンプトを生成し、続けて `/music --generate` で Suno UI へ投入・音源生成して試聴する。Lyria / MiniMax なら `/music --generate pilot-direction-check` を実行して生成音源を試聴し、ムード・テンポを確認する。
+3. `workflow-state.json::music_engine` に合わせて、Suno なら `/music --prompt pilot-direction-check` でプロンプトを生成し、続けて `/music --generate` で Suno UI へ投入・音源生成して試聴する。Lyria なら `/music --generate pilot-direction-check` を実行して生成音源を試聴し、ムード・テンポを確認する。
 4. NG なら試作物を破棄し、`config/skills/thumbnail.yaml`、`config/skills/music.yaml::prompt`、または `config/skills/lyria.yaml` の方向性項目を調整して再試作する。
 5. OK なら仮コレクションを削除して `/wf-new` に進む。仮コレクションを本制作へ昇格する場合は削除せず、既存 `collections/planning/` の続きとして `/wf-next` で進める。
 
