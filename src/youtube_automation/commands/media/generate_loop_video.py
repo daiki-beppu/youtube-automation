@@ -111,6 +111,17 @@ def resolve_prompt(args, engine_config: dict, loop_config: dict | None = None) -
       3. skill-config の motion_targets / static_targets で structured 構築
       4. skill-config の default_prompt
       5. ハードコード DEFAULT_PROMPT
+
+    structured 構築に使う 4 キー（prompt_template / base_rules /
+    motion_targets / static_targets）は `engine_config`（`loop.<engine>` 節）
+    → `loop_config`（`loop` 直下の全 engine 共有値）の 2 段フォールバックで
+    解決する。engine 節にキーが存在すれば値が空でもそちらが勝つ。
+    `default_prompt` は engine 節専用でフォールバックしない。
+
+    Args:
+        args: CLI 引数（prompt / motion_targets / static_targets を参照）。
+        engine_config: `loop.<engine>` 節。engine 固有の上書き値。
+        loop_config: `loop` 直下の全 engine 共有値。省略時は engine 節のみを見る。
     """
     if args.prompt:
         if args.motion_targets or args.static_targets:
