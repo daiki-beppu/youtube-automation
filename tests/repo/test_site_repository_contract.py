@@ -24,7 +24,7 @@ OPERATOR_DOC_SOURCES = (
     "docs/workflow-cheatsheet.md",
     "docs/chrome-extension-install-guide.md",
     "docs/dashboard.md",
-    "docs/channel-workspace-migration.md",
+    "docs/migration/workspace-to-single-repo.md",
     "docs/cloud-execution.md",
     "docs/live-streaming.md",
     "docs/streaming-healthcheck.md",

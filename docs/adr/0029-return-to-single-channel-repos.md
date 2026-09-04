@@ -52,7 +52,7 @@ workspace が達成したものは記録しておく。`yt-skills sync` / automa
 - **警告リリース**（A3 / A4 のみ。互いに独立、stack 不要。`### Deprecated` fragment を含むため規則上 minor）
   - A1（`find_workspace_root` の `DeprecationWarning`）と A2（`yt-doctor` の `workspace_deprecated` check）は #4880 で落とした。外部 workspace 利用者の痕跡が無く、B5 で消える一時コードのため。`deprecated` fragment は A3 / A4 に載せる
   - A3 `skills_sync/_settings.py` に廃止 hook の prune、template から guard hook 2 件（PreToolUse `check` / SessionStart `context`）を除去、settings test 差し替え（B1 の技術的前提）
-  - A4 逆移行ガイド `docs/migration/workspace-to-single-repo.md` を公開 map（#4802）・`site.yml` paths・Cloudflare watch path へ登録し、旧移行ページ `docs/channel-workspace-migration.md` を即撤去する（site の `legacyRoute` / `site.yml` paths / Cloudflare watch path も同時に外し、navigation 6 → 5）
+  - A4 逆移行ガイド `docs/migration/workspace-to-single-repo.md` を公開 map（#4802）・`site.yml` paths・Cloudflare watch path へ登録し、旧 workspace 移行ページを即撤去する（site の `legacyRoute` / `site.yml` paths / Cloudflare watch path も同時に外し、navigation 6 → 5）
 - **削除リリース**（依存順の stack。**7 チャンネルの export 完了 + workspace archive がゲート**。`### Removed` を含むため規則上 major）
   - B1 console script 4 件（`yt-channel` / `yt-channel-import` / `yt-workspace-status` / `yt-workspace-guard`）の削除と `pyproject` / `entrypoints` / harness gate / CLI 対応表 / test の整理
   - B2 doctor の workspace 分岐削除

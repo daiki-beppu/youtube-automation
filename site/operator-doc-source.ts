@@ -54,9 +54,8 @@ export const operatorDocMap = [
     route: "/guides/dashboard",
   },
   {
-    legacyRoute: "/channel-workspace-migration",
-    source: "docs/channel-workspace-migration.md",
-    route: "/releases/workspace-migration",
+    source: "docs/migration/workspace-to-single-repo.md",
+    route: "/releases/workspace-to-single-repo",
   },
   {
     legacyRoute: "/cloud-execution",

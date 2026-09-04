@@ -18,7 +18,7 @@
 | pnpm | `11.15.1`（`site/package.json::packageManager` と `PNPM_VERSION`） |
 | Production deploy | `main` への push で自動実行 |
 | Preview deploy | repository 内の production 以外の全 branch / pull request |
-| Build watch paths | `site/**`, `docs/release-notes/**`, `ONBOARDING.md`, `docs/oauth-setup.md`, `docs/features.md`, `docs/workflow-cheatsheet.md`, `docs/chrome-extension-install-guide.md`, `docs/dashboard.md`, `docs/channel-workspace-migration.md` |
+| Build watch paths | `site/**`, `docs/release-notes/**`, `ONBOARDING.md`, `docs/oauth-setup.md`, `docs/features.md`, `docs/workflow-cheatsheet.md`, `docs/chrome-extension-install-guide.md`, `docs/dashboard.md`, `docs/migration/workspace-to-single-repo.md` |
 
 Cloudflare Pages の GitHub integration が commit を取得し、production branch では
 `https://youtube-automation-release-notes.pages.dev/`、それ以外では commit 固有 URL と
@@ -56,7 +56,7 @@ docs/features.md
 docs/workflow-cheatsheet.md
 docs/chrome-extension-install-guide.md
 docs/dashboard.md
-docs/channel-workspace-migration.md
+docs/migration/workspace-to-single-repo.md
 ```
 
 Cloudflare Dashboard で既存の `youtube-automation-release-notes` project を開き、Git integration の
@@ -69,7 +69,7 @@ site を変更した pull request では、Cloudflare Pages の commit 固有 pr
 fork からの pull request には preview URL が作られないため、同一 repository の branch で確認する。
 
 - トップページと sidebar / tabs に「はじめる」「使う」「リリースノート」の3区分が表示される。
-- 公開 navigation とトップページには次の6ページだけが表示される: `/oauth-setup/`、`/chrome-extension-install-guide/`、`/features/`、`/workflow-cheatsheet/`、`/dashboard/`、`/channel-workspace-migration/`。
+- 公開 navigation とトップページの主要導線には次の5ページが表示される: `/oauth-setup/`、`/chrome-extension-install-guide/`、`/features/`、`/workflow-cheatsheet/`、`/dashboard/`。逆移行ガイドはアップデート tab の `/releases/workspace-to-single-repo/` から到達できる。
 - `/onboarding/` は直接 URL で表示でき、robots noindex を持つ一方、sidebar、トップページ、検索、AI 出力、sitemap には現れない。
 - Production / Preview の `/onboarding/` はクエリパラメータなしの直接 URL で表示できる。
 - `/features/` から `/workflow-cheatsheet/`、`/onboarding/` と `/oauth-setup/` の相互リンクは preview 内の route を指す。
