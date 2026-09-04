@@ -17,7 +17,7 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 **cutover**: 撤回済みの計画で、first-party 下流の日常運用が tayk のみで回るようになった時点で Python 版のメンテナンスを終了するとしていたイベント。実施しない。
 
-**dogfood**: 撤回済みの cutover 判断のために計画していた受け入れ検証。first-party 2 リポジトリで各コレクション 1 本のフルライフサイクルを実走させ、期間ではなく完走で判定するとしていた。
+**dogfood**: first-party チャンネルで新機能や移行手順のフルライフサイクル 1 周を実走し、期間ではなく完走で受け入れを判定すること。ADR-0022 の workspace 移行と ADR-0029 の逆移行は、いずれも 1 チャンネルで dogfood してから残りへ広げる。撤回済みの cutover 計画では、first-party 2 リポジトリで各コレクション 1 本を実走する cutover 判断の受け入れ検証を同じ語で指していた。
 
 **critical regression**: 撤回済みの計画で cutover をブロックする欠陥として定義していた区分。誤公開・誤メタデータ、analytics 履歴または collection 成果物のデータ破壊、auth 破壊の 3 種に限る。
 

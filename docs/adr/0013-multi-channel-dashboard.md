@@ -2,7 +2,7 @@
 
 ## Status
 
-accepted (2026-06-23)、amended (2026-07-21, #2386, #2397)。旧 2 フェーズ案を廃止し、本リポジトリ内で保守する単一構成へ置き換える。
+accepted (2026-06-23)、amended (2026-07-21, #2386, #2397)、amended (2026-09-03, #4879)。旧 2 フェーズ案を廃止し、本リポジトリ内で保守する単一構成へ置き換える。
 
 ## Context
 
@@ -71,3 +71,9 @@ accepted (2026-06-23)、amended (2026-07-21, #2386, #2397)。旧 2 フェーズ�
 
 - ADR-0021（tayk は別リポジトリ。dashboard 限定例外）
 - #2384 / #2385 / #2387 / #2397
+
+## Amendment: channel registry の台帳化（2026-09-03, #4879）
+
+ADR-0029 により、channel registry（`~/.config/tayk/channels.json`）は dashboard の表示対象を発見するための読み取り専用ファイルから、**dashboard の表示対象と fan-out（`yt-channels update`）の適格チャンネルの両方を列挙する台帳**へ役割が広がる。writer は `yt-channel-export`（戻し先の絶対パスを追加するだけで、既にあれば no-op）であり、dashboard は引き続き読むだけである。schema（絶対パス文字列の JSON 配列）、`list[Path]` を返す loader、チャンネル単位の部分エラー隔離は変えないため、dashboard 側の変更はない。
+
+registry へ属性を足す、dashboard から registry を書く、登録 UX を dashboard に持たせるといった提案は、本 ADR ではなく ADR-0029 側の論点として扱う。登録 UX の不在と `~/.config/tayk/` が tayk と共有される点は未解決のまま残る。
