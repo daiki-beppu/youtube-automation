@@ -127,11 +127,8 @@ import {
   transitionRunTiming,
 } from "../lib/run-timing";
 import { applyProgress, initSnapshot } from "../lib/snapshot";
-import {
-  downloadFormatItem,
-  readDownloadFormat,
-  serverUrlItem,
-} from "../lib/storage";
+import { serverUrlItem } from "../lib/storage";
+import { performStudioMultitrackExport } from "../lib/studio-export";
 import {
   assertUnattendedRunRequest,
   createUnattendedManualState,
@@ -678,12 +675,9 @@ function appendDeferredIndices(
   };
 }
 
-async function resolveDownloadContext(
-  formatOverride?: DownloadContext["format"]
-): Promise<DownloadContext> {
+async function resolveDownloadContext(): Promise<DownloadContext> {
   return {
     baseUrl: (await serverUrlItem.getValue()).trim(),
-    format: formatOverride ?? (await readDownloadFormat()),
   };
 }
 
@@ -1073,6 +1067,17 @@ export default defineContentScript({
       },
     });
     downloadFlow.installMessageHandlers();
+    onMessage("performStudioExport", async ({ data }) => {
+      try {
+        await performStudioMultitrackExport(data);
+        return { ok: true } as const;
+      } catch (error) {
+        return {
+          ok: false,
+          message: error instanceof Error ? error.message : String(error),
+        } as const;
+      }
+    });
 
     async function guardCreateAgainstCaptcha(
       index: number,
@@ -1480,7 +1485,7 @@ export default defineContentScript({
           body: {
             file_count: 0,
             expected_file_count: expectedClipCount,
-            format: activeUnattended.request.downloadFormat,
+            format: "wav",
             suno_playlist_url: playlistUrl,
           },
         });
@@ -2515,6 +2520,7 @@ export default defineContentScript({
           return;
         }
       }
+      let studioClipIds: string[] | null = null;
       try {
         verifiedPlaylistClipCount = await addClipsToPlaylist(
           total,
@@ -2528,6 +2534,7 @@ export default defineContentScript({
           options.durationOutlierPolicy,
           async (info) => {
             playlistPersistInfo = info;
+            studioClipIds = info.submittedClipIds;
             if (unattended) {
               // playlist create は不可逆。定期実行では clip IDs と作成前 URL baseline の
               // durable checkpoint が成功した場合だけ先へ進む。
@@ -2559,15 +2566,19 @@ export default defineContentScript({
       if (shouldRunDownloadAfterPlaylist) {
         persistInterruptState(total);
         try {
-          const downloadContext = await resolveDownloadContext(
-            unattended?.request.downloadFormat
-          );
+          const downloadContext = await resolveDownloadContext();
           assertUnattendedUiIsSafe();
+          if (!studioClipIds) {
+            throw new Error(
+              "Studio export 対象の clip ID が解決されていません"
+            );
+          }
           const downloadResult = await downloadFlow.downloadBestEffortResult(
             downloadContext,
             collectionId,
             total,
-            verifiedPlaylistClipCount
+            verifiedPlaylistClipCount,
+            studioClipIds
           );
           downloadSummary = downloadResult.summary;
           keepResumeStateForDownloadRetry = downloadResult.error !== null;
@@ -2864,6 +2875,7 @@ export default defineContentScript({
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;
           }
+          let studioClipIds: string[] | null = null;
           const verifiedClipCount = await addClipsToPlaylist(
             0,
             playlistName,
@@ -2873,22 +2885,29 @@ export default defineContentScript({
             [],
             durationFilter,
             submittedClipIdsAreDurationFiltered === true,
-            durationOutlierPolicy
+            durationOutlierPolicy,
+            (info) => {
+              studioClipIds = info.submittedClipIds;
+            }
           );
           if (aborted) {
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;
           }
           if (shouldDownload) {
-            const downloadContext = await resolveDownloadContext(
-              unattended?.request.downloadFormat
-            );
+            const downloadContext = await resolveDownloadContext();
             assertUnattendedUiIsSafe();
+            if (studioClipIds === null) {
+              throw new Error(
+                "Studio export 対象の clip ID が解決されていません"
+              );
+            }
             await downloadFlow.performDownload(
               downloadContext,
               collectionId,
               verifiedClipCount,
-              verifiedClipCount
+              verifiedClipCount,
+              studioClipIds
             );
           }
           if (aborted) {
@@ -2968,26 +2987,17 @@ export default defineContentScript({
       aborted = false;
       void (async () => {
         try {
-          const downloadContext = await resolveDownloadContext(
-            unattended?.request.downloadFormat
-          );
+          const downloadContext = await resolveDownloadContext();
           assertUnattendedUiIsSafe();
           const result = await downloadFlow.retryDownload({
             context: downloadContext,
             collectionId,
             submittedClipIds,
             expectedClipCount,
-            selectClipIds: async (clipIds) => {
-              await scrollAndMultiSelectByIds(clipIds, {
-                isAborted: () => aborted,
-              });
-            },
             clearResumeState: clearResumeStateForCollection,
           });
-          // retryDownload も selectClipIds で multi-select 状態を作るため、完了時に
-          // ページごと破棄する (#1411)。この経路だけリロードが無いと、次 run が
-          // 確実に Cmd+P 前ガードで止まり手動リロードを強いられる。
-          // リロード前に FINISHED snapshot を退避する（runAll の完了経路と同じ）。
+          // 完了時の状態復元契約を通常 run と揃えるため、FINISHED snapshot を
+          // 退避してからページを再読み込みする (#1411)。
           if (result.completedAndCleared) {
             await verifyUnattendedCompletion(unattended);
             if (await persistFinishedSnapshotForReload()) {
@@ -3148,7 +3158,6 @@ export default defineContentScript({
         }
 
         await serverUrlItem.setValue(request.baseUrl);
-        await downloadFormatItem.setValue(request.downloadFormat);
         const collections = await sendMessage("fetchCollections", {
           baseUrl: request.baseUrl,
         });
@@ -3276,7 +3285,7 @@ export default defineContentScript({
               body: {
                 file_count: plan.expectedClipCount,
                 expected_file_count: plan.expectedClipCount,
-                format: request.downloadFormat,
+                format: "wav",
                 download_path: resumeState.downloadCompletedFilename,
                 ...(collection.suno_playlist_url
                   ? { suno_playlist_url: collection.suno_playlist_url }

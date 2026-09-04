@@ -219,12 +219,12 @@ async function loadContentScriptWithStalledCompletion(options: {
     serverUrlItem: {
       getValue: vi.fn(() => Promise.resolve("http://localhost:8787")),
     },
-    downloadFormatItem: { getValue: vi.fn(() => Promise.resolve("mp3")) },
-    readDownloadFormat: vi.fn(() => Promise.resolve("mp3")),
   }));
 
-  vi.doMock("../lib/download", () => ({
-    triggerDownloadAll: vi.fn(() => Promise.resolve()),
+  vi.doMock("../lib/studio-export", () => ({
+    requestStudioMultitrackExport: vi.fn(() => Promise.resolve(73)),
+    performStudioMultitrackExport: vi.fn(() => Promise.resolve()),
+    closeStudioExportTab: vi.fn(() => Promise.resolve()),
   }));
 
   vi.doMock("../../shared/api", async () => ({

@@ -1537,7 +1537,7 @@ export function useSunoRunner(): RunnerState {
     durationOutlierWarningsForResume,
   ]);
 
-  // ダウンロードのみ再実行 (#1251)。clip を再選択 → Download all を実行する。
+  // ダウンロードのみ再実行 (#1251)。保存済み clip を Studio export へ渡す。
   const retryDownload = useCallback(async () => {
     if (isRunning) {
       return;

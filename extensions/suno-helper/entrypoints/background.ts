@@ -19,7 +19,7 @@ import { onMessage, sendMessage } from "../lib/messaging";
 import { showSunoNotification } from "../lib/notification";
 import { relayTabId, requireRelayTab } from "../lib/overlay-relay";
 import { migrateServerSourcesStorage } from "../lib/storage";
-import { sendTrustedCmdP } from "../lib/trusted-shortcut";
+import { sendTrustedClick, sendTrustedCmdP } from "../lib/trusted-shortcut";
 import {
   acquireUnattendedLease,
   releaseUnattendedLease,
@@ -46,6 +46,14 @@ export default defineBackground(() => {
     return next;
   };
   const downloadWatcher = installDownloadWatcher({ sendMessage });
+
+  // Studio export 用に開いた tab は成否いずれの経路でも必ず閉じる。閉じ忘れると
+  // 複数 collection の直列実行や retryDownload の再試行ごとに Studio tab が積み上がる。
+  const closeStudioExportTab = async (studioTabId: number): Promise<void> => {
+    await browser.tabs.remove(studioTabId).catch((error: unknown) => {
+      console.warn("[suno-helper] Studio tab を閉じられませんでした:", error);
+    });
+  };
 
   installSunoContentScriptRecovery({
     addTabUpdatedListener: (listener) =>
@@ -149,7 +157,7 @@ export default defineBackground(() => {
       requireRelayTab(sender, "queryUnattendedState")
     )
   );
-  onMessage("startDownload", async ({ data, sender }) => {
+  onMessage("startDownload", async ({ sender }) => {
     const tabId = relayTabId(sender);
     if (tabId === null) {
       console.warn("[suno-helper] startDownload: 送信元タブが特定できません");
@@ -158,7 +166,52 @@ export default defineBackground(() => {
         message: "startDownload: 送信元タブが特定できません",
       } as const;
     }
-    return downloadWatcher.start(tabId, data.format);
+    return downloadWatcher.start(tabId);
+  });
+
+  onMessage("startStudioExport", async ({ data, sender }) => {
+    requireRelayTab(sender, "startStudioExport");
+    const tab = await browser.tabs.create({ url: "https://suno.com/studio" });
+    if (typeof tab.id !== "number") {
+      return {
+        ok: false,
+        message: "Studio tab を開けませんでした",
+      } as const;
+    }
+    const studioTabId = tab.id;
+    const deadline = Date.now() + 30_000;
+    let lastError: unknown;
+    while (Date.now() < deadline) {
+      try {
+        const result = await sendMessage(
+          "performStudioExport",
+          data,
+          studioTabId
+        );
+        if (!result.ok) {
+          // export を開始できなかった Studio tab は残しても再利用できないため即座に閉じる。
+          await closeStudioExportTab(studioTabId);
+          return result;
+        }
+        // 成功時の tab は blob ZIP の生成元なので閉じない。ZIP 完了後に runner が
+        // closeStudioExport を送るまで責務を渡す。
+        return { ok: true, studioTabId } as const;
+      } catch (error) {
+        lastError = error;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
+    await closeStudioExportTab(studioTabId);
+    const detail = lastError instanceof Error ? `: ${lastError.message}` : "";
+    return {
+      ok: false,
+      message: `Studio を開けませんでした${detail}`,
+    } as const;
+  });
+
+  onMessage("closeStudioExport", async ({ data, sender }) => {
+    requireRelayTab(sender, "closeStudioExport");
+    await closeStudioExportTab(data.studioTabId);
   });
 
   onMessage("cancelDownload", async ({ sender }) => {
@@ -176,6 +229,14 @@ export default defineBackground(() => {
       throw new Error("sendTrustedCmdP: 送信元タブが特定できません");
     }
     await sendTrustedCmdP(tabId, data.isMac);
+  });
+
+  onMessage("sendTrustedClick", async ({ data, sender }) => {
+    const tabId = relayTabId(sender);
+    if (tabId === null) {
+      throw new Error("sendTrustedClick: 送信元タブが特定できません");
+    }
+    await sendTrustedClick(tabId, data.x, data.y);
   });
 
   onMessage("fetchCompatibilityWarning", ({ data, sender }) => {

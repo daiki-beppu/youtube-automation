@@ -172,18 +172,19 @@ async function loadContentScript(
     serverUrlItem: {
       getValue: vi.fn(() => Promise.resolve("http://localhost:8787")),
     },
-    downloadFormatItem: { getValue: vi.fn(() => Promise.resolve("mp3")) },
-    readDownloadFormat: vi.fn(() => Promise.resolve("mp3")),
   }));
 
-  vi.doMock("../lib/download", () => ({
-    triggerDownloadAll: vi.fn(async () => {
+  vi.doMock("../lib/studio-export", () => ({
+    requestStudioMultitrackExport: vi.fn(async () => {
       if (overrides?.downloadFilename) {
         handlers.get("downloadComplete")?.({
           data: { filename: overrides.downloadFilename },
         });
       }
+      return 73;
     }),
+    performStudioMultitrackExport: vi.fn(() => Promise.resolve()),
+    closeStudioExportTab: vi.fn(() => Promise.resolve()),
   }));
 
   vi.doMock("../../shared/api", async () => ({

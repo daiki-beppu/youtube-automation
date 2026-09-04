@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { CollectionSummary } from "../../shared/api";
 import type { ResumeState } from "../lib/resume-state";
 import {
+  assertUnattendedRunRequest,
   classifyUnattendedStop,
   createUnattendedManualState,
   nextUnattendedRunState,
@@ -26,7 +27,6 @@ const REQUEST: UnattendedRunRequest = {
   baseUrl: "http://rjn.localhost:7873",
   collectionId: COLLECTION.id,
   entryIndices: [0, 1, 2, 3, 4],
-  downloadFormat: "wav",
   limits: {
     maxEntries: 2,
     maxConcurrentGenerations: 3,
@@ -66,6 +66,14 @@ describe("parseUnattendedLaunchHash", () => {
       return;
     }
     expect(() => parseUnattendedLaunchHash(hash)).toThrow();
+  });
+});
+
+describe("assertUnattendedRunRequest", () => {
+  it("accepts a request without downloadFormat and ignores a legacy value", () => {
+    expect(
+      assertUnattendedRunRequest({ ...REQUEST, downloadFormat: "mp3" })
+    ).toEqual(REQUEST);
   });
 });
 

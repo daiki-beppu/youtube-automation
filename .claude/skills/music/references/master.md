@@ -390,7 +390,7 @@ uv run yt-generate-master --pin-first 00-hook.mp3 --shuffle           # 指定 1
 uv run yt-generate-master --pin-first-count 1 --shuffle               # ソート済み先頭 1 件を固定 + 残りシャッフル
 ```
 
-`02-Individual-music/` のオーディオファイル（MP3 / M4A / WAV）を自動検出し、skill-config の `audio.crossfade_duration` / `audio.bitrate` でクロスフェード結合します。チャンネルごとに変更する場合は `config/skills/masterup.json`、または JSON が存在しない既存チャンネルでは `config/skills/masterup.yaml` の `audio` section を更新してから、フラグなしで本 CLI を実行します。`domains.metadata.service.BAHMetadataGenerator` のタイムスタンプ計算と同じ設定値を参照するため、実音声と description のタイムスタンプが常に一致します。suno-helper の DL フォーマット設定（`sunoDownloadFormat`）により入力形式が MP3 以外になる場合があるため、拡張子で判別する。
+`02-Individual-music/` のオーディオファイル（MP3 / M4A / WAV）を自動検出し、skill-config の `audio.crossfade_duration` / `audio.bitrate` でクロスフェード結合します。チャンネルごとに変更する場合は `config/skills/masterup.json`、または JSON が存在しない既存チャンネルでは `config/skills/masterup.yaml` の `audio` section を更新してから、フラグなしで本 CLI を実行します。`domains.metadata.service.BAHMetadataGenerator` のタイムスタンプ計算と同じ設定値を参照するため、実音声と description のタイムスタンプが常に一致します。入力拡張子は各ファイルから判別する。suno-helper の Studio Multitrack export は WAV を配置する。
 **この処理は常にダウンロード後（または suno-helper DL 済み確認後）に自動実行する。**
 
 生成成功後、メインは次のコマンドで receipt と現在の入力・閾値を再検証し、PASS の場合だけ `assets.raw_master` / `updated_at` を原子的に更新する。receipt 検証は SHA-256 と保存済み測定値の再計算だけを行い、FFmpeg の全曲走査を繰り返さない。

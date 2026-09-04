@@ -15,8 +15,6 @@ from urllib.request import Request, urlopen
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError
 
-_DOWNLOAD_FORMATS = ("mp3", "m4a", "wav")
-
 
 def _bounded_integer(value: object, field: str, minimum: int, maximum: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
@@ -46,7 +44,6 @@ def build_unattended_request(
     base_url: str,
     collection_id: str,
     entry_indices: list[int] | None,
-    download_format: str,
     max_entries: int,
     max_concurrent_generations: int,
     max_retries: int,
@@ -55,8 +52,6 @@ def build_unattended_request(
     collection_id = collection_id.strip()
     if not collection_id:
         raise ConfigError("--collection-id は空にできません")
-    if download_format not in _DOWNLOAD_FORMATS:
-        raise ConfigError(f"--download-format は {' / '.join(_DOWNLOAD_FORMATS)} から選んでください")
     normalized_indices: list[int] | None = None
     if entry_indices is not None:
         if not entry_indices:
@@ -77,7 +72,6 @@ def build_unattended_request(
         "requestId": resolved_request_id,
         "baseUrl": _loopback_base_url(base_url),
         "collectionId": collection_id,
-        "downloadFormat": download_format,
         "limits": {
             "maxEntries": _bounded_integer(max_entries, "--max-entries", 1, 100),
             "maxConcurrentGenerations": _bounded_integer(
@@ -123,7 +117,7 @@ def register_unattended_request(base_url: str, request: dict[str, object]) -> st
     return nonce
 
 
-_DEFAULTED_OPTIONS = ("download_format", "max_entries", "max_concurrent_generations", "max_retries")
+_DEFAULTED_OPTIONS = ("max_entries", "max_concurrent_generations", "max_retries")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -137,7 +131,6 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--base-url", required=True, help="起動中の yt-collection-serve URL")
     parser.add_argument("--collection-id", required=True)
     parser.add_argument("--entry-index", type=int, action="append", dest="entry_indices")
-    parser.add_argument("--download-format", choices=_DOWNLOAD_FORMATS, help=fallback.format(key="download_format"))
     parser.add_argument("--max-entries", type=int, help=fallback.format(key="max_entries"))
     parser.add_argument(
         "--max-concurrent-generations",
@@ -153,7 +146,7 @@ def _config_defaults() -> dict[str, object]:
     config = load_skill_config("suno-helper").get("unattended")
     if not isinstance(config, dict):
         raise ConfigError("suno-helper skill-config の unattended は object で指定してください")
-    required = ("download_format", "max_entries", "max_concurrent_generations", "max_retries")
+    required = ("max_entries", "max_concurrent_generations", "max_retries")
     missing = [key for key in required if key not in config]
     if missing:
         raise ConfigError(f"suno-helper skill-config に必須キーがありません: {', '.join(missing)}")
@@ -170,7 +163,6 @@ def main(argv: list[str] | None = None) -> int:
         base_url=args.base_url,
         collection_id=args.collection_id,
         entry_indices=args.entry_indices,
-        download_format=args.download_format,
         max_entries=args.max_entries,
         max_concurrent_generations=args.max_concurrent_generations,
         max_retries=args.max_retries,

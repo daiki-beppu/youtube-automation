@@ -75,6 +75,9 @@ async function loadBackground(opts?: {
   useRealPostDownloaded?: boolean;
   fetchImpl?: ReturnType<typeof vi.fn>;
   migrationError?: Error;
+  studioExportResult?: { ok: boolean; message?: string };
+  studioTabId?: number;
+  tabsRemoveError?: Error;
 }) {
   vi.resetModules();
 
@@ -104,6 +107,12 @@ async function loadBackground(opts?: {
     return fn;
   });
 
+  const tabsCreate = vi.fn(() =>
+    Promise.resolve({ id: opts?.studioTabId ?? 73 })
+  );
+  const tabsRemove = opts?.tabsRemoveError
+    ? vi.fn(() => Promise.reject(opts.tabsRemoveError))
+    : vi.fn(() => Promise.resolve());
   vi.stubGlobal("browser", {
     runtime: {
       onInstalled: {
@@ -116,7 +125,11 @@ async function loadBackground(opts?: {
     },
     notifications: { create: notificationCreate },
     action: { onClicked: { addListener: vi.fn() } },
-    tabs: { onUpdated: { addListener: vi.fn() } },
+    tabs: {
+      create: tabsCreate,
+      remove: tabsRemove,
+      onUpdated: { addListener: vi.fn() },
+    },
     storage: {
       session: {
         get: browserSessionGet,
@@ -245,6 +258,9 @@ async function loadBackground(opts?: {
     }),
     sendMessage: vi.fn((type: string, data?: unknown, tabId?: number) => {
       sentMessages.push({ type, data, tabId });
+      if (type === "performStudioExport") {
+        return Promise.resolve(opts?.studioExportResult ?? { ok: true });
+      }
       return Promise.resolve();
     }),
   }));
@@ -320,6 +336,8 @@ async function loadBackground(opts?: {
     migrateServerSourcesStorageMock,
     installedListeners,
     notificationCreate,
+    tabsCreate,
+    tabsRemove,
     sessionStore,
     browserSessionGet,
     browserSessionSet,
@@ -535,6 +553,78 @@ async function flushPromises(): Promise<void> {
 }
 
 // startDownload ----------------------------------------------------------------
+
+describe('background onMessage("startStudioExport")', () => {
+  it("Studio tab を作成して content script に export を依頼し tab id を返す", async () => {
+    const { handlers, sentMessages, tabsCreate, tabsRemove } =
+      await loadBackground();
+    const request = { collectionId: "collection-a", clipIds: ["clip-a"] };
+
+    const result = await handlers.get("startStudioExport")!({
+      data: request,
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(result).toEqual({ ok: true, studioTabId: 73 });
+    expect(tabsCreate).toHaveBeenCalledWith({ url: "https://suno.com/studio" });
+    expect(sentMessages).toContainEqual({
+      type: "performStudioExport",
+      data: request,
+      tabId: 73,
+    });
+    // ZIP は Studio tab が生成するため、成功時はここで閉じない（runner が完了後に閉じる）。
+    expect(tabsRemove).not.toHaveBeenCalled();
+  });
+
+  it("Studio 側の Premier エラーをそのまま返し Studio tab を閉じる", async () => {
+    const failure = {
+      ok: false,
+      message:
+        "Studio の Multitrack export が利用できません。Premier プランを確認してください",
+    };
+    const { handlers, tabsRemove } = await loadBackground({
+      studioExportResult: failure,
+    });
+
+    await expect(
+      handlers.get("startStudioExport")!({
+        data: { collectionId: "collection-a", clipIds: ["clip-a"] },
+        sender: { tab: { id: 42 } },
+      })
+    ).resolves.toEqual(failure);
+    expect(tabsRemove).toHaveBeenCalledWith(73);
+  });
+});
+
+describe('background onMessage("closeStudioExport")', () => {
+  it("Given 成功した export When closeStudioExport Then Studio tab を閉じる", async () => {
+    const { handlers, tabsRemove } = await loadBackground();
+
+    await handlers.get("closeStudioExport")!({
+      data: { studioTabId: 73 },
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(tabsRemove).toHaveBeenCalledWith(73);
+  });
+
+  it("Given tab close が失敗する When closeStudioExport Then throw せず warn に留める", async () => {
+    const { handlers } = await loadBackground({
+      tabsRemoveError: new Error("No tab with id: 73"),
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await expect(
+      handlers.get("closeStudioExport")!({
+        data: { studioTabId: 73 },
+        sender: { tab: { id: 42 } },
+      })
+    ).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
 
 describe('background onMessage("startDownload"): .zip 完了で downloadComplete を中継する', () => {
   afterEach(() => {
@@ -1287,6 +1377,45 @@ describe('background onMessage("startDownload"): 監視開始前の .zip は無�
     ).toHaveLength(0);
   });
 
+  it("Given Suno Studio bounce の fresh ZIP When complete event が届く Then 完了通知する", async () => {
+    const freshStart = new Date().toISOString();
+    const studioBounceUrl =
+      "https://suno-ai--studio-bounce-prod-web.modal.run/render_streaming/v2/test";
+    const { handlers, sentMessages, createdListeners, downloadListeners } =
+      await loadBackground({
+        searchResultsById: {
+          101: [
+            {
+              filename: "collection.zip",
+              startTime: freshStart,
+              url: studioBounceUrl,
+            },
+          ],
+        },
+      });
+
+    await handlers.get("startDownload")!({
+      data: { format: "wav" },
+      sender: { tab: { id: 42 } },
+    });
+
+    createdListeners[0](
+      freshZip(101, {
+        filename: "collection.zip",
+        startTime: freshStart,
+        url: studioBounceUrl,
+      })
+    );
+    downloadListeners[0]({ id: 101, state: { current: "complete" } });
+    await flushPromises();
+
+    expect(sentMessages).toContainEqual({
+      type: "downloadComplete",
+      data: { filename: "collection.zip" },
+      tabId: 42,
+    });
+  });
+
   it("Given malformed URL の fresh ZIP When complete event が届く Then 完了扱いしない", async () => {
     const freshStart = new Date().toISOString();
     const { handlers, sentMessages, createdListeners, downloadListeners } =
@@ -1467,10 +1596,9 @@ describe('background onMessage("startDownload"): polling fallback で完了済�
     expect(removedDownloadListeners).not.toContain(downloadListeners[0]);
   });
 
-  it("Given Suno bulk ZIP の modal.run URL When poll interval 経過 Then downloadComplete を中継する", async () => {
+  it("Given Suno origin の blob ZIP When poll interval 経過 Then downloadComplete を中継する", async () => {
     const freshStart = new Date().toISOString();
-    const bulkZipUrl =
-      "https://suno-ai--bulk-download-prod-web.modal.run/bulk_zip/613c9f0a40e04529959559aa0d963dc7";
+    const bulkZipUrl = "blob:https://suno.com/613c9f0a40e04529959559aa0d963dc7";
     const { handlers, sentMessages, createdListeners } = await loadBackground({
       searchResultsById: {
         90: [
@@ -1505,6 +1633,41 @@ describe('background onMessage("startDownload"): polling fallback で完了済�
       data: { filename: "/Users/test/Downloads/test.zip" },
       tabId: 42,
     });
+  });
+
+  it("Given 他 origin の blob ZIP When poll interval 経過 Then downloadComplete を中継しない", async () => {
+    const freshStart = new Date().toISOString();
+    const { handlers, sentMessages, createdListeners } = await loadBackground({
+      searchResultsById: {
+        91: [
+          {
+            filename: "/Users/test/Downloads/untrusted.zip",
+            startTime: freshStart,
+            url: "blob:https://evil.example/613c9f0a40e04529959559aa0d963dc7",
+            state: "complete",
+          },
+        ],
+      },
+    });
+
+    await handlers.get("startDownload")!({
+      data: {},
+      sender: { tab: { id: 42 } },
+    });
+    createdListeners[0](
+      freshZip(91, {
+        filename: "/Users/test/Downloads/untrusted.zip",
+        startTime: freshStart,
+        url: "blob:https://evil.example/613c9f0a40e04529959559aa0d963dc7",
+      })
+    );
+    await flushPromises();
+    vi.advanceTimersByTime(3000);
+    await flushPromises();
+
+    expect(sentMessages).not.toContainEqual(
+      expect.objectContaining({ type: "downloadComplete" })
+    );
   });
 });
 
@@ -1612,7 +1775,7 @@ describe("background downloads listener: service worker restart 後も session w
     await expect(resultPromise).resolves.toEqual({
       ok: false,
       message:
-        "別の Download all 監視が進行中です。完了後に再実行してください。",
+        "別の Studio export 監視が進行中です。完了後に再実行してください。",
     });
 
     downloadListeners[0]({ id: 77, state: { current: "complete" } });
@@ -1744,7 +1907,7 @@ describe('background onMessage("cancelDownload"): active watcher を解除する
     expect(result).toEqual({
       ok: false,
       message:
-        "別の Download all 監視が進行中です。完了後に再実行してください。",
+        "別の Studio export 監視が進行中です。完了後に再実行してください。",
     });
   });
 
@@ -1770,7 +1933,7 @@ describe('background onMessage("cancelDownload"): active watcher を解除する
     expect(result).toEqual({
       ok: false,
       message:
-        "別の Download all 監視が進行中です。完了後に再実行してください。",
+        "別の Studio export 監視が進行中です。完了後に再実行してください。",
     });
   });
 });
@@ -1881,6 +2044,62 @@ describe('background onMessage("postDownloaded"): privileged POST boundary', () 
 });
 
 // sendTrustedCmdP --------------------------------------------------------------
+
+describe('background onMessage("sendTrustedClick"): 座標へ trusted click を送る', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("Given Studio content の座標 When sendTrustedClick Then mousePressed / mouseReleased を dispatch する", async () => {
+    const { handlers, chromeDebugger } = await loadBackground();
+
+    await handlers.get("sendTrustedClick")!({
+      data: { x: 123.5, y: 456.25 },
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(chromeDebugger.attach).toHaveBeenCalledWith({ tabId: 42 }, "1.3");
+    expect(chromeDebugger.sendCommand).toHaveBeenNthCalledWith(
+      1,
+      { tabId: 42 },
+      "Input.dispatchMouseEvent",
+      {
+        type: "mouseMoved",
+        x: 123.5,
+        y: 456.25,
+        button: "none",
+        buttons: 0,
+      }
+    );
+    expect(chromeDebugger.sendCommand).toHaveBeenNthCalledWith(
+      2,
+      { tabId: 42 },
+      "Input.dispatchMouseEvent",
+      {
+        type: "mousePressed",
+        x: 123.5,
+        y: 456.25,
+        button: "left",
+        buttons: 1,
+        clickCount: 1,
+      }
+    );
+    expect(chromeDebugger.sendCommand).toHaveBeenNthCalledWith(
+      3,
+      { tabId: 42 },
+      "Input.dispatchMouseEvent",
+      {
+        type: "mouseReleased",
+        x: 123.5,
+        y: 456.25,
+        button: "left",
+        buttons: 0,
+        clickCount: 1,
+      }
+    );
+    expect(chromeDebugger.detach).toHaveBeenCalledWith({ tabId: 42 });
+  });
+});
 
 describe('background onMessage("sendTrustedCmdP"): Mac は modifiers=4 (Meta) を使う', () => {
   afterEach(() => {

@@ -27,32 +27,16 @@ import {
   RadioGroupItem,
   ScrollArea,
   ServerSourceField,
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
 } from "@youtube-automation/ui";
 import { useEffect, useRef, useState } from "react";
 
-import {
-  DOWNLOAD_FORMAT_DEFAULT,
-  PHASE,
-  RUN_MODES,
-  type RunModeId,
-} from "../../shared/constants";
+import { PHASE, RUN_MODES, type RunModeId } from "../../shared/constants";
 import {
   buildInitialPatternSelection,
   reconcilePatternSelection,
   selectedEntryCount as countSelectedEntries,
 } from "../lib/pattern-selection";
 import { buildSelectedEntriesRunOverrides } from "../lib/run-overrides";
-import {
-  downloadFormatItem,
-  readDownloadFormat,
-  type DownloadFormat,
-} from "../lib/storage";
 import { CompletionSoundControls } from "./CompletionSoundControls";
 import { PatternList } from "./PatternList";
 import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
@@ -62,13 +46,7 @@ import { useSunoRunner } from "./useSunoRunner";
 // RUN_MODES のキー集合から導出する（手書き複製だと mode 追加時に UI へ出ないまま型チェックが通る）。
 // Record の string キーは挿入順で列挙されるため、表示順は RUN_MODES の定義順 = serial, queue。
 const RUN_MODE_ORDER = Object.keys(RUN_MODES) as RunModeId[];
-const DOWNLOAD_FORMAT_OPTIONS: DownloadFormat[] = ["mp3", "m4a", "wav"];
-
 export function App() {
-  const [downloadFormat, setDownloadFormat] = useState<DownloadFormat>(
-    DOWNLOAD_FORMAT_DEFAULT
-  );
-  const [reloadRequired, setReloadRequired] = useState(false);
   const [selectedEntries, setSelectedEntries] = useState<boolean[]>([]);
   const {
     reloadRequired: runnerReloadRequired,
@@ -127,43 +105,6 @@ export function App() {
     resumeBanner && resumeBanner.failedIndex < resumeBanner.total
       ? resumeBanner
       : null;
-
-  useEffect(() => {
-    let mounted = true;
-    void readDownloadFormat()
-      .then((value) => {
-        if (mounted) {
-          setDownloadFormat(
-            DOWNLOAD_FORMAT_OPTIONS.includes(value)
-              ? value
-              : DOWNLOAD_FORMAT_DEFAULT
-          );
-        }
-      })
-      .catch((error: unknown) => {
-        console.warn(
-          "[suno-helper] ダウンロード形式の読込に失敗しました（拡張更新後はタブを再読み込みしてください）:",
-          error
-        );
-        if (mounted) {
-          setReloadRequired(true);
-        }
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const updateDownloadFormat = (value: DownloadFormat): void => {
-    setDownloadFormat(value);
-    void downloadFormatItem.setValue(value).catch((error: unknown) => {
-      console.warn(
-        "[suno-helper] ダウンロード形式の保存に失敗しました（拡張更新後はタブを再読み込みしてください）:",
-        error
-      );
-      setReloadRequired(true);
-    });
-  };
 
   useEffect(() => {
     const previousEntries = previousEntriesRef.current;
@@ -269,7 +210,7 @@ export function App() {
       })
     );
   };
-  if (reloadRequired || runnerReloadRequired) {
+  if (runnerReloadRequired) {
     return <ReloadRequiredNotice />;
   }
 
@@ -661,38 +602,6 @@ export function App() {
         disabled={!completionSoundSettingsLoaded}
         onEnabledChange={setCompletionSoundEnabled}
       />
-
-      <div className="flex flex-col gap-1 text-sm">
-        <span id="download-format-label">DL 形式</span>
-        <Select
-          value={downloadFormat}
-          items={DOWNLOAD_FORMAT_OPTIONS.map((format) => ({
-            value: format,
-            label: format.toUpperCase(),
-          }))}
-          disabled={controlsLocked}
-          onValueChange={(value) =>
-            updateDownloadFormat(value as DownloadFormat)
-          }
-        >
-          <SelectTrigger
-            className="w-full"
-            aria-labelledby="download-format-label"
-            data-suno-control="download-format"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              {DOWNLOAD_FORMAT_OPTIONS.map((format) => (
-                <SelectItem key={format} value={format}>
-                  {format.toUpperCase()}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-      </div>
 
       <div className="flex gap-2">
         <Button

@@ -117,7 +117,7 @@ Chrome DevTools MCP は必須ではない。通常運用は browser use を prim
 6. `[data-suno-control="collection-select"]` で対象 collection を選ぶ。選択後、Playlist 名が表示されること、`data-suno-collection-id` が対象 id になることを確認する。
 7. 配信元または collection の選択後に自動取得が完了し、`role="status"` の live region が `N パターンを取得しました。` になること、`data-suno-entry-count` が 1 以上で `[data-suno-entry-list]` に entry 行が並ぶことを確認する。配信元候補は selector を開き、候補更新後に表示された対象を選択する。実行前に overlay 自体が更新されない場合だけページを再読み込みし、手順 3 からやり直す。
 8. 必要な entry だけを checkbox で残す。各行は `data-suno-entry-index` / `data-suno-entry-state` / `data-suno-entry-selected` を持つ。通常は全選択のままにする。
-9. preset と DL 形式を確認し、`[data-suno-control="run"]`（表示文言: 全パターンを連続実行 / 選択したN件を連続実行）を押す。
+9. preset を確認し、`[data-suno-control="run"]`（表示文言: 全パターンを連続実行 / 選択したN件を連続実行）を押す。
 10. 実行中は Suno タブを reload / close せず、overlay の `data-suno-phase` と `role="status"` を監視する。agent は `finished` / `stopped` / `error` の終端 phase まで待つ。非終端 phase が変化しない場合は下記「無限待機を避ける監視ルール」で判断する。
 
 Chrome 拡張 popup が別ウィンドウとして開く環境でも、操作対象と確認項目は同じ。Suno タブ上に overlay が出る場合は overlay を優先し、popup しか使えない場合だけ同じラベル・ボタン文言で操作する。
@@ -132,7 +132,7 @@ uv run yt-suno-unattended-request \
   --collection-id <collection-id>
 ```
 
-必要な場合だけ `--entry-index`（0-based、複数可）、`--download-format mp3|m4a|wav`、`--max-entries`、`--max-concurrent-generations`、`--max-retries` を上書きする。同じ collection の resume state があれば未完了 entry / playlist / download から再開し、1 run の上限を超えた entry は次回へ繰り越す。既存 playlist の clip ID が失われている場合は新規生成しない。
+必要な場合だけ `--entry-index`（0-based、複数可）、`--max-entries`、`--max-concurrent-generations`、`--max-retries` を上書きする。同じ collection の resume state があれば未完了 entry / playlist / download から再開し、1 run の上限を超えた entry は次回へ繰り越す。既存 playlist の clip ID が失われている場合は新規生成しない。
 
 ログイン、CAPTCHA、料金・credit 確認、Suno UI 非互換では `manual-intervention` を保存して停止する。Suno ページ root の `data-suno-unattended-collection-id` が対象と一致することを確認し、`data-suno-unattended-status` / `data-suno-unattended-checkpoint` / `data-suno-unattended-stop-reason` / `data-suno-unattended-required-action` を監視する。`manual-intervention` を検知した agent は自動クリックや追加購入で突破せず、人へ handoff する。完了判定は手動 flow と同じ Step 6 の 6 点であり、extension storage の `completed` だけでは `/music --master` へ進めない。
 
@@ -146,7 +146,6 @@ browser use で Suno タブを前面にし、拡張アイコンをクリック�
 | Collection 選択 | 必須 | ドロップダウンから対象 collection を選ぶ。選択した瞬間に下に "Playlist 名" が auto derive される |
 | 前回中断の resume バナー | entry phase の ERROR / STOPPED 後 24h 以内 | "再開" を押すと保存済み entry から直接再開する。不要なら "閉じる" |
 | Entry 選択 | 任意 | prompts 自動取得後の checkbox で実行対象を選ぶ。全選択なら全実行、不要 entry はチェック OFF |
-| DL 形式 | 任意 | ZIP 内の音声形式。デフォルト MP3。MP3 / M4A / WAV から選択 |
 | 自動取得 | 初回表示・配信元選択・collection 選択 | サーバーから prompts JSON を fetch。配信元候補は selector を開く操作で再検出し、更新完了後に選択肢を表示 |
 | 連続実行 | 実行時 | 開始 |
 | 停止 | 実行中のみ有効 | 任意中断 |
@@ -265,11 +264,12 @@ handoff 条件（agent は自動突破しない）:
   - `Clip multi-select verification failed: expected N selected, got M`
   - `中断: Add to Playlist dialog を検出できませんでした。clip が selected 状態であることを確認してください。Suno の UI 変更の可能性があります。`
 
-## 一括ダウンロード
+## Studio Multitrack export
 
-playlist 追加が完了すると、拡張が全 clip を multi-select して "Download all" から ZIP を取得し、
-`POST /collections/<id>/downloaded` でサーバーへ報告する。DL 形式は popup の "DL 形式"
-（`chrome.storage` の `sunoDownloadFormat`、既定 `mp3`）。
+playlist 追加が完了すると、拡張は Suno Studio に collection id 名の project を作成する。
+対象 clip をそれぞれ別 track の位置 0 に配置し、配置数が一致することを確認してから
+Export → Multitrack の WAV ZIP を取得し、`POST /collections/<id>/downloaded` で報告する。
+Studio は Premier プランが必要で、利用不可・配置数不一致・Export 無効時は理由を表示して停止する。
 
 DL が止まる・形式が違う・`workflow-state.json` へ反映されない場合は
 [references/download-flow.md](download-flow.md) を読む。POST は冪等なので再開時の再送は安全。
@@ -285,7 +285,7 @@ DL が止まる・形式が違う・`workflow-state.json` へ反映されない�
 - `yt-collection-serve collections/planning --port 49152` の稼働情報は `http://localhost:7872/.well-known/yt-collection-serve` から動的検出する。selector を開く操作で更新し、更新完了後に選択肢を表示する。`http://youtube-automation.localhost:7873` は常に表示される。
 - **下流チャンネルの venv が古いと `/collections` の status / count 契約が古い場合がある**。automation リポに機能追加した後は下流で `uv lock --upgrade-package youtube-channels-automation && uv sync` を実行し、サーバーを再起動する。Step 1 の確認で検出できる。
 - **playlist URL が記録されない場合**: (1) `/auth/token` が 200 を返すか、(2) popup の対象 collection が正しいか、(3) `POST /collections/<id>/downloaded` の 1 回目（`file_count: 0`）が 2xx で返っているかを確認する。
-- **ZIP 展開後も downloaded にならない場合**: (1) Download all ZIP が完了しているか、(2) `download_path` が絶対パスで POST されているか、(3) ZIP 内音声数が `expected_file_count` 以上か、(4) `02-Individual-music/` に mp3/m4a/wav が配置されたかを確認する。
+- **ZIP 展開後も downloaded にならない場合**: (1) Studio Multitrack ZIP が完了しているか、(2) `download_path` が絶対パスで POST されているか、(3) ZIP 内音声数が `expected_file_count` 以上か、(4) `02-Individual-music/` に WAV が配置されたかを確認する。
 
 ## Rules
 
@@ -302,7 +302,6 @@ DL が止まる・形式が違う・`workflow-state.json` へ反映されない�
 - サーバー CLI: `src/youtube_automation/commands/collections/collection_serve.py`
 - POST downloaded エンドポイント: `src/youtube_automation/commands/collections/collection_serve.py`
 - 連続実行ペーシング定義: `extensions/shared/constants.ts::BALANCED_RUN_PACING`
-- DL フォーマット storage key: `extensions/shared/constants.ts::sunoDownloadFormat`
 
 
 ## Lyria 経路

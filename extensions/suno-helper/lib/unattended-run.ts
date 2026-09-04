@@ -5,10 +5,8 @@ import {
   type ProgressPayload,
 } from "../../shared/constants";
 import type { ResumeState } from "./resume-state";
-import type { DownloadFormat } from "./storage";
 
 const LAUNCH_PREFIX = "#suno-helper-unattended=";
-const DOWNLOAD_FORMATS = new Set<DownloadFormat>(["mp3", "m4a", "wav"]);
 
 export interface UnattendedRunLimits {
   /** 1回の定期実行で新たに処理する entry 数。残りは checkpoint へ繰り越す。 */
@@ -25,7 +23,6 @@ export interface UnattendedRunRequest {
   baseUrl: string;
   collectionId: string;
   entryIndices?: number[];
-  downloadFormat: DownloadFormat;
   limits: UnattendedRunLimits;
 }
 
@@ -215,13 +212,6 @@ export function assertUnattendedRunRequest(
   if (record.version !== 1) {
     throw new Error("unattended request.version must be 1");
   }
-  const downloadFormat = nonEmptyString(
-    record.downloadFormat,
-    "downloadFormat"
-  ) as DownloadFormat;
-  if (!DOWNLOAD_FORMATS.has(downloadFormat)) {
-    throw new Error("downloadFormat must be mp3, m4a, or wav");
-  }
   const limits = assertRecord(record.limits, "limits");
   return {
     version: 1,
@@ -229,7 +219,6 @@ export function assertUnattendedRunRequest(
     baseUrl: assertLoopbackBaseUrl(record.baseUrl),
     collectionId: nonEmptyString(record.collectionId, "collectionId"),
     entryIndices: normalizeIndices(record.entryIndices),
-    downloadFormat,
     limits: {
       maxEntries: boundedInteger(
         limits.maxEntries,

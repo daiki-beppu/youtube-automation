@@ -51,12 +51,11 @@ async function loadContentScript(overrides?: {
   durationsById?: Record<string, number | undefined>;
   guardSelectedClipIds?: string[];
   readSelectedClipIdsError?: Error;
-  triggerDownloadAllError?: Error;
+  studioExportError?: Error;
   startDownloadResult?: { ok: true } | { ok: false; message: string };
   postDownloadedError?: Error;
   postDownloadedRejectOnCall?: number;
   postDownloadedResult?: PostDownloadedResult;
-  downloadFormatValue?: unknown;
 }) {
   vi.resetModules();
   vi.stubGlobal(
@@ -238,29 +237,19 @@ async function loadContentScript(overrides?: {
     injectWithVerification: vi.fn(() => Promise.resolve()),
   }));
 
-  const normalizeDownloadFormat = (value: unknown): "mp3" | "m4a" | "wav" =>
-    value === "mp3" || value === "m4a" || value === "wav" ? value : "mp3";
   vi.doMock("../lib/storage", () => ({
     serverUrlItem: {
       getValue: vi.fn(() => Promise.resolve("http://localhost:8787")),
     },
-    downloadFormatItem: {
-      getValue: vi.fn(() =>
-        Promise.resolve(overrides?.downloadFormatValue ?? "mp3")
-      ),
-    },
-    readDownloadFormat: vi.fn(() =>
-      Promise.resolve(
-        normalizeDownloadFormat(overrides?.downloadFormatValue ?? "mp3")
-      )
-    ),
   }));
 
-  const triggerDownloadAllMock = overrides?.triggerDownloadAllError
-    ? vi.fn(() => Promise.reject(overrides.triggerDownloadAllError))
+  const studioExportMock = overrides?.studioExportError
+    ? vi.fn(() => Promise.reject(overrides.studioExportError))
     : vi.fn(() => Promise.resolve());
-  vi.doMock("../lib/download", () => ({
-    triggerDownloadAll: triggerDownloadAllMock,
+  vi.doMock("../lib/studio-export", () => ({
+    requestStudioMultitrackExport: studioExportMock,
+    performStudioMultitrackExport: vi.fn(() => Promise.resolve()),
+    closeStudioExportTab: vi.fn(() => Promise.resolve()),
   }));
 
   vi.doMock("../../shared/api", async () => ({
@@ -279,7 +268,7 @@ async function loadContentScript(overrides?: {
     progressMessages,
     progressMock,
     sentMessages,
-    triggerDownloadAllMock,
+    studioExportMock,
     scrollAndMultiSelectByIdsMock,
     scheduleRunCompleteReloadMock,
     writeFinishedSnapshotMock,
@@ -765,43 +754,6 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
       scheduleRunCompleteReloadMock.mock.invocationCallOrder[0]
     );
   });
-
-  it("Given 不正な保存済み download format When retryDownload Then mp3 に正規化して実行する", async () => {
-    const { handlers, sentMessages, triggerDownloadAllMock } =
-      await loadContentScript({
-        downloadFormatValue: "flac",
-      });
-
-    const clipIds = ["clip-1", "clip-2"];
-    handlers.get("retryDownload")!({
-      data: {
-        collectionId: "coll-1",
-        submittedClipIds: clipIds,
-        expectedClipCount: 4,
-      },
-    });
-
-    await new Promise((r) => setTimeout(r, 0));
-    handlers.get("downloadComplete")!({
-      data: { filename: "/Users/test/Downloads/test-playlist.zip" },
-    });
-
-    await vi.waitFor(() =>
-      expect(triggerDownloadAllMock).toHaveBeenCalledWith("mp3")
-    );
-    expect(
-      sentMessages.find((m) => m.type === "startDownload")?.payload
-    ).toMatchObject({ format: "mp3" });
-    await vi.waitFor(() =>
-      expect(
-        sentMessages.filter((m) => m.type === "postDownloaded")
-      ).toHaveLength(1)
-    );
-    const downloadedPosts = sentMessages.filter(
-      (m) => m.type === "postDownloaded"
-    );
-    expectPostDownloadedBody(downloadedPosts[0].payload, { format: "mp3" });
-  });
 });
 
 describe('content onMessage("retryDownload"): payload contract', () => {
@@ -857,9 +809,9 @@ describe('content onMessage("retryDownload"): running ガード', () => {
   });
 
   it("Given retryDownload 実行中 When 再度 retryDownload Then busy を返す", async () => {
-    // triggerDownloadAll をエラーにしてすぐ終了させる（waitForDownloadComplete に入らないようにする）
+    // Studio export をエラーにしてすぐ終了させる（waitForDownloadComplete に入らないようにする）
     const { handlers } = await loadContentScript({
-      triggerDownloadAllError: new Error("immediate exit"),
+      studioExportError: new Error("immediate exit"),
     });
 
     // 最初の retryDownload を投入
@@ -885,10 +837,10 @@ describe('content onMessage("retryDownload"): throw→ERROR', () => {
     vi.unstubAllGlobals();
   });
 
-  it("Given triggerDownloadAll が throw When retryDownload Then ERROR phase を emit する", async () => {
+  it("Given Studio export が throw When retryDownload Then ERROR phase を emit する", async () => {
     const { handlers, progressMessages, sentMessages } =
       await loadContentScript({
-        triggerDownloadAllError: new Error("download trigger failed"),
+        studioExportError: new Error("download trigger failed"),
       });
 
     handlers.get("retryDownload")!({
@@ -906,12 +858,12 @@ describe('content onMessage("retryDownload"): throw→ERROR', () => {
     expect(sentMessages.some((m) => m.type === "cancelDownload")).toBe(true);
   });
 
-  it("Given startDownload が拒否された When retryDownload Then Download all を押さず ERROR phase を emit する", async () => {
-    const { handlers, progressMessages, sentMessages, triggerDownloadAllMock } =
+  it("Given startDownload が拒否された When retryDownload Then Studio export を開始せず ERROR phase を emit する", async () => {
+    const { handlers, progressMessages, sentMessages, studioExportMock } =
       await loadContentScript({
         startDownloadResult: {
           ok: false,
-          message: "別の Download all 監視が進行中です",
+          message: "別の Studio export 監視が進行中です",
         },
       });
 
@@ -924,16 +876,16 @@ describe('content onMessage("retryDownload"): throw→ERROR', () => {
         expect.objectContaining({
           phase: PHASE.ERROR,
           message: expect.stringContaining(
-            "別の Download all 監視が進行中です"
+            "別の Studio export 監視が進行中です"
           ),
         })
       )
     );
-    expect(triggerDownloadAllMock).not.toHaveBeenCalled();
+    expect(studioExportMock).not.toHaveBeenCalled();
     expect(sentMessages.some((m) => m.type === "cancelDownload")).toBe(false);
   });
 
-  it("Given Download all 待機中に stop When retryDownload Then watcher を cancel し downloaded POST しない", async () => {
+  it("Given Studio export 待機中に stop When retryDownload Then watcher を cancel し downloaded POST しない", async () => {
     const { handlers, sentMessages } = await loadContentScript();
 
     handlers.get("retryDownload")!({

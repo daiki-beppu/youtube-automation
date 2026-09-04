@@ -21,6 +21,7 @@ import type {
 import type { LocalServerSource } from "../../shared/constants";
 import type { SunoNotificationPayload } from "./notification";
 import type { RunRange } from "./resume-state";
+import type { StudioExportRequest } from "./studio-export";
 import type {
   UnattendedRunRequest,
   UnattendedRunState,
@@ -100,6 +101,11 @@ interface DownloadFailedPayload {
 
 type StartDownloadResult = { ok: true } | { ok: false; message: string };
 
+/** background → runner: 成功時は close 責務を渡すため Studio tab の id を返す。 */
+type StartStudioExportResult =
+  | { ok: true; studioTabId: number }
+  | { ok: false; message: string };
+
 /** overlay → runner: ダウンロードのみ再実行するペイロード (#1251)。 */
 export interface RetryDownloadPayload {
   collectionId: string;
@@ -145,10 +151,16 @@ interface ProtocolMap {
   queryUnattendedState(): UnattendedRunState | null;
   /** background → overlay content: action クリックで overlay 表示を toggle する (#892)。 */
   toggleOverlay(): void;
-  /** runner → background: Download all 開始を通知し、background の chrome.downloads 監視を起動する (#1146)。
+  /** runner → background: Studio export 開始前に chrome.downloads 監視を起動する (#1146)。
    *  content script は chrome.downloads API にアクセスできないため background に委譲する。 */
-  startDownload(payload: { format: string }): StartDownloadResult;
-  /** runner → background: Download all 起動前後の失敗時に chrome.downloads watcher を解除する (#1217)。 */
+  startDownload(): StartDownloadResult;
+  /** runner → background: Studio tab を開いて Multitrack export を開始する。 */
+  startStudioExport(payload: StudioExportRequest): StartStudioExportResult;
+  /** runner → background: ZIP 完了・失敗・中断のいずれでも Studio tab を閉じる。 */
+  closeStudioExport(payload: { studioTabId: number }): void;
+  /** background → Studio content: project 作成・clip 配置・Multitrack export を実行する。 */
+  performStudioExport(payload: StudioExportRequest): StartDownloadResult;
+  /** runner → background: Studio export 起動前後の失敗時に chrome.downloads watcher を解除する (#1217)。 */
   cancelDownload(): void;
   /** background → runner: chrome.downloads の完了通知を content へ中継する (#1146)。 */
   downloadComplete(payload: DownloadCompletePayload): void;
@@ -157,6 +169,8 @@ interface ProtocolMap {
   /** content → background: chrome.debugger で trusted Cmd+P を dispatch する (#1251)。
    *  content script は chrome.debugger API にアクセスできないため background に委譲する。 */
   sendTrustedCmdP(payload: { isMac: boolean }): void;
+  /** Studio content → background: React が trusted input を要求する control をクリックする。 */
+  sendTrustedClick(payload: { x: number; y: number }): void;
   /** overlay → background: localhost read API を extension origin から取得する。 */
   discoverServerSources(): LocalServerSource[];
   fetchCompatibilityWarning(payload: {
