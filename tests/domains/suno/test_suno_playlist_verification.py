@@ -729,6 +729,26 @@ def test_cli_renames_noncanonical_duplicate_basenames_before_verification(
     assert f"RENAMED: {duplicate_name} -> 01b-Dim the Lights.mp3" in err
 
 
+def test_cli_renames_studio_track_number_prefix_before_verification(tmp_path, monkeypatch, capsys):
+    """Given Studio 由来の数字 prefix 付きファイルが music directory にある
+    When --music-dir で CLI main を実行する
+    Then 数字 prefix を除いた曲名で照合し空いている正準 variant へリネームする。
+    """
+    entry = "灰色のまま五時"
+    _write_prompts_json(tmp_path, [entry])
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / f"01b-{entry}.wav").touch()
+    (music_dir / f"0 {entry}.wav").touch()
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path), "--music-dir", str(music_dir)])
+
+    assert code == 0
+    assert f"{entry}: 2 clip(s)" in out
+    assert (music_dir / f"01a-{entry}.wav").is_file()
+    assert f"RENAMED: 0 {entry}.wav -> 01a-{entry}.wav" in err
+
+
 def test_cli_renames_noncanonical_file_into_free_variant_next_to_canonical_clip(tmp_path, monkeypatch, capsys):
     """Given 正準形 a variant が既にあり、同一 entry の非正準形ファイルが 1 件ある
     When --music-dir で CLI main を実行する

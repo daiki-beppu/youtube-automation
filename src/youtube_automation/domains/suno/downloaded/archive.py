@@ -19,6 +19,7 @@ from youtube_automation.domains.suno.downloaded.models import (
 from youtube_automation.domains.suno.name_matching import (
     SunoNameIndex,
     split_suno_duplicate_stem,
+    split_suno_studio_track_prefix,
     suno_name_lookup_candidates,
 )
 
@@ -110,16 +111,17 @@ _OUTPUT_STEM_SEPARATOR_RE = re.compile(r"[\\/]+")
 _OUTPUT_STEM_SPACE_RE = re.compile(r"\s+")
 
 
-def _zip_member_lookup_candidates(filename: str) -> list[tuple[str, str]]:
+def _zip_member_lookup_candidates(filename: str) -> list[tuple[str, str, int | None]]:
     member_path = PurePosixPath(filename)
     relative_stem = member_path.with_suffix("").as_posix()
     raw_stems = [relative_stem, member_path.stem]
-    deduped: list[tuple[str, str]] = []
+    deduped: list[tuple[str, str, int | None]] = []
     for raw_stem in raw_stems:
         stem, duplicate_number = split_suno_duplicate_stem(raw_stem)
+        _, studio_track_number = split_suno_studio_track_prefix(stem)
         variant = "b" if duplicate_number == 1 else "a"
         for candidate in suno_name_lookup_candidates(stem):
-            item = (candidate, variant)
+            item = (candidate, variant, studio_track_number if duplicate_number == 0 else None)
             if item not in deduped:
                 deduped.append(item)
     return deduped
@@ -271,23 +273,54 @@ def _extract_and_rename_music_to_dir(
             audio_infos = [
                 info for info in infos if not info.is_dir() and Path(info.filename).suffix.lower() in _AUDIO_EXTENSIONS
             ]
-            extracted_audio: list[tuple[Path, str, int, str]] = []
-            for info in audio_infos:
+            extracted_audio: list[tuple[Path, str, int, str, int | None, int]] = []
+            for archive_order, info in enumerate(audio_infos):
                 if not _is_safe_zip_member(info.filename):
                     print(f"[yt-collection-serve] 危険な ZIP entry をスキップします: {info.filename}")
                     continue
                 extracted_path = Path(zf.extract(info, tmp_dir))
                 lookup_candidates = _zip_member_lookup_candidates(info.filename)
-                resolved = name_index.resolve_with_candidate(candidate for candidate, _ in lookup_candidates)
+                resolved = name_index.resolve_with_candidate(candidate for candidate, _, _ in lookup_candidates)
                 if resolved is None:
                     print(f"[yt-collection-serve] prompts に未対応の音声ファイルをスキップします: {info.filename}")
                     continue
                 track_num, lookup = resolved
-                variant = next(value for candidate, value in lookup_candidates if candidate == lookup)
-                extracted_audio.append((extracted_path, lookup, track_num, variant))
+                variant, studio_track_number = next(
+                    (variant, studio_track_number)
+                    for candidate, variant, studio_track_number in lookup_candidates
+                    if candidate == lookup
+                )
+                extracted_audio.append((extracted_path, lookup, track_num, variant, studio_track_number, archive_order))
+
+        studio_matches: dict[int, list[tuple[int, int, int]]] = {}
+        occupied_variants: dict[int, set[str]] = {}
+        for index, (_, _, track_num, variant, studio_track_number, archive_order) in enumerate(extracted_audio):
+            if studio_track_number is None:
+                occupied_variants.setdefault(track_num, set()).add(variant)
+            else:
+                studio_matches.setdefault(track_num, []).append((studio_track_number, archive_order, index))
+        for track_num, matches in studio_matches.items():
+            matches.sort()
+            free_variants = [
+                variant for variant in ("a", "b") if variant not in occupied_variants.get(track_num, set())
+            ]
+            if len(matches) > len(free_variants):
+                paths = [extracted_audio[index][0] for _, _, index in matches]
+                names = ", ".join(path.name for path in paths)
+                raise ValueError(f"entry {track_num:02d} matched more files than variants (a/b): {names}")
+            for (_, _, index), variant in zip(matches, free_variants, strict=False):
+                extracted_path, lookup, _, _, studio_track_number, archive_order = extracted_audio[index]
+                extracted_audio[index] = (
+                    extracted_path,
+                    lookup,
+                    track_num,
+                    variant,
+                    studio_track_number,
+                    archive_order,
+                )
 
         moved_count = 0
-        for extracted, lookup, track_num, variant in extracted_audio:
+        for extracted, lookup, track_num, variant, _, _ in extracted_audio:
             if not extracted.is_file():
                 print(f"[yt-collection-serve] ZIP entry の展開結果が見つかりません: {extracted}")
                 continue

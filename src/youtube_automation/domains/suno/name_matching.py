@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import TypeVar
 
 _SUNO_TRACK_PREFIX_RE = re.compile(r"^Track\s+\d+\s+(.+)$", re.IGNORECASE)
+_SUNO_STUDIO_TRACK_PREFIX_RE = re.compile(r"^(?P<track_number>\d+)\s+(?P<title>.+)$")
 _LATIN_TITLE_TAIL_RE = re.compile(r"([A-Za-z][A-Za-z0-9 &'(),.!?:/-]*)$")
 _DUP_SUFFIX_RE = re.compile(r"^(?P<base>.+?)(?:\s*\((?P<paren>\d+)\)|_(?P<underscore>\d+))$")
 
@@ -33,8 +34,12 @@ def normalize_suno_name_for_lookup(value: str) -> str:
 
 def suno_name_lookup_candidates(name: str) -> tuple[str, ...]:
     """Return full and derived aliases in most-specific-first order."""
-    prefix_match = _SUNO_TRACK_PREFIX_RE.match(name.strip())
-    base = prefix_match.group(1).strip() if prefix_match is not None else name.strip()
+    stripped_name = name.strip()
+    prefix_match = _SUNO_TRACK_PREFIX_RE.match(stripped_name)
+    if prefix_match is not None:
+        base = prefix_match.group(1).strip()
+    else:
+        base, _ = split_suno_studio_track_prefix(stripped_name)
     candidates = [base]
     dash_positions = [index for index, char in enumerate(base) if unicodedata.category(char) == "Pd"]
     candidates.extend(base[index + 1 :].strip() for index in dash_positions)
@@ -42,6 +47,15 @@ def suno_name_lookup_candidates(name: str) -> tuple[str, ...]:
     if tail_match is not None:
         candidates.append(tail_match.group(1).strip())
     return tuple(dict.fromkeys(candidate for candidate in candidates if candidate))
+
+
+def split_suno_studio_track_prefix(stem: str) -> tuple[str, int | None]:
+    """Split Studio Multitrack's ``<track number> <title>`` prefix."""
+    stripped_stem = stem.strip()
+    match = _SUNO_STUDIO_TRACK_PREFIX_RE.match(stripped_stem)
+    if match is None:
+        return stripped_stem, None
+    return match.group("title").strip(), int(match.group("track_number"))
 
 
 def split_suno_duplicate_stem(stem: str) -> tuple[str, int]:
