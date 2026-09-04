@@ -27,10 +27,29 @@ _GITIGNORE = """# yt-channel-export single-repository policy
 .env
 auth/client_secrets.json
 auth/token*.json
+auth/backups/
 collections/**/*.mp3
+collections/**/*.m4a
 collections/**/*.wav
+collections/**/*.flac
+collections/**/*.aac
+collections/**/*.ogg
 collections/**/*.mp4
+collections/**/*.mov
+collections/**/*.webm
+collections/**/*.mkv
+collections/**/*.png
+collections/**/*.jpg
+collections/**/*.jpeg
+collections/**/*.webp
+collections/**/*.gif
+collections/**/*.zip
 assets/stock/**/*.mp3
+assets/stock/**/*.m4a
+assets/stock/**/*.wav
+assets/stock/**/*.flac
+assets/stock/**/*.aac
+assets/stock/**/*.ogg
 """
 
 

@@ -1,1 +1,2 @@
 - workspace の channel を検証付きで独立リポジトリ用 directory へコピーする `yt-channel-export` を追加した（#4906）。
+- export 先の初回 commit から認証バックアップと workspace で除外する全メディア形式を除外する。

@@ -128,3 +128,29 @@ def test_export_validation_failure_rolls_back_without_touching_source(tmp_path: 
         == before
     )
     assert source.exists()
+
+
+def test_initial_commit_excludes_copied_secrets_and_media(tmp_path: Path) -> None:
+    workspace, source = _workspace(tmp_path)
+    ignored = ["auth/client_secrets.json", "auth/token.json", "auth/backups/old-token.json"]
+    audio = ("mp3", "m4a", "wav", "flac", "aac", "ogg")
+    media = (*audio, "mp4", "mov", "webm", "mkv", "png", "jpg", "jpeg", "webp", "gif", "zip")
+    ignored.extend(f"collections/live/demo/10-assets/file.{suffix}" for suffix in media)
+    ignored.extend(f"assets/stock/demo/file.{suffix}" for suffix in audio)
+    tracked = "collections/live/demo/workflow-state.json"
+    for relative in [*ignored, tracked]:
+        path = source / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}", encoding="utf-8")
+    destination = tmp_path / "exported"
+    assert channel_export.export_channel("demo", destination, workspace=workspace, allow_dirty=True) == 0
+    for relative in ignored:
+        assert (destination / relative).is_file()
+    subprocess.run(["git", "init", "-b", "main"], cwd=destination, check=True, capture_output=True)
+    subprocess.run(["git", "add", "-A"], cwd=destination, check=True)
+    staged = subprocess.run(
+        ["git", "ls-files", "-z"], cwd=destination, check=True, capture_output=True, text=True
+    ).stdout.split("\0")
+    assert not set(ignored).intersection(staged)
+    assert tracked in staged
+    assert "auth/client_secrets.template.json" in staged
