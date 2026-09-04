@@ -48,6 +48,7 @@ browser use から overlay を安定して観測できるよう、操作 panel �
 | `[data-suno-control="download-enabled"]`                                                           | Suno Studio からの download 実行を切り替える shadcn Switch（既定 ON）                                    |
 | `[data-suno-control="resume"]` / `[data-suno-control="dismiss-resume"]`                            | 前回中断 resume バナーの再開 / 閉じる                                                                     |
 | `[data-suno-control="adopt-selected-clips"]`                                                       | Suno 上の選択中 clip を採用                                                                               |
+| `[data-suno-control="download-only"]`                                                             | Suno 上の選択中 clip を採用し、生成・playlist 追加を行わず Studio download だけを実行                    |
 | `[data-suno-control="retry-playlist"]` / `[data-suno-control="retry-download"]`                    | playlist / download phase から再開                                                                        |
 | `role="status"` + `data-suno-status`                                                               | live status。`data-suno-status="error"` は handoff / retry 判断の入口                                     |
 | `[data-suno-entry-list]` / `[data-suno-entry-index]`                                               | entry 一覧。各行に `data-suno-entry-state` と `data-suno-entry-selected` が付く                           |
@@ -97,6 +98,8 @@ build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/suno-helpe
 5. 各パターンで Style/Lyrics を注入 → Generate 押下 → 生成完了検知 → 次へ、を自動で繰り返す。
 6. 全件完了後、対象 clip を playlist へ追加する。download Switch が ON なら Suno Studio に collection id 名の project を作り、各 clip を別 track の位置 0 に配置して件数を検証し、**Export → Multitrack** の WAV ZIP を監視して `POST /collections/<id>/downloaded` へ通知する。Studio 用に開いたタブは ZIP 完了・失敗・中断のいずれでも自動で閉じる（project 自体は Studio に残す）。Studio は Premier プランが必要で、利用できない場合は理由を表示して停止する。OFF なら Studio 操作と `/downloaded` 通知を行わず `FINISHED` になる。
 7. captcha challenge は waiting-captcha 表示で解消（多くは自動 verify）を待って続行する。entry 単位の一時的な失敗は Balanced 固定の上限で自動リトライし、上限超過分はスキップして完走する（#948）。スキップされた entry は一覧表示され、**失敗分のみ再実行** で再投入できる。
+
+生成と playlist 追加をやり直さず Studio export だけを試す場合は、Suno 上で対象 clip を選択して **ダウンロードのみ実行** を押す。この明示操作は「ダウンロードまで実行する」Switch が OFF でも利用でき、選択 clip を resume state に保存してから Studio Multitrack download へ進む。
 
 prompt entry に `duration_sec` がある場合は、各 Generate 前に Duration の **Custom** を選択し、Suno UI の slider が公開する最小値・最大値の範囲内で指定秒数を注入する。selector 不在、範囲外、操作不受理、読戻し不一致は entry をエラー停止し、overlay に原因を表示する。`duration_sec` がない entry では Auto / Custom と slider の現在状態を変更しない。
 

@@ -89,6 +89,7 @@ export function App() {
     retryPlaylist,
     retryDownload,
     adoptSelectedClips,
+    downloadOnly,
     run,
     stop,
     timingReceipt,
@@ -659,6 +660,15 @@ export function App() {
             size="sm"
           >
             選択中の曲を採用
+          </Button>
+          <Button
+            type="button"
+            onClick={() => void downloadOnly()}
+            data-suno-control="download-only"
+            variant="success"
+            size="sm"
+          >
+            ダウンロードのみ実行
           </Button>
           <div className="flex gap-2">
             {playlistName && (

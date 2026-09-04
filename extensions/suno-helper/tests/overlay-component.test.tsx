@@ -88,6 +88,7 @@ const runner = vi.hoisted(() => ({
   retryPlaylist: vi.fn(),
   retryDownload: vi.fn(),
   adoptSelectedClips: vi.fn(),
+  downloadOnly: vi.fn(),
   run: vi.fn(),
   stop: vi.fn(),
 }));
@@ -286,6 +287,9 @@ describe("Overlay shell", () => {
     expect(
       container.querySelector('[data-suno-control="retry-download"]')
     ).toBeNull();
+    expect(
+      container.querySelector('[data-suno-control="download-only"]')
+    ).not.toBeNull();
   });
 
   it("challenge履歴を総件数と直近5件で表示する", async () => {
