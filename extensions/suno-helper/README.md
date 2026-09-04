@@ -10,7 +10,7 @@
 | パス                                 | 役割                                                                                                        |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
 | `wxt.config.ts`                      | manifest を自動生成（権限 `storage` / `activeTab` / `downloads` / `debugger` は `lib/manifest.ts` が SSOT） |
-| `entrypoints/background.ts`          | service worker（Download all ZIP 監視、server token 取得、downloaded POST 中継）                            |
+| `entrypoints/background.ts`          | service worker（Studio Multitrack ZIP 監視、server token 取得、downloaded POST 中継）                      |
 | `entrypoints/content.ts`             | Suno UI への注入と Generate 連続実行のフロー制御                                                            |
 | `entrypoints/suno-bridge.content.ts` | MAIN world fetch bridge（#948）。Suno API の生成投入 / clip status を passive 観測                          |
 | `components/`                        | overlay UI（`App.tsx` / `PatternList.tsx` / `useSunoRunner.ts`）                                            |
@@ -94,7 +94,7 @@ build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/suno-helpe
 3. 拡張アイコンからポップアップを開き、**ローカル配信元** で動的検出されたチャンネル名つき候補を選ぶ。初回表示・配信元選択・collection 選択の各タイミングで一覧と prompts が自動取得される。
 4. `ready` な collection を checkbox で 1 件以上選び、prompts の自動取得後に **異常値の曲を再生成する** を選んでから実行する。1 件なら従来どおり現在の entry 選択を使い、2 件以上なら server 一覧順で各 collection の全 pattern を直列実行する。既定の ON は duration guard NG の entry を最大 2 回再生成する。OFF は追加生成せず、NG を警告表示したうえで生成済み全 clip を playlist / download 候補に残す。
 5. 各パターンで Style/Lyrics を注入 → Generate 押下 → 生成完了検知 → 次へ、を自動で繰り返す。
-6. 全件完了後、対象 clip を一括選択 → playlist 追加 → More menu の **Download all** → format 選択 → ZIP ダウンロード完了監視 → `POST /collections/<id>/downloaded` で ZIP パス通知、まで実行する。サーバーは ZIP を展開し、`02-Individual-music/` と `workflow-state.json` を更新する。
+6. 全件完了後、対象 clip を playlist へ追加し、Suno Studio に collection id 名の project を作る。各 clip を別 track の位置 0 に配置して件数を検証し、**Export → Multitrack** の WAV ZIP を監視して `POST /collections/<id>/downloaded` へ通知する。Studio は Premier プランが必要で、利用できない場合は理由を表示して停止する。
 7. captcha challenge は waiting-captcha 表示で解消（多くは自動 verify）を待って続行する。entry 単位の一時的な失敗は Balanced 固定の上限で自動リトライし、上限超過分はスキップして完走する（#948）。スキップされた entry は一覧表示され、**失敗分のみ再実行** で再投入できる。
 
 prompt entry に `duration_sec` がある場合は、各 Generate 前に Duration の **Custom** を選択し、Suno UI の slider が公開する最小値・最大値の範囲内で指定秒数を注入する。selector 不在、範囲外、操作不受理、読戻し不一致は entry をエラー停止し、overlay に原因を表示する。`duration_sec` がない entry では Auto / Custom と slider の現在状態を変更しない。
@@ -107,13 +107,13 @@ prompt entry に `duration_sec` がある場合は、各 Generate 前に Duratio
 
 ### 定期実行 launch 契約
 
-`yt-suno-unattended-request` は、対象 collection・任意の entry index・DL 形式・1 run の entry / concurrency / retry 上限を起動中の localhost server に短時間だけ登録し、`baseUrl` と一度だけ消費できる nonce だけを含む `https://suno.com/create#suno-helper-unattended=...` を出力する。課金操作の完全な要求は URL や Suno page に公開しない。拡張 background は extension lock と serve token を通して nonce を原子的に消費し、fragment を直ちに URL から除去する。`baseUrl` は認証情報なしの loopback HTTP（`localhost` / `127.0.0.1` / `*.localhost`）だけを受理する。
+`yt-suno-unattended-request` は、対象 collection・任意の entry index・1 run の entry / concurrency / retry 上限を起動中の localhost server に短時間だけ登録し、`baseUrl` と一度だけ消費できる nonce だけを含む `https://suno.com/create#suno-helper-unattended=...` を出力する。課金操作の完全な要求は URL や Suno page に公開しない。拡張 background は extension lock と serve token を通して nonce を原子的に消費し、fragment を直ちに URL から除去する。`baseUrl` は認証情報なしの loopback HTTP（`localhost` / `127.0.0.1` / `*.localhost`）だけを受理する。
 
 ```bash
 uv run yt-suno-unattended-request \
   --base-url http://rjn.localhost:7873 \
   --collection-id 20260718-rjn-night-drive-collection \
-  --download-format wav --max-entries 10 \
+  --max-entries 10 \
   --max-concurrent-generations 3 --max-retries 2
 ```
 
@@ -131,7 +131,7 @@ uv run yt-suno-unattended-request \
 
 検出 0 件、複数 ID、Preferences read failure、JSON parse failure の場合だけ、Chrome の `chrome://extensions` で suno-helper の拡張 ID を確認し、手動 fallback として `--allow-origin "chrome-extension://<EXTENSION_ID>"` を指定する。`.output/chrome-mv3/` を直接ロードすると basename is `chrome-mv3` になり `--allow-extension suno-helper` では検出できないため、通常は `$HOME/chrome-extensions/suno-helper` のような固定パスをロードする。
 
-`/auth/token` が返す token は Download all 完了通知時に `X-Serve-Token` として送るため、`--allow-extension` または fallback の `--allow-origin` なし起動では ZIP 展開・DL 完了記録は動かない。
+`/auth/token` が返す token は Studio Multitrack export 完了通知時に `X-Serve-Token` として送るため、`--allow-extension` または fallback の `--allow-origin` なし起動では ZIP 展開・DL 完了記録は動かない。
 
 `GET /collections` などの読み取り API と違い、downloaded POST は workflow-state と `02-Individual-music/` を更新する書き込み境界なので、origin と token の両方を必須にしている。
 

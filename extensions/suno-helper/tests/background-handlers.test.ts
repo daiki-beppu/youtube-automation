@@ -75,6 +75,8 @@ async function loadBackground(opts?: {
   useRealPostDownloaded?: boolean;
   fetchImpl?: ReturnType<typeof vi.fn>;
   migrationError?: Error;
+  studioExportResult?: { ok: boolean; message?: string };
+  studioTabId?: number;
 }) {
   vi.resetModules();
 
@@ -104,6 +106,9 @@ async function loadBackground(opts?: {
     return fn;
   });
 
+  const tabsCreate = vi.fn(() =>
+    Promise.resolve({ id: opts?.studioTabId ?? 73 })
+  );
   vi.stubGlobal("browser", {
     runtime: {
       onInstalled: {
@@ -116,7 +121,7 @@ async function loadBackground(opts?: {
     },
     notifications: { create: notificationCreate },
     action: { onClicked: { addListener: vi.fn() } },
-    tabs: { onUpdated: { addListener: vi.fn() } },
+    tabs: { create: tabsCreate, onUpdated: { addListener: vi.fn() } },
     storage: {
       session: {
         get: browserSessionGet,
@@ -245,6 +250,9 @@ async function loadBackground(opts?: {
     }),
     sendMessage: vi.fn((type: string, data?: unknown, tabId?: number) => {
       sentMessages.push({ type, data, tabId });
+      if (type === "performStudioExport") {
+        return Promise.resolve(opts?.studioExportResult ?? { ok: true });
+      }
       return Promise.resolve();
     }),
   }));
@@ -320,6 +328,7 @@ async function loadBackground(opts?: {
     migrateServerSourcesStorageMock,
     installedListeners,
     notificationCreate,
+    tabsCreate,
     sessionStore,
     browserSessionGet,
     browserSessionSet,
@@ -535,6 +544,42 @@ async function flushPromises(): Promise<void> {
 }
 
 // startDownload ----------------------------------------------------------------
+
+describe('background onMessage("startStudioExport")', () => {
+  it("Studio tab を作成して content script に export を依頼する", async () => {
+    const { handlers, sentMessages, tabsCreate } = await loadBackground();
+    const request = { collectionId: "collection-a", clipIds: ["clip-a"] };
+
+    const result = await handlers.get("startStudioExport")!({
+      data: request,
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(tabsCreate).toHaveBeenCalledWith({ url: "https://suno.com/studio" });
+    expect(sentMessages).toContainEqual({
+      type: "performStudioExport",
+      data: request,
+      tabId: 73,
+    });
+  });
+
+  it("Studio 側の Premier エラーをそのまま返す", async () => {
+    const failure = {
+      ok: false,
+      message:
+        "Studio の Multitrack export が利用できません。Premier プランを確認してください",
+    };
+    const { handlers } = await loadBackground({ studioExportResult: failure });
+
+    await expect(
+      handlers.get("startStudioExport")!({
+        data: { collectionId: "collection-a", clipIds: ["clip-a"] },
+        sender: { tab: { id: 42 } },
+      })
+    ).resolves.toEqual(failure);
+  });
+});
 
 describe('background onMessage("startDownload"): .zip 完了で downloadComplete を中継する', () => {
   afterEach(() => {
@@ -1467,10 +1512,9 @@ describe('background onMessage("startDownload"): polling fallback で完了済�
     expect(removedDownloadListeners).not.toContain(downloadListeners[0]);
   });
 
-  it("Given Suno bulk ZIP の modal.run URL When poll interval 経過 Then downloadComplete を中継する", async () => {
+  it("Given Suno origin の blob ZIP When poll interval 経過 Then downloadComplete を中継する", async () => {
     const freshStart = new Date().toISOString();
-    const bulkZipUrl =
-      "https://suno-ai--bulk-download-prod-web.modal.run/bulk_zip/613c9f0a40e04529959559aa0d963dc7";
+    const bulkZipUrl = "blob:https://suno.com/613c9f0a40e04529959559aa0d963dc7";
     const { handlers, sentMessages, createdListeners } = await loadBackground({
       searchResultsById: {
         90: [
@@ -1505,6 +1549,41 @@ describe('background onMessage("startDownload"): polling fallback で完了済�
       data: { filename: "/Users/test/Downloads/test.zip" },
       tabId: 42,
     });
+  });
+
+  it("Given 他 origin の blob ZIP When poll interval 経過 Then downloadComplete を中継しない", async () => {
+    const freshStart = new Date().toISOString();
+    const { handlers, sentMessages, createdListeners } = await loadBackground({
+      searchResultsById: {
+        91: [
+          {
+            filename: "/Users/test/Downloads/untrusted.zip",
+            startTime: freshStart,
+            url: "blob:https://evil.example/613c9f0a40e04529959559aa0d963dc7",
+            state: "complete",
+          },
+        ],
+      },
+    });
+
+    await handlers.get("startDownload")!({
+      data: {},
+      sender: { tab: { id: 42 } },
+    });
+    createdListeners[0](
+      freshZip(91, {
+        filename: "/Users/test/Downloads/untrusted.zip",
+        startTime: freshStart,
+        url: "blob:https://evil.example/613c9f0a40e04529959559aa0d963dc7",
+      })
+    );
+    await flushPromises();
+    vi.advanceTimersByTime(3000);
+    await flushPromises();
+
+    expect(sentMessages).not.toContainEqual(
+      expect.objectContaining({ type: "downloadComplete" })
+    );
   });
 });
 
@@ -1612,7 +1691,7 @@ describe("background downloads listener: service worker restart 後も session w
     await expect(resultPromise).resolves.toEqual({
       ok: false,
       message:
-        "別の Download all 監視が進行中です。完了後に再実行してください。",
+        "別の Studio export 監視が進行中です。完了後に再実行してください。",
     });
 
     downloadListeners[0]({ id: 77, state: { current: "complete" } });
@@ -1744,7 +1823,7 @@ describe('background onMessage("cancelDownload"): active watcher を解除する
     expect(result).toEqual({
       ok: false,
       message:
-        "別の Download all 監視が進行中です。完了後に再実行してください。",
+        "別の Studio export 監視が進行中です。完了後に再実行してください。",
     });
   });
 
@@ -1770,7 +1849,7 @@ describe('background onMessage("cancelDownload"): active watcher を解除する
     expect(result).toEqual({
       ok: false,
       message:
-        "別の Download all 監視が進行中です。完了後に再実行してください。",
+        "別の Studio export 監視が進行中です。完了後に再実行してください。",
     });
   });
 });

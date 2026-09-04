@@ -46,7 +46,6 @@ async function loadContentScriptWithPlaylistRows(
   overrides?: {
     postDownloadedError?: Error;
     postDownloadedRejectOnCall?: number;
-    downloadFormatValue?: unknown;
     durationsById?: Record<string, number | undefined>;
     // Cmd+P 前ガードが読む「実際の選択中 clip ID」(#1411)。未指定は multi-select した ID と同一
     //（= 余剰なしでガード通過）。stale selection の混入はここへ余剰 ID を足して再現する。
@@ -255,26 +254,15 @@ async function loadContentScriptWithPlaylistRows(
     injectWithVerification: vi.fn(() => Promise.resolve()),
   }));
 
-  const normalizeDownloadFormat = (value: unknown): "mp3" | "m4a" | "wav" =>
-    value === "mp3" || value === "m4a" || value === "wav" ? value : "mp3";
   vi.doMock("../lib/storage", () => ({
     serverUrlItem: {
       getValue: vi.fn(() => Promise.resolve("http://localhost:8787")),
     },
-    downloadFormatItem: {
-      getValue: vi.fn(() =>
-        Promise.resolve(overrides?.downloadFormatValue ?? "mp3")
-      ),
-    },
-    readDownloadFormat: vi.fn(() =>
-      Promise.resolve(
-        normalizeDownloadFormat(overrides?.downloadFormatValue ?? "mp3")
-      )
-    ),
   }));
 
-  vi.doMock("../lib/download", () => ({
-    triggerDownloadAll: vi.fn(() => Promise.resolve()),
+  vi.doMock("../lib/studio-export", () => ({
+    requestStudioMultitrackExport: vi.fn(() => Promise.resolve()),
+    performStudioMultitrackExport: vi.fn(() => Promise.resolve()),
   }));
 
   vi.doMock("../../shared/api", async () => ({
@@ -705,7 +693,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
       {
         file_count: 2,
         expected_file_count: 2,
-        format: "mp3",
+        format: "wav",
         download_path: "/Users/test/Downloads/default-filter.zip",
       }
     );
@@ -1013,7 +1001,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     ).toHaveLength(0);
   });
 
-  it("Given full collection run When Download all completes Then playlist URL と ZIP 完了を POST して FINISHED になる", async () => {
+  it("Given full collection run When Studio export completes Then playlist URL と ZIP 完了を POST して FINISHED になる", async () => {
     const entries: PromptEntry[] = [
       { name: "track-1", style: "style 1", lyrics: "" },
     ];
@@ -1053,54 +1041,10 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     expectPostDownloadedBody(downloadedPosts[0].payload, {
       file_count: 2,
       expected_file_count: 2,
-      format: "mp3",
+      format: "wav",
       download_path: "/Users/test/Downloads/regression.zip",
     });
   });
-
-  it.each(["m4a", "wav"] as const)(
-    "Given download format=%s When full collection run completes Then startDownload と postDownloaded に同じ形式を渡す",
-    async (format) => {
-      const entries: PromptEntry[] = [
-        { name: "track-1", style: "style 1", lyrics: "" },
-      ];
-      const currentSubmittedClipIds = ["clip-1", "clip-2"];
-      const rows = currentSubmittedClipIds.map(() => ({}) as HTMLElement);
-      const { handlers, progressMessages, runHandler, sentMessages } =
-        await loadContentScriptWithPlaylistRows(currentSubmittedClipIds, rows, {
-          downloadFormatValue: format,
-        });
-
-      runHandler({
-        data: {
-          entries,
-          playlistName: "vj | regression",
-          collectionId: "collection-a",
-        },
-      });
-      await vi.waitFor(() =>
-        expect(sentMessages.some((m) => m.type === "startDownload")).toBe(true)
-      );
-
-      handlers.get("downloadComplete")!({
-        data: { filename: "/Users/test/Downloads/regression.zip" },
-      });
-
-      await vi.waitFor(() =>
-        expect(progressMessages).toContainEqual(
-          expect.objectContaining({ phase: PHASE.FINISHED })
-        )
-      );
-      expect(
-        sentMessages.find((m) => m.type === "startDownload")?.payload
-      ).toMatchObject({ format });
-      const downloadedPosts = sentMessages.filter(
-        (m) => m.type === "postDownloaded"
-      );
-      expect(downloadedPosts).toHaveLength(1);
-      expectPostDownloadedBody(downloadedPosts[0].payload, { format });
-    }
-  );
 
   it("Given full collection run When ZIP 完了後の postDownloaded が失敗 Then ERROR で止めて resume state を保持する", async () => {
     const entries: PromptEntry[] = [
@@ -1181,7 +1125,7 @@ describe("content.ts playlist 追加失敗時の resume state", () => {
     expect(scheduleRunCompleteReloadMock).not.toHaveBeenCalled();
   });
 
-  it("Given full collection run の Download all が失敗 When run Then ERROR のまま終了する", async () => {
+  it("Given full collection run の Studio export が失敗 When run Then ERROR のまま終了する", async () => {
     const entries: PromptEntry[] = [
       { name: "track-1", style: "style 1", lyrics: "" },
     ];

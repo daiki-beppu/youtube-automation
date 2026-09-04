@@ -149,7 +149,7 @@ export default defineBackground(() => {
       requireRelayTab(sender, "queryUnattendedState")
     )
   );
-  onMessage("startDownload", async ({ data, sender }) => {
+  onMessage("startDownload", async ({ sender }) => {
     const tabId = relayTabId(sender);
     if (tabId === null) {
       console.warn("[suno-helper] startDownload: 送信元タブが特定できません");
@@ -158,7 +158,34 @@ export default defineBackground(() => {
         message: "startDownload: 送信元タブが特定できません",
       } as const;
     }
-    return downloadWatcher.start(tabId, data.format);
+    return downloadWatcher.start(tabId);
+  });
+
+  onMessage("startStudioExport", async ({ data, sender }) => {
+    requireRelayTab(sender, "startStudioExport");
+    const tab = await browser.tabs.create({ url: "https://suno.com/studio" });
+    if (typeof tab.id !== "number") {
+      return {
+        ok: false,
+        message: "Studio tab を開けませんでした",
+      } as const;
+    }
+    const deadline = Date.now() + 30_000;
+    let lastError: unknown;
+    while (Date.now() < deadline) {
+      try {
+        const result = await sendMessage("performStudioExport", data, tab.id);
+        return result;
+      } catch (error) {
+        lastError = error;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+    }
+    const detail = lastError instanceof Error ? `: ${lastError.message}` : "";
+    return {
+      ok: false,
+      message: `Studio を開けませんでした${detail}`,
+    } as const;
   });
 
   onMessage("cancelDownload", async ({ sender }) => {

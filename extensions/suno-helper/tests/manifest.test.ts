@@ -20,7 +20,7 @@ const EXPECTED_PERMISSIONS = [
   "scripting",
   "notifications",
 ];
-// Download all / trusted Cmd+P 追加後も混入させたくない広域権限（過剰権限 creep の回帰検知）。
+// Studio export / trusted Cmd+P 追加後も混入させたくない広域権限（過剰権限 creep の回帰検知）。
 const FORBIDDEN_PERMISSIONS = [
   "history",
   "bookmarks",

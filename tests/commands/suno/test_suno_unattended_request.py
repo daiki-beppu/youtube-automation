@@ -28,7 +28,6 @@ def test_build_request_matches_extension_wire_contract() -> None:
         base_url="http://rjn.localhost:7873/path/?token=ignored",
         collection_id="20260718-rjn-night-drive-collection",
         entry_indices=[0, 2],
-        download_format="wav",
         max_entries=2,
         max_concurrent_generations=3,
         max_retries=1,
@@ -40,7 +39,6 @@ def test_build_request_matches_extension_wire_contract() -> None:
         "baseUrl": "http://rjn.localhost:7873/path",
         "collectionId": "20260718-rjn-night-drive-collection",
         "entryIndices": [0, 2],
-        "downloadFormat": "wav",
         "limits": {
             "maxEntries": 2,
             "maxConcurrentGenerations": 3,
@@ -74,7 +72,6 @@ def test_rejects_unsafe_or_unbounded_requests(override: dict[str, object], messa
         "base_url": "http://localhost:7873",
         "collection_id": "collection",
         "entry_indices": [0],
-        "download_format": "mp3",
         "max_entries": 1,
         "max_concurrent_generations": 1,
         "max_retries": 0,
@@ -161,7 +158,7 @@ def test_cli_uses_skill_config_defaults(capsys: pytest.CaptureFixture[str], monk
     envelope = decode_launch_url(capsys.readouterr().out.strip())
     assert envelope["nonce"] == "abcdefghijklmnopqrstuvwxyzABCDEFGH_1234567890"
     request = captured[0]
-    assert request["downloadFormat"] == "mp3"
+    assert "downloadFormat" not in request
     assert request["limits"] == {
         "maxEntries": 10,
         "maxConcurrentGenerations": 3,

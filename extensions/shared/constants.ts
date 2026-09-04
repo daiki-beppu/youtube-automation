@@ -39,13 +39,6 @@ export const FINISHED_SNAPSHOT_KEY = "sunoFinishedSnapshot";
  * SSOT: src/youtube_automation/domains/suno/downloaded/models.py collection_downloaded_route。 */
 const DOWNLOADED_ROUTE = "/collections/:id/downloaded" as const;
 
-/** Suno ダウンロード形式を保存する chrome.storage.local の key (#1215)。
- * popup（書込）と content（読込）が同一 key を参照するため、契約文字列としてここを SSOT とする。 */
-export const DOWNLOAD_FORMAT_KEY = "sunoDownloadFormat" as const;
-
-/** Suno ダウンロード形式のデフォルト値 (#1215)。 */
-export const DOWNLOAD_FORMAT_DEFAULT = "mp3" as const;
-
 /** Suno の OS 通知と固定音の ON/OFF を保存する chrome.storage.local key。 */
 export const COMPLETION_SOUND_SETTINGS_KEY =
   "sunoCompletionSoundSettings" as const;

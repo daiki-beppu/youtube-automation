@@ -81,7 +81,6 @@ const harness = vi.hoisted(() => {
     writeFinishedSnapshot,
     scheduleRunCompleteReload,
     serverUrlSet: vi.fn(() => Promise.resolve()),
-    downloadFormatSet: vi.fn(() => Promise.resolve()),
     readResumeState: vi.fn<() => Promise<ResumeState | null>>(() =>
       Promise.resolve(null)
     ),
@@ -250,11 +249,6 @@ vi.mock("../lib/storage", () => ({
     getValue: vi.fn(() => Promise.resolve("http://localhost:8787")),
     setValue: harness.serverUrlSet,
   },
-  downloadFormatItem: {
-    getValue: vi.fn(() => Promise.resolve("mp3")),
-    setValue: harness.downloadFormatSet,
-  },
-  readDownloadFormat: vi.fn(() => Promise.resolve("mp3")),
 }));
 
 vi.mock("../lib/resume-state", async () => {
@@ -272,10 +266,6 @@ vi.mock("../lib/resume-state", async () => {
 vi.mock("../lib/unattended-state", () => ({
   readUnattendedRunState: harness.readUnattendedRunState,
   writeUnattendedRunState: harness.writeUnattendedRunState,
-}));
-
-vi.mock("../lib/download", () => ({
-  triggerDownloadAll: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("../lib/download-flow", () => ({
@@ -664,7 +654,6 @@ function setUnattendedLaunchHash(
     requestId: "scheduled-20260718T120000Z",
     baseUrl: "http://localhost:8787",
     collectionId: "20260718-rjn-night-drive-collection",
-    downloadFormat: "wav",
     limits: {
       maxEntries: 2,
       maxConcurrentGenerations: 2,
@@ -732,7 +721,6 @@ describe("content unattended launch", () => {
       )
     );
     expect(harness.serverUrlSet).toHaveBeenCalledWith("http://localhost:8787");
-    expect(harness.downloadFormatSet).toHaveBeenCalledWith("wav");
     expect(location.hash).toBe("");
   });
 
@@ -1128,7 +1116,6 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
                 requestId: `scheduled-captcha-${runMode}`,
                 baseUrl: "http://localhost:8787",
                 collectionId: "20260601-clm-preflight-collection",
-                downloadFormat: "wav",
                 limits: {
                   maxEntries: entries.length,
                   maxConcurrentGenerations: 2,
@@ -1208,7 +1195,6 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
                 requestId: `scheduled-playlist-captcha-${runMode}`,
                 baseUrl: "http://localhost:8787",
                 collectionId: "20260601-clm-preflight-collection",
-                downloadFormat: "wav",
                 limits: {
                   maxEntries: 1,
                   maxConcurrentGenerations: 2,
@@ -1288,7 +1274,6 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
                 requestId: `scheduled-timeout-${runMode}`,
                 baseUrl: "http://localhost:8787",
                 collectionId: "20260601-clm-preflight-collection",
-                downloadFormat: "wav",
                 limits: {
                   maxEntries: 2,
                   maxConcurrentGenerations: 1,
@@ -1398,7 +1383,6 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
                 requestId: `scheduled-stop-${runMode}`,
                 baseUrl: "http://localhost:8787",
                 collectionId: "20260601-clm-preflight-collection",
-                downloadFormat: "wav",
                 limits: {
                   maxEntries: 2,
                   maxConcurrentGenerations: 1,
@@ -2695,7 +2679,6 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
               requestId: "scheduled-durable-checkpoint",
               baseUrl: "http://localhost:8787",
               collectionId: "20260601-clm-preflight-collection",
-              downloadFormat: "wav",
               limits: {
                 maxEntries: 1,
                 maxConcurrentGenerations: 1,

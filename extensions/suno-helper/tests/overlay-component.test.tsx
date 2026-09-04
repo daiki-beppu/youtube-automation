@@ -96,10 +96,6 @@ vi.mock("../lib/overlay-storage", () => ({
 vi.mock("../lib/challenge-log", () => ({
   readChallengeLog: challengeLogMocks.readChallengeLog,
 }));
-vi.mock("../lib/storage", () => ({
-  downloadFormatItem: { setValue: vi.fn(async () => undefined) },
-  readDownloadFormat: vi.fn(async () => "mp3"),
-}));
 vi.mock("../components/useSunoRunner", () => ({ useSunoRunner: () => runner }));
 
 async function waitFor(assertion: () => void): Promise<void> {
@@ -706,11 +702,6 @@ describe("Overlay shell", () => {
       )
     ).toBeNull();
 
-    expect(
-      container.querySelector<HTMLButtonElement>(
-        'button[data-suno-control="download-format"]'
-      )?.disabled
-    ).toBe(true);
     expect(
       container.querySelector<HTMLButtonElement>(
         'button[data-suno-control="stop"]'

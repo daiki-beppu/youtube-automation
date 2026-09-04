@@ -1,7 +1,4 @@
-const TRUSTED_DOWNLOAD_HOSTS = [
-  "suno.com",
-  "suno-ai--bulk-download-prod-web.modal.run",
-];
+const TRUSTED_DOWNLOAD_HOSTS = ["suno.com"];
 const TRUSTED_DOWNLOAD_HOST_SUFFIXES = [".suno.com", ".suno.ai"];
 const DOWNLOAD_WATCHER_SESSION_KEY = "suno-helper:downloadWatcher";
 const DOWNLOAD_COMPLETE_POLL_MS = 3000;
@@ -21,8 +18,7 @@ interface DownloadWatcherState {
 
 export interface DownloadWatcherController {
   start: (
-    tabId: number,
-    format: string
+    tabId: number
   ) => Promise<{ ok: true } | { ok: false; message: string }>;
   cancelForTab: (tabId: number) => Promise<void>;
 }
@@ -41,7 +37,11 @@ export function installDownloadWatcher(deps: {
     if (!URL.canParse(value)) {
       return false;
     }
-    const { hostname } = new URL(value);
+    const url = new URL(value);
+    if (url.protocol === "blob:") {
+      return url.origin === "https://suno.com";
+    }
+    const { hostname } = url;
     return (
       TRUSTED_DOWNLOAD_HOSTS.includes(hostname) ||
       TRUSTED_DOWNLOAD_HOST_SUFFIXES.some((suffix) => hostname.endsWith(suffix))
@@ -172,7 +172,7 @@ export function installDownloadWatcher(deps: {
             return;
           }
           const message =
-            "Download all 監視タイムアウト（10 分）。listener を解除しました。";
+            "Studio export 監視タイムアウト（10 分）。listener を解除しました。";
           console.warn(`[suno-helper] ${message}`);
           cleanupWatcher(watcher);
           notifyDownloadFailed(watcher, message);
@@ -309,7 +309,7 @@ export function installDownloadWatcher(deps: {
     const filename = item.filename ?? "";
     if (!isZipStartedAfterMonitor(item, watcher.monitorStartedAt)) {
       console.debug(
-        "[suno-helper] Download all 監視対象外の download event を無視:",
+        "[suno-helper] Studio export 監視対象外の download event を無視:",
         {
           filename,
           url: item.url,
@@ -361,7 +361,7 @@ export function installDownloadWatcher(deps: {
   chrome.downloads.onChanged.addListener(changedListener);
 
   return {
-    start: async (tabId, format) => {
+    start: async (tabId) => {
       await hydration;
       if (activeDownloadWatcher !== null) {
         if (
@@ -369,14 +369,14 @@ export function installDownloadWatcher(deps: {
           activeDownloadWatcher.targetDownloadId === null
         ) {
           console.warn(
-            "[suno-helper] 未確定の Download all 監視を同一タブの再実行で解除します。"
+            "[suno-helper] 未確定の Studio export 監視を同一タブの再実行で解除します。"
           );
           cleanupWatcher(activeDownloadWatcher);
         } else {
           return {
             ok: false,
             message:
-              "別の Download all 監視が進行中です。完了後に再実行してください。",
+              "別の Studio export 監視が進行中です。完了後に再実行してください。",
           } as const;
         }
       }
@@ -384,12 +384,10 @@ export function installDownloadWatcher(deps: {
         return {
           ok: false,
           message:
-            "別の Download all 監視が進行中です。完了後に再実行してください。",
+            "別の Studio export 監視が進行中です。完了後に再実行してください。",
         } as const;
       }
-      console.info(
-        `[suno-helper] Download all 監視を開始します (format=${format})`
-      );
+      console.info("[suno-helper] Studio export 監視を開始します");
       setActiveDownloadWatcher({
         tabId,
         monitorStartedAt: Date.now(),

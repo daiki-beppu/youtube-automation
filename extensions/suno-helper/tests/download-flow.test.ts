@@ -9,8 +9,8 @@ const messagingMocks = vi.hoisted(() => ({
   sendMessage: vi.fn(),
 }));
 
-const downloadMocks = vi.hoisted(() => ({
-  triggerDownloadAll: vi.fn(async () => undefined),
+const studioExportMocks = vi.hoisted(() => ({
+  requestStudioMultitrackExport: vi.fn(async () => undefined),
 }));
 
 vi.mock("../lib/messaging", () => ({
@@ -21,14 +21,15 @@ vi.mock("../lib/messaging", () => ({
   sendMessage: messagingMocks.sendMessage,
 }));
 
-vi.mock("../lib/download", () => ({
-  triggerDownloadAll: downloadMocks.triggerDownloadAll,
+vi.mock("../lib/studio-export", () => ({
+  requestStudioMultitrackExport:
+    studioExportMocks.requestStudioMultitrackExport,
 }));
 
 const CONTEXT = {
   baseUrl: "http://localhost:7873",
-  format: "mp3" as const,
 };
+const CLIP_IDS = ["clip-1", "clip-2"];
 
 const PARTIAL_SUMMARY = {
   expected: 56,
@@ -78,9 +79,11 @@ function arrangePartialDownloadSuccess(): void {
     }
     return { ok: true };
   });
-  downloadMocks.triggerDownloadAll.mockImplementationOnce(async () => {
-    dispatchDownloadComplete();
-  });
+  studioExportMocks.requestStudioMultitrackExport.mockImplementationOnce(
+    async () => {
+      dispatchDownloadComplete();
+    }
+  );
 }
 
 describe("download flow", () => {
@@ -93,7 +96,9 @@ describe("download flow", () => {
       }
       return { ok: true };
     });
-    downloadMocks.triggerDownloadAll.mockResolvedValue(undefined);
+    studioExportMocks.requestStudioMultitrackExport.mockResolvedValue(
+      undefined
+    );
   });
 
   afterEach(() => {
@@ -102,13 +107,13 @@ describe("download flow", () => {
   });
 
   it("DOM 操作が throw すると watcher を一回 cancel し resolver を破棄する", async () => {
-    downloadMocks.triggerDownloadAll.mockRejectedValueOnce(
+    studioExportMocks.requestStudioMultitrackExport.mockRejectedValueOnce(
       new Error("download button missing")
     );
     const flow = createSubject(() => false);
 
     await expect(
-      flow.performDownload(CONTEXT, "collection", 2, 2)
+      flow.performDownload(CONTEXT, "collection", 2, 2, CLIP_IDS)
     ).rejects.toThrow("download button missing");
 
     expectOnlyStartAndCancelMessages();
@@ -119,9 +124,9 @@ describe("download flow", () => {
 
   it("timeout すると watcher を一回 cancel し late completion を無視する", async () => {
     const flow = createSubject(() => false);
-    const result = flow.performDownload(CONTEXT, "collection", 2, 2);
+    const result = flow.performDownload(CONTEXT, "collection", 2, 2, CLIP_IDS);
     const rejection = expect(result).rejects.toThrow(
-      "Download all がタイムアウトしました"
+      "Studio Multitrack export がタイムアウトしました"
     );
 
     await vi.advanceTimersByTimeAsync(660_000);
@@ -135,11 +140,13 @@ describe("download flow", () => {
 
   it("abort すると watcher を一回 cancel し post も resolver も残さない", async () => {
     let aborted = false;
-    downloadMocks.triggerDownloadAll.mockImplementationOnce(async () => {
-      aborted = true;
-    });
+    studioExportMocks.requestStudioMultitrackExport.mockImplementationOnce(
+      async () => {
+        aborted = true;
+      }
+    );
     const flow = createSubject(() => aborted);
-    const result = flow.performDownload(CONTEXT, "collection", 2, 2);
+    const result = flow.performDownload(CONTEXT, "collection", 2, 2, CLIP_IDS);
 
     await vi.advanceTimersByTimeAsync(1_000);
     await result;
@@ -154,9 +161,28 @@ describe("download flow", () => {
     arrangePartialDownloadSuccess();
     const flow = createSubject(() => false);
 
-    const summary = await flow.performDownload(CONTEXT, "collection", 28, 56);
+    const summary = await flow.performDownload(
+      CONTEXT,
+      "collection",
+      28,
+      56,
+      CLIP_IDS
+    );
 
     expect(summary).toBe(PARTIAL_SUMMARY);
+    expect(
+      studioExportMocks.requestStudioMultitrackExport
+    ).toHaveBeenCalledWith({ collectionId: "collection", clipIds: CLIP_IDS });
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("postDownloaded", {
+      baseUrl: CONTEXT.baseUrl,
+      collectionId: "collection",
+      body: {
+        file_count: 56,
+        expected_file_count: 56,
+        format: "wav",
+        download_path: "collection.zip",
+      },
+    });
   });
 
   it("best-effort download の部分成功は error なしで同じ server summary を返す", async () => {
@@ -167,7 +193,8 @@ describe("download flow", () => {
       CONTEXT,
       "collection",
       28,
-      56
+      56,
+      CLIP_IDS
     );
 
     expect(result).toEqual({ error: null, summary: PARTIAL_SUMMARY });
@@ -184,7 +211,6 @@ describe("download flow", () => {
       collectionId: "collection",
       submittedClipIds: ["clip-id"],
       expectedClipCount: 56,
-      selectClipIds: vi.fn(async () => undefined),
       clearResumeState: vi.fn(async () => undefined),
     });
 
@@ -217,13 +243,15 @@ describe("download flow", () => {
       }
       return { ok: true };
     });
-    downloadMocks.triggerDownloadAll.mockImplementationOnce(async () => {
-      dispatchDownloadComplete();
-    });
+    studioExportMocks.requestStudioMultitrackExport.mockImplementationOnce(
+      async () => {
+        dispatchDownloadComplete();
+      }
+    );
     const flow = createSubject(() => false);
 
     await expect(
-      flow.downloadBestEffort(CONTEXT, "collection", 2, 2)
+      flow.downloadBestEffort(CONTEXT, "collection", 2, 2, CLIP_IDS)
     ).resolves.toBe(`${apiError} (phase=downloading)`);
   });
 
@@ -239,7 +267,6 @@ describe("download flow", () => {
         context: CONTEXT,
         collectionId: "collection",
         submittedClipIds: ["clip-id"],
-        selectClipIds: vi.fn(async () => undefined),
         clearResumeState: vi.fn(async () => undefined),
       })
     ).rejects.toThrow("watcher unavailable (phase=downloading)");
@@ -256,13 +283,15 @@ describe("download flow", () => {
       }
       return { ok: true };
     });
-    downloadMocks.triggerDownloadAll.mockImplementationOnce(async () => {
-      dispatchDownloadComplete();
-    });
+    studioExportMocks.requestStudioMultitrackExport.mockImplementationOnce(
+      async () => {
+        dispatchDownloadComplete();
+      }
+    );
     const flow = createSubject(() => false);
 
     await expect(
-      flow.performDownload(CONTEXT, "collection", 2, 2)
+      flow.performDownload(CONTEXT, "collection", 2, 2, CLIP_IDS)
     ).rejects.toThrow(`${serverError} (phase=downloading)`);
   });
 
@@ -274,7 +303,7 @@ describe("download flow", () => {
     const flow = createSubject(() => false);
 
     await expect(
-      flow.performDownload(CONTEXT, "collection", 2, 2)
+      flow.performDownload(CONTEXT, "collection", 2, 2, CLIP_IDS)
     ).rejects.toThrow(/^watcher unavailable \(phase=downloading\)$/);
   });
 });

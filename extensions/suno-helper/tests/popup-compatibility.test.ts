@@ -37,11 +37,6 @@ const storageMocks = vi.hoisted(() => ({
   setValue: vi.fn(async () => undefined),
 }));
 
-const downloadFormatMocks = vi.hoisted(() => ({
-  getValue: vi.fn(async () => "mp3"),
-  setValue: vi.fn(async () => undefined),
-}));
-
 const completionSoundMocks = vi.hoisted(() => ({
   getValue: vi.fn(async () => ({ enabled: true })),
   setValue: vi.fn(async () => undefined),
@@ -85,8 +80,6 @@ vi.mock("wxt/browser", () => ({
 
 vi.mock("../lib/storage", () => ({
   serverUrlItem: storageMocks,
-  downloadFormatItem: downloadFormatMocks,
-  readDownloadFormat: vi.fn(() => downloadFormatMocks.getValue()),
   completionSoundSettingsItem: completionSoundMocks,
   readCompletionSoundSettings: vi.fn(() => completionSoundMocks.getValue()),
   migrateServerSourcesStorage: serverSourcesMocks.migrateServerSourcesStorage,
@@ -289,31 +282,6 @@ function setSelectValue(control: HTMLElement, value: string): void {
   );
 }
 
-async function setDownloadFormatValue(
-  container: HTMLElement,
-  value: "mp3" | "m4a" | "wav"
-): Promise<void> {
-  const trigger = expectControl(
-    container,
-    "download-format"
-  ) as HTMLButtonElement;
-  await act(async () => {
-    trigger.focus();
-    trigger.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })
-    );
-  });
-  const item = Array.from(
-    container.querySelectorAll<HTMLElement>('[data-slot="select-item"]')
-  ).find((candidate) => candidate.textContent === value.toUpperCase());
-  if (!item) throw new Error(`download format item not found: ${value}`);
-  await act(async () => {
-    item.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "Enter", bubbles: true })
-    );
-  });
-}
-
 function buttonByText(container: HTMLElement, text: string): HTMLButtonElement {
   const button = Array.from(container.querySelectorAll("button")).find(
     (candidate) => candidate.textContent?.includes(text)
@@ -420,8 +388,6 @@ describe("Suno popup compatibility check", () => {
     fetchMock = vi.fn();
     storageMocks.getValue.mockResolvedValue("");
     storageMocks.setValue.mockResolvedValue(undefined);
-    downloadFormatMocks.getValue.mockResolvedValue("mp3");
-    downloadFormatMocks.setValue.mockResolvedValue(undefined);
     completionSoundMocks.getValue.mockResolvedValue({
       enabled: true,
     });
@@ -453,18 +419,6 @@ describe("Suno popup compatibility check", () => {
       root.render(createElement(App));
     });
   });
-
-  async function rerenderAppWithDownloadFormat(value: string): Promise<void> {
-    await act(async () => {
-      root.unmount();
-    });
-    container.innerHTML = "";
-    root = createRoot(container);
-    downloadFormatMocks.getValue.mockResolvedValueOnce(value);
-    await act(async () => {
-      root.render(createElement(App));
-    });
-  }
 
   async function rerenderApp(): Promise<void> {
     await act(async () => {
@@ -551,16 +505,6 @@ describe("Suno popup compatibility check", () => {
     expect(serverTrigger.dataset.slot).toBe("select-trigger");
     expect(serverTrigger.dataset.size).toBe("sm");
     expect(serverTrigger.getAttribute("aria-haspopup")).toBe("listbox");
-    const downloadFormat = expectControl(
-      container,
-      "download-format"
-    ) as HTMLButtonElement;
-    expect(downloadFormat.dataset.slot).toBe("select-trigger");
-    expect(downloadFormat.getAttribute("role")).toBe("combobox");
-    expect(downloadFormat.getAttribute("aria-labelledby")).toContain(
-      "download-format-label"
-    );
-    expect(downloadFormat.textContent).toContain("MP3");
     expect(
       expectControl(container, "regenerate-duration-outliers").dataset.slot
     ).toBe("checkbox");
@@ -2896,63 +2840,6 @@ describe("Suno popup compatibility check", () => {
     });
   });
 
-  it("DL 形式 select は storage の初期値を反映し、変更時に保存する", async () => {
-    await rerenderAppWithDownloadFormat("m4a");
-
-    await waitFor(() => {
-      expect(expectControl(container, "download-format").textContent).toContain(
-        "M4A"
-      );
-    });
-
-    await setDownloadFormatValue(container, "wav");
-
-    expect(downloadFormatMocks.setValue).toHaveBeenCalledWith("wav");
-    expect(expectControl(container, "download-format").textContent).toContain(
-      "WAV"
-    );
-  });
-
-  // REQ-2921-01: the reload-required action reloads the tab exactly once.
-  it("DL 形式の読込が失敗すると未捕捉にせず再読み込み案内を表示する", async () => {
-    downloadFormatMocks.getValue.mockRejectedValueOnce(
-      new Error("'wxt/storage' must be loaded in a web extension environment")
-    );
-
-    await act(async () => {
-      root.unmount();
-    });
-    container.innerHTML = "";
-    root = createRoot(container);
-    await act(async () => {
-      root.render(createElement(App));
-    });
-
-    await waitFor(() => {
-      expect(container.textContent).toContain(
-        EXTENSION_RELOAD_REQUIRED_MESSAGE
-      );
-      const alert = expectControl(container, "reload-required");
-      expect(alert.dataset.slot).toBe("alert");
-      expect(alert.dataset.variant).toBe("warning");
-      expectShadcnControl(expectControl(container, "reload-tab"), "outline");
-    });
-
-    const reload = vi.fn();
-    const reloadWindow = Object.create(window) as Window & typeof globalThis;
-    Object.defineProperty(reloadWindow, "location", {
-      configurable: true,
-      value: { reload },
-    });
-    vi.stubGlobal("window", reloadWindow);
-
-    await act(async () => {
-      expectControl(container, "reload-tab").click();
-    });
-
-    expect(reload).toHaveBeenCalledOnce();
-  });
-
   it.each([
     [
       "server URL",
@@ -3047,30 +2934,6 @@ describe("Suno popup compatibility check", () => {
         EXTENSION_RELOAD_REQUIRED_MESSAGE
       );
       expect(buttonByText(container, "タブを再読み込み")).toBeTruthy();
-    });
-  });
-
-  it("DL 形式の保存が失敗すると未捕捉にせず再読み込み案内を表示する", async () => {
-    downloadFormatMocks.setValue.mockRejectedValueOnce(
-      new Error("Extension context invalidated.")
-    );
-    await setDownloadFormatValue(container, "wav");
-
-    await waitFor(() => {
-      expect(container.textContent).toContain(
-        EXTENSION_RELOAD_REQUIRED_MESSAGE
-      );
-      expect(buttonByText(container, "タブを再読み込み")).toBeTruthy();
-    });
-  });
-
-  it("DL 形式 select は不正な storage 値を MP3 に戻す", async () => {
-    await rerenderAppWithDownloadFormat("flac");
-
-    await waitFor(() => {
-      expect(expectControl(container, "download-format").textContent).toContain(
-        "MP3"
-      );
     });
   });
 
@@ -3251,7 +3114,7 @@ describe("Suno popup compatibility check", () => {
     });
   });
 
-  it("persisted resume が entries 未取得でも Playlist から再開すると Download all 対象として送る", async () => {
+  it("persisted resume が entries 未取得でも Playlist から再開すると Studio export 対象として送る", async () => {
     act(() => {
       root.unmount();
     });

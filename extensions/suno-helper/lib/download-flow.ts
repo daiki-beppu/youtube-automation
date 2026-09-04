@@ -1,8 +1,8 @@
-import type { DownloadedPayload, DownloadSummary } from "../../shared/api";
+import type { DownloadSummary } from "../../shared/api";
 import type { ProgressPayload } from "../../shared/constants";
 import { PHASE } from "../../shared/constants";
-import { triggerDownloadAll } from "./download";
 import { onMessage, sendMessage } from "./messaging";
+import { requestStudioMultitrackExport } from "./studio-export";
 
 type DownloadResult =
   | { ok: true; filename: string }
@@ -14,19 +14,22 @@ export interface DownloadFlow {
     context: DownloadContext,
     collectionId: string,
     progressTotal: number,
-    expectedFileCount: number
+    expectedFileCount: number,
+    clipIds: string[]
   ) => Promise<DownloadSummary | undefined>;
   downloadBestEffortResult: (
     context: DownloadContext,
     collectionId: string,
     progressTotal: number,
-    expectedFileCount: number
+    expectedFileCount: number,
+    clipIds: string[]
   ) => Promise<DownloadBestEffortResult>;
   downloadBestEffort: (
     context: DownloadContext,
     collectionId: string,
     progressTotal: number,
-    expectedFileCount: number
+    expectedFileCount: number,
+    clipIds: string[]
   ) => Promise<string | null>;
   retryDownload: (
     options: RetryDownloadOptions
@@ -57,13 +60,11 @@ export interface RetryDownloadOptions {
   collectionId: string;
   submittedClipIds: string[];
   expectedClipCount?: number;
-  selectClipIds: (submittedClipIds: string[]) => Promise<void>;
   clearResumeState: (collectionId: string) => Promise<void>;
 }
 
 export interface DownloadContext {
   baseUrl: string;
-  format: DownloadedPayload["format"];
 }
 
 const DOWNLOAD_COMPLETE_TIMEOUT_MS = 660000;
@@ -123,13 +124,11 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     });
   }
 
-  async function startDownloadWatcher(
-    format: DownloadContext["format"]
-  ): Promise<void> {
-    const startResult = await sendMessage("startDownload", { format });
+  async function startDownloadWatcher(): Promise<void> {
+    const startResult = await sendMessage("startDownload", undefined);
     if (!startResult?.ok) {
       throw new Error(
-        startResult?.message ?? "Download all 監視を開始できませんでした"
+        startResult?.message ?? "Studio export の監視を開始できませんでした"
       );
     }
   }
@@ -144,16 +143,17 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
   }
 
   async function waitForDownloadedFilename(
-    format: DownloadContext["format"]
+    collectionId: string,
+    clipIds: string[]
   ): Promise<string | null> {
     const downloadPromise = waitForDownloadComplete();
     let watcherActive = true;
     try {
-      await triggerDownloadAll(format);
+      await requestStudioMultitrackExport({ collectionId, clipIds });
       const downloadResult = await downloadPromise;
       if (deps.isAborted()) return null;
       if (!downloadResult) {
-        throw new Error("Download all がタイムアウトしました");
+        throw new Error("Studio Multitrack export がタイムアウトしました");
       }
       watcherActive = false;
       if (!downloadResult.ok) {
@@ -185,7 +185,7 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
       body: {
         file_count: expectedFileCount,
         expected_file_count: expectedFileCount,
-        format: context.format,
+        format: "wav",
         download_path: filename,
       },
     });
@@ -206,17 +206,18 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     context: DownloadContext,
     collectionId: string,
     progressTotal: number,
-    expectedFileCount: number
+    expectedFileCount: number,
+    clipIds: string[]
   ): Promise<DownloadSummary | undefined> {
     if (deps.isAborted()) return;
 
     deps.emitProgress({
       phase: PHASE.DOWNLOADING,
       total: progressTotal,
-      message: `${context.format.toUpperCase()} 形式`,
+      message: "Studio Multitrack export（WAV）",
     });
-    await startDownloadWatcher(context.format);
-    const filename = await waitForDownloadedFilename(context.format);
+    await startDownloadWatcher();
+    const filename = await waitForDownloadedFilename(collectionId, clipIds);
     if (filename === null) return;
     return await postDownloadedArchive(
       context,
@@ -231,14 +232,16 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     context: DownloadContext,
     collectionId: string,
     progressTotal: number,
-    expectedFileCount: number
+    expectedFileCount: number,
+    clipIds: string[]
   ): Promise<DownloadSummary | undefined> {
     try {
       return await performDownloadAttempt(
         context,
         collectionId,
         progressTotal,
-        expectedFileCount
+        expectedFileCount,
+        clipIds
       );
     } catch (error) {
       throw withDownloadingPhase(error);
@@ -249,23 +252,25 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     context: DownloadContext,
     collectionId: string,
     progressTotal: number,
-    expectedFileCount: number
+    expectedFileCount: number,
+    clipIds: string[]
   ): Promise<DownloadBestEffortResult> {
     try {
       const summary = await performDownload(
         context,
         collectionId,
         progressTotal,
-        expectedFileCount
+        expectedFileCount,
+        clipIds
       );
       return summary === undefined ? { error: null } : { error: null, summary };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.warn(`[suno-helper] Download all failed: ${message}`);
+      console.warn(`[suno-helper] Studio export failed: ${message}`);
       deps.emitProgress({
         phase: PHASE.DOWNLOADING,
         total: progressTotal,
-        message: `ダウンロード失敗（手動でダウンロードしてください）: ${message}`,
+        message: `Studio export 失敗: ${message}`,
       });
       return { error: message };
     }
@@ -275,14 +280,16 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     context: DownloadContext,
     collectionId: string,
     progressTotal: number,
-    expectedFileCount: number
+    expectedFileCount: number,
+    clipIds: string[]
   ): Promise<string | null> {
     return (
       await downloadBestEffortResult(
         context,
         collectionId,
         progressTotal,
-        expectedFileCount
+        expectedFileCount,
+        clipIds
       )
     ).error;
   }
@@ -294,21 +301,12 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     if (options.submittedClipIds.length === 0) {
       throw new Error("retryDownload に必要な clip ID がありません");
     }
-    deps.emitProgress({
-      phase: PHASE.ADDING_TO_PLAYLIST,
-      total,
-      message: "clip を選択中…",
-    });
-    await options.selectClipIds(options.submittedClipIds);
-    if (deps.isAborted()) {
-      deps.emitProgress({ phase: PHASE.STOPPED, total: 0 });
-      return { completedAndCleared: false };
-    }
     const summary = await performDownload(
       options.context,
       options.collectionId,
       total,
-      options.expectedClipCount ?? total
+      options.expectedClipCount ?? total,
+      options.submittedClipIds
     );
     if (deps.isAborted()) {
       deps.emitProgress({ phase: PHASE.STOPPED, total: 0 });
