@@ -206,20 +206,13 @@ def _codec_uses_bitrate(codec: str) -> bool:
 def build_filter(cfg: CleanupConfig, *, duration_sec: float | None = None) -> str:
     filters: list[str] = []
     if cfg.trim_silence:
-        filters.append(
+        # 末尾は areverse で挟み、同じ silenceremove を「冒頭」として適用する
+        silence_step = (
             f"silenceremove=start_periods=1:start_duration=0.2:start_threshold={cfg.silence_threshold_db:g}dB"
         )
+        filters.append(silence_step)
         if cfg.trim_silence_trailing:
-            filters.extend(
-                [
-                    "areverse",
-                    (
-                        "silenceremove=start_periods=1:start_duration=0.2:"
-                        f"start_threshold={cfg.silence_threshold_db:g}dB"
-                    ),
-                    "areverse",
-                ]
-            )
+            filters.extend(["areverse", silence_step, "areverse"])
     if cfg.adaptive_eq:
         filters.append(f"equalizer=f={cfg.muddiness_freq_hz}:t=q:w=1:g={cfg.muddiness_gain_db:g}")
         filters.append(f"equalizer=f={cfg.harshness_freq_hz}:t=q:w=1:g={cfg.harshness_gain_db:g}")
@@ -319,9 +312,10 @@ def process_file(path: Path, cfg: CleanupConfig, *, apply: bool, force: bool, qu
             print(f"skip already cleaned: {path.name} (backup exists)")
         return False
 
-    duration = probe_duration(path)
     if apply and cfg.trim_silence and cfg.trim_silence_trailing and cfg.tail_fade_guard:
         duration = probe_trimmed_duration(path, cfg)
+    else:
+        duration = probe_duration(path)
     tmp = _tmp_output_for(path)
     cmd = build_ffmpeg_cmd(path, tmp, cfg, duration_sec=duration)
 
