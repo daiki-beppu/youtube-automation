@@ -71,7 +71,8 @@ Python module 移動: なし
 local fix 衝突注意:
 
 - `/music`（Suno Studio Multitrack export、ダウンロード省略、Lyria loop 結合）
-- `/video`（動画解析の agentic processing と既定 30 秒窓）
+- `/audit`（動画解析の agentic processing と既定 30 秒窓）
+- `/analytics`（analysis JSON validator の `uv run` 経由実行）
 - `/setup`（設定再生成時の JSON 正本参照）
 - `/automation`（公開ドキュメントと skill 解説の同期）
 
