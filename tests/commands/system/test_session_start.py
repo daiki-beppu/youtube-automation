@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fcntl
+import os
 import subprocess
 from pathlib import Path
 
@@ -100,6 +101,33 @@ def test_tag_diff_only_notifies(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
     assert session_start.main([]) == 0
     assert len(commands) == 1
     assert "新しい release" in capsys.readouterr().out
+
+
+def test_tag_diff_names_the_release_from_check_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    repo = _repo(tmp_path, 'tag="v5.7.1"')
+    _environment(monkeypatch, repo)
+    stdout = "pin 形式: tag pin (v5.7.1)\nupstream 最新リリース: v5.7.2\n→ 差分あり: v5.7.1 → v5.7.2\n"
+    monkeypatch.setattr(
+        session_start, "_command", lambda command, root, **kwargs: subprocess.CompletedProcess(command, 1, stdout, "")
+    )
+    assert session_start.main([]) == 0
+    assert "新しい release v5.7.2 があります。yt-channels update --tag v5.7.2 で追従してください" in capsys.readouterr().out
+
+
+def test_blocked_main_notification_names_the_upstream_head(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    repo = _repo(tmp_path, 'branch="main"')
+    _environment(monkeypatch, repo)
+    monkeypatch.setattr(session_start, "_gate_reason", lambda root: "linked worktree のため自動追従しません")
+    stdout = f"upstream main HEAD: {'b' * 40}\nuv.lock 解決済み sha: {'a' * 40}\n"
+    monkeypatch.setattr(
+        session_start, "_command", lambda command, root, **kwargs: subprocess.CompletedProcess(command, 1, stdout, "")
+    )
+    assert session_start.main([]) == 0
+    assert "上流 main の最新は bbbbbbb です。yt-channels update で追従してください" in capsys.readouterr().out
 
 
 def test_failed_apply_reports_local_fix_and_recovery(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys) -> None:
@@ -220,3 +248,74 @@ def test_successful_commit_is_reported_when_followup_cannot_start(
     assert "追従と commit が完了" in output
     assert "検査に失敗" in output
     assert len(output.splitlines()) <= 3
+
+
+# 実行環境の git 設定（既定ブランチ名・署名・hooksPath）に結果が左右されないよう遮断する。
+_GIT_ENVIRONMENT = {
+    "GIT_CONFIG_GLOBAL": os.devnull,
+    "GIT_CONFIG_SYSTEM": os.devnull,
+    "GIT_AUTHOR_NAME": "session-start-test",
+    "GIT_AUTHOR_EMAIL": "session-start-test@example.invalid",
+    "GIT_COMMITTER_NAME": "session-start-test",
+    "GIT_COMMITTER_EMAIL": "session-start-test@example.invalid",
+}
+
+
+def _git(cwd: Path, *arguments: str) -> None:
+    subprocess.run(
+        ["git", *arguments],
+        cwd=cwd,
+        env={**os.environ, **_GIT_ENVIRONMENT},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+
+@pytest.fixture
+def clone(tmp_path: Path) -> Path:
+    """origin/HEAD と upstream を持つ clean な main checkout。"""
+    remote = tmp_path / "remote.git"
+    seed = tmp_path / "seed"
+    checkout = tmp_path / "checkout"
+    seed.mkdir()
+    _git(tmp_path, "init", "--bare", "--initial-branch=main", str(remote))
+    _git(seed, "init", "--initial-branch=main")
+    (seed / "README.md").write_text("seed\n", encoding="utf-8")
+    _git(seed, "add", "README.md")
+    _git(seed, "commit", "--quiet", "--message", "seed")
+    _git(seed, "remote", "add", "origin", str(remote))
+    _git(seed, "push", "--quiet", "origin", "main")
+    _git(tmp_path, "clone", "--quiet", str(remote), str(checkout))
+    return checkout
+
+
+def test_gate_allows_clean_default_branch_with_untracked_files(clone: Path) -> None:
+    (clone / "scratch.txt").write_text("untracked\n", encoding="utf-8")
+    assert session_start._gate_reason(clone) is None
+
+
+def test_gate_rejects_tracked_dirty_worktree(clone: Path) -> None:
+    (clone / "README.md").write_text("changed\n", encoding="utf-8")
+    assert session_start._gate_reason(clone) == "追跡ファイルに未コミット変更があるため自動追従しません"
+
+
+def test_gate_rejects_non_default_branch(clone: Path) -> None:
+    _git(clone, "switch", "--quiet", "--create", "feature")
+    assert session_start._gate_reason(clone) == "デフォルトブランチ以外（feature）のため自動追従しません"
+
+
+def test_gate_rejects_detached_head(clone: Path) -> None:
+    _git(clone, "checkout", "--quiet", "--detach", "HEAD")
+    assert session_start._gate_reason(clone) == "デフォルトブランチ以外（detached）のため自動追従しません"
+
+
+def test_gate_rejects_branch_without_upstream(clone: Path) -> None:
+    _git(clone, "branch", "--unset-upstream")
+    assert session_start._gate_reason(clone) == "追跡 upstream branch がないため自動追従しません"
+
+
+def test_gate_rejects_linked_worktree(clone: Path, tmp_path: Path) -> None:
+    linked = tmp_path / "linked"
+    _git(clone, "worktree", "add", "--quiet", "-b", "topic", str(linked))
+    assert session_start._gate_reason(linked) == "linked worktree のため自動追従しません"

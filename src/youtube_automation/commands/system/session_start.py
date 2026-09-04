@@ -10,15 +10,25 @@ from pathlib import Path
 
 from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.commands.system.automation_update import _load_pyproject, _resolve_repo_root
+from youtube_automation.commands.system.automation_update_followup import migrate_action, render_action
 from youtube_automation.commands.system.automation_update_refs import _detect_pin
 from youtube_automation.core.errors import ConfigError
 
 _PREFIX = "[yt-session-start]"
 _CHECK_TIMEOUT_SECONDS = 3
+_LATEST_RELEASE_PREFIX = "upstream 最新リリース: "
 
 
 def _command(command: list[str], root: Path, *, timeout: int | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(command, cwd=root, capture_output=True, text=True, check=False, timeout=timeout)
+
+
+def _value_after(output: str, prefix: str) -> str | None:
+    """`yt-automation-update check` の 1 行から prefix に続く値を取り出す。"""
+    for line in output.splitlines():
+        if line.startswith(prefix):
+            return line[len(prefix) :].strip() or None
+    return None
 
 
 def _git_output(root: Path, *arguments: str) -> str | None:
@@ -48,12 +58,9 @@ def _gate_reason(root: Path) -> str | None:
 
 def _followup_actions(root: Path, apply_output: str) -> list[str]:
     actions: list[str] = []
-    migrate = _command(["uv", "run", "yt-skills", "migrate-config", "--channel-dir", str(root), "--dry-run"], root)
-    if "dry-run 完了:" in migrate.stdout:
-        actions.append("要 migrate")
-    render = _command(["uv", "run", "yt-document-render", "--check", "--all"], root)
-    if render.returncode != 0:
-        actions.append("要 render")
+    for action in (migrate_action(root, _command), render_action(root, _command)):
+        if action is not None:
+            actions.append(action)
     if "Claude Code を再起動" in apply_output:
         actions.append("Claude Code を再起動してください")
     return actions
@@ -83,12 +90,16 @@ def _run(_: argparse.Namespace) -> int:
             if check.returncode != 1:
                 return 0
             if pin.kind == "tag":
-                print(f"{_PREFIX} 新しい release があります。yt-channels update --tag <tag> で追従してください")
+                tag = _value_after(check.stdout, _LATEST_RELEASE_PREFIX)
+                release = f"新しい release {tag}" if tag else "新しい release"
+                print(f"{_PREFIX} {release} があります。yt-channels update --tag {tag or '<tag>'} で追従してください")
                 return 0
             reason = _gate_reason(root)
             if reason:
+                head = _value_after(check.stdout, f"upstream {pin.value} HEAD: ")
+                upstream = f"上流 {pin.value} の最新は {head[:7]} です" if head else "上流に更新があります"
                 print(f"{_PREFIX} {reason}")
-                print(f"{_PREFIX} 上流に更新があります。yt-channels update で追従してください")
+                print(f"{_PREFIX} {upstream}。yt-channels update で追従してください")
                 return 0
             apply = _command(["uv", "run", "yt-automation-update", "apply", "--commit", "--accept-hooks"], root)
             output = "\n".join((apply.stdout, apply.stderr))
