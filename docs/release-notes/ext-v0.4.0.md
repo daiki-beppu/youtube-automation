@@ -11,7 +11,7 @@ sidebar:
 ## 30 秒サマリー
 
 - Suno Helper 0.4.0、DistroKid Helper 0.3.1、Community Helper 0.3.0 を収録した Chrome 拡張リリースです。
-- 初回インストールと更新は、チャンネルリポジトリで `/extension` を実行すると導入状態に応じて案内されます。
+- 初回インストールと更新は、チャンネルリポジトリで `/ext-install` を実行すると導入状態に応じて案内されます。
 - 手動で取得する場合は、GitHub Release に各拡張の Chrome 用 ZIP が用意されています。
 
 ## アップデート方法
@@ -19,7 +19,7 @@ sidebar:
 ご自身のチャンネルリポジトリで次を実行してください。
 
 ```text
-/extension
+/ext-install
 ```
 
 ## 新機能
