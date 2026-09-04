@@ -103,7 +103,7 @@ class TestBuildParser:
         )
 
         assert result.returncode == 0
-        assert "--engine {veo,omni,h3}" in result.stdout
+        assert "--engine {veo,fal,omni,h3}" in result.stdout
 
     def test_parser_accepts_lite_preview_model(self):
         # Given: Issue #129 のメインケース。preview モデルを CLI から指定可能。
@@ -268,8 +268,11 @@ class TestBuildParser:
         # Then
         assert args.skip_existing is False
 
-    def test_parser_engine_defaults_to_veo(self):
-        assert _build_parser().parse_args([]).engine == "veo"
+    def test_parser_engine_defaults_to_none_for_config_resolution(self):
+        assert _build_parser().parse_args([]).engine is None
+
+    def test_parser_accepts_fal_engine(self):
+        assert _build_parser().parse_args(["--engine", "fal"]).engine == "fal"
 
     def test_parser_accepts_omni_engine(self):
         assert _build_parser().parse_args(["--engine", "omni"]).engine == "omni"
@@ -1181,6 +1184,64 @@ class TestMainOmniEngine:
 
         assert excinfo.value.code == 0
         assert generate_omni.call_args.args[3] == DEFAULT_OMNI_MODEL
+
+
+class TestMainFalEngine:
+    def test_config_selects_fal_without_cli_engine(self, tmp_path, monkeypatch):
+        from youtube_automation.commands.media import generate_loop_video as mod
+
+        col = _make_collection(tmp_path)
+        _write_image(col)
+        monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "-y"])
+        fal_config = {
+            "model": "minimax/h3-max-turbo/image-to-video",
+            "allowed_models": ["minimax/h3-max-turbo/image-to-video"],
+        }
+        with (
+            _patch_main_boundaries() as mocks,
+            patch.object(mod, "generate_fal_loop_video", return_value=True) as generate_fal,
+        ):
+            _set_default_mocks(mocks)
+            mocks["load_config"].return_value = {"engine": "fal", "fal": fal_config}
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+
+        assert excinfo.value.code == 0
+        generate_fal.assert_called_once()
+        mocks["create_veo_genai_client"].assert_not_called()
+
+    def test_cli_veo_overrides_configured_fal(self, tmp_path, monkeypatch):
+        from youtube_automation.commands.media import generate_loop_video as mod
+
+        col = _make_collection(tmp_path)
+        _write_image(col)
+        monkeypatch.setattr(sys, "argv", ["yt-generate-loop-video", str(col), "--engine", "veo", "-y"])
+        with _patch_main_boundaries() as mocks, patch.object(mod, "generate_fal_loop_video") as generate_fal:
+            _set_default_mocks(mocks)
+            mocks["load_config"].return_value = {"engine": "fal"}
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+
+        assert excinfo.value.code == 0
+        mocks["generate_loop_video"].assert_called_once()
+        generate_fal.assert_not_called()
+
+    def test_unallowed_fal_model_fails_before_generator(self, tmp_path, monkeypatch):
+        from youtube_automation.commands.media import generate_loop_video as mod
+
+        col = _make_collection(tmp_path)
+        _write_image(col)
+        monkeypatch.setattr(
+            sys, "argv", ["yt-generate-loop-video", str(col), "--engine", "fal", "--model", "unapproved", "-y"]
+        )
+        with _patch_main_boundaries() as mocks, patch.object(mod, "generate_fal_loop_video") as generate_fal:
+            _set_default_mocks(mocks)
+            mocks["load_config"].return_value = {"fal": {"allowed_models": ["minimax/h3-max-turbo/image-to-video"]}}
+            with pytest.raises(SystemExit) as excinfo:
+                mod.main()
+
+        assert excinfo.value.code == 1
+        generate_fal.assert_not_called()
 
 
 class TestMainH3Engine:
