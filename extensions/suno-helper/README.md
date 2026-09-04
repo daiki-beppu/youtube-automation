@@ -45,10 +45,10 @@ browser use から overlay を安定して観測できるよう、操作 panel �
 | `[data-suno-control="collection-queue-discard-confirmation"]`                                      | 停止中 queue のインライン破棄確認                                                                          |
 | `[data-suno-control="run"]` / `[data-suno-control="stop"]`                                         | 主要操作ボタン                                                                                            |
 | `[data-suno-control="notification-enabled"]`                                                       | OS 通知と固定音をまとめて切り替える shadcn Switch                                                        |
-| `[data-suno-control="download-enabled"]`                                                           | Suno Studio からの download 実行を切り替える shadcn Switch（既定 ON）                                    |
+| `[data-suno-control="download-enabled"]`                                                           | 連続実行と Playlist / Download からの再開で Studio download を行うかを切り替える shadcn Switch（既定 ON）。`download-only` の明示操作には適用されない |
 | `[data-suno-control="resume"]` / `[data-suno-control="dismiss-resume"]`                            | 前回中断 resume バナーの再開 / 閉じる                                                                     |
 | `[data-suno-control="adopt-selected-clips"]`                                                       | Suno 上の選択中 clip を採用                                                                               |
-| `[data-suno-control="download-only"]`                                                             | Suno 上の選択中 clip を採用し、生成・playlist 追加を行わず Studio download だけを実行                    |
+| `[data-suno-control="download-only"]`                                                             | Suno 上の選択中 clip を採用し、生成・playlist 追加を行わず Studio download だけを実行（`download-enabled` が OFF でも表示・実行できる明示操作） |
 | `[data-suno-control="retry-playlist"]` / `[data-suno-control="retry-download"]`                    | playlist / download phase から再開                                                                        |
 | `role="status"` + `data-suno-status`                                                               | live status。`data-suno-status="error"` は handoff / retry 判断の入口                                     |
 | `[data-suno-entry-list]` / `[data-suno-entry-index]`                                               | entry 一覧。各行に `data-suno-entry-state` と `data-suno-entry-selected` が付く                           |

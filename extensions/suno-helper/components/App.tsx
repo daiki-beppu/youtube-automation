@@ -27,7 +27,6 @@ import {
   RadioGroupItem,
   ScrollArea,
   ServerSourceField,
-  Switch,
 } from "@youtube-automation/ui";
 import { useEffect, useRef, useState } from "react";
 
@@ -39,6 +38,7 @@ import {
 } from "../lib/pattern-selection";
 import { buildSelectedEntriesRunOverrides } from "../lib/run-overrides";
 import { CompletionSoundControls } from "./CompletionSoundControls";
+import { DownloadControls } from "./DownloadControls";
 import { PatternList } from "./PatternList";
 import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
 import { RunTimingPanel } from "./RunTimingPanel";
@@ -608,23 +608,11 @@ export function App() {
         onEnabledChange={setCompletionSoundEnabled}
       />
 
-      <section
-        className="flex flex-col gap-1 text-sm"
-        aria-label="ダウンロード設定"
-      >
-        <label className="flex items-center gap-2">
-          <Switch
-            checked={downloadEnabled}
-            disabled={!downloadEnabledLoaded || controlsLocked}
-            data-suno-control="download-enabled"
-            onCheckedChange={(checked) => setDownloadEnabled(checked === true)}
-          />
-          <span className="font-medium">ダウンロードまで実行する</span>
-        </label>
-        <p className="text-xs text-muted-foreground">
-          Suno Studio・Premier 必須
-        </p>
-      </section>
+      <DownloadControls
+        enabled={downloadEnabled}
+        disabled={!downloadEnabledLoaded || controlsLocked}
+        onEnabledChange={setDownloadEnabled}
+      />
 
       <div className="flex gap-2">
         <Button
