@@ -540,6 +540,7 @@ def smooth_loop(
     trim_tail_sec: float = 1.0,
     crf: int = 18,
     preset: str = "slow",
+    scale_to: tuple[int, int] | None = None,
 ) -> bool:
     """末尾トリム + FFmpeg クロスフェードでループの継ぎ目を滑らかにする。
 
@@ -547,6 +548,7 @@ def smooth_loop(
     trim_tail_sec でカットしてからクロスフェードで結合する。
     再エンコード時の crf/preset は compress_loop と揃えると `--smooth` 実行後も
     `compress_loop` 由来の容量削減効果を維持できる（Issue #175）。
+    scale_to 指定時は同じ filter graph 内で Lanczos アップスケールする。
     """
     output = video_path.with_stem(video_path.stem + "_smooth")
     duration_cmd = [
@@ -576,12 +578,16 @@ def smooth_loop(
     print(f"  [Trim]   末尾 {trim_tail_sec}秒カット（{duration:.1f}秒 → {usable_end:.1f}秒）")
 
     # 末尾と先頭をクロスフェードで結合
+    output_filter = "[out]"
+    if scale_to is not None:
+        width, height = scale_to
+        output_filter = f"[xfaded];[xfaded]scale={width}:{height}:flags=lanczos[out]"
     filter_complex = (
         f"[0]trim=0:{usable_end},setpts=PTS-STARTPTS[trimmed];"
         f"[trimmed]split[main][tail];"
         f"[main]trim=0:{trim_end},setpts=PTS-STARTPTS[a];"
         f"[tail]trim={trim_end}:{usable_end},setpts=PTS-STARTPTS[b];"
-        f"[b][a]xfade=transition=fade:duration={crossfade_sec}:offset=0[out]"
+        f"[b][a]xfade=transition=fade:duration={crossfade_sec}:offset=0{output_filter}"
     )
 
     cmd = [
