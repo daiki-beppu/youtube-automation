@@ -59,7 +59,7 @@ cloud / local とも同じ `references/run-sandwich.sh` を使う。runner は�
 ```bash
 bash .claude/skills/wf-new/references/run-sandwich.sh \
   --repository-url <channel-repository> --ref <branch> --workspace <empty-directory> -- \
-  --channel-slug <channel> --collection <collection> \
+  --collection <collection> \
   --collection-dir collections/<planning|live>/<collection> \
   --agent <claude|codex> --prompt "/wf-new --auto" \
   --generation-cost-usd 0 --monthly-run-count <今月完了済みrun数> \
