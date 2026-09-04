@@ -25,6 +25,11 @@ export interface StudioExportDeps {
 
 type Button = HTMLButtonElement;
 
+interface TrustedClickUntilOptions {
+  postClickDelayMs?: number;
+  recoverButton?: () => Promise<void>;
+}
+
 function isVisible(element: Element): boolean {
   if (!(element instanceof HTMLElement) || element.hidden) return false;
   const style = getComputedStyle(element);
@@ -171,7 +176,8 @@ export async function clickStudioButtonUntil<T extends HTMLElement>(
 export async function clickStudioAriaButtonUntil<T extends HTMLElement>(
   ariaLabel: string,
   findResult: () => T | null,
-  description: string
+  description: string,
+  options: TrustedClickUntilOptions = {}
 ): Promise<T> {
   const deadline = Date.now() + DOM_TIMEOUT_MS;
   while (Date.now() < deadline) {
@@ -180,6 +186,13 @@ export async function clickStudioAriaButtonUntil<T extends HTMLElement>(
     const button = buttonByAriaLabel(ariaLabel);
     if (button && !button.disabled) {
       await dispatchTrustedStudioClick(button);
+      if (options.postClickDelayMs) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, options.postClickDelayMs)
+        );
+      }
+    } else if (options.recoverButton) {
+      await options.recoverButton();
     }
     await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
   }
@@ -400,7 +413,22 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
             trackIndex + 1
               ? document.querySelector<HTMLElement>("[data-track-id]")
               : null,
-          `track ${trackIndex + 1} 件`
+          `track ${trackIndex + 1} 件`,
+          {
+            // Track creation is asynchronous. Waiting before the next poll
+            // prevents duplicate Add Audio actions from overshooting the
+            // expected count when Studio is under load.
+            postClickDelayMs: 1_000,
+            // A click during the closing edge of the menu animation can only
+            // dismiss the menu. Reopen it so the action itself can be retried.
+            recoverButton: async () => {
+              const trigger = buttonByAriaLabel("Add new track");
+              if (trigger && !trigger.disabled) {
+                await dispatchTrustedStudioClick(trigger);
+                await new Promise((resolve) => setTimeout(resolve, 500));
+              }
+            },
+          }
         );
       }
       const tracks = await waitForTrackCount(trackIndex + 1);

@@ -117,6 +117,70 @@ describe("Studio multitrack export", () => {
     vi.mocked(sendMessage).mockReset();
   });
 
+  it("Given Add Audio の初回 click が menu を閉じるだけ When track を追加する Then menu を開き直して再試行する", async () => {
+    vi.useFakeTimers();
+    try {
+      const firstTrack = document.createElement("div");
+      firstTrack.dataset.trackId = "track-1";
+      firstTrack.getBoundingClientRect = () =>
+        ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+      const createMenuItem = (): HTMLButtonElement => {
+        const item = document.createElement("button");
+        item.setAttribute("aria-label", "Add Audio track");
+        item.getBoundingClientRect = () =>
+          ({ left: 30, top: 40, width: 20, height: 10 }) as DOMRect;
+        document.body.append(item);
+        return item;
+      };
+      document.body.append(firstTrack);
+      createMenuItem();
+
+      let clickAttempts = 0;
+      let reopenAttempts = 0;
+      vi.mocked(sendMessage).mockImplementation(async (type) => {
+        if (type !== "sendTrustedClick") return undefined;
+        clickAttempts += 1;
+        const item = document.querySelector<HTMLButtonElement>(
+          'button[aria-label="Add Audio track"]'
+        );
+        item?.remove();
+        if (clickAttempts === 1) return undefined;
+        const secondTrack = document.createElement("div");
+        secondTrack.dataset.trackId = "track-2";
+        secondTrack.getBoundingClientRect = () =>
+          ({ left: 0, top: 20, width: 20, height: 20 }) as DOMRect;
+        document.body.append(secondTrack);
+        return undefined;
+      });
+
+      const resultPromise = clickStudioAriaButtonUntil(
+        "Add Audio track",
+        () =>
+          document.querySelectorAll<HTMLElement>("[data-track-id]").length === 2
+            ? document.querySelector<HTMLElement>("[data-track-id]")
+            : null,
+        "track 2 件",
+        {
+          postClickDelayMs: 500,
+          recoverButton: async () => {
+            reopenAttempts += 1;
+            createMenuItem();
+          },
+        }
+      );
+      const assertion = expect(resultPromise).resolves.toBe(firstTrack);
+
+      await vi.runAllTimersAsync();
+      await assertion;
+      expect(clickAttempts).toBe(2);
+      expect(reopenAttempts).toBe(1);
+    } finally {
+      vi.useRealTimers();
+      document.body.replaceChildren();
+      vi.mocked(sendMessage).mockReset();
+    }
+  });
+
   it("Given Studio の inline rename When 値を確定 Then blur で保存を発火する", () => {
     const input = document.createElement("input");
     let committed = "";
