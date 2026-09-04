@@ -19,6 +19,8 @@ from youtube_automation.domains.suno.downloaded.models import (
 from youtube_automation.domains.suno.name_matching import (
     SunoNameIndex,
     split_suno_duplicate_stem,
+    split_suno_studio_track_prefix,
+    suno_filename_lookup_candidates,
     suno_name_lookup_candidates,
 )
 
@@ -32,6 +34,18 @@ _ZIP_MAX_ENTRIES = 1000
 class DownloadedArchiveResult:
     audio_count: int
     placed_count: int
+
+
+@dataclass(slots=True)
+class _ExtractedAudio:
+    """ZIP から展開した 1 メンバーの配置先。`variant` だけが Studio トラック順の割当で書き換わる。"""
+
+    path: Path
+    lookup: str
+    track_num: int
+    variant: str
+    studio_track_number: int | None
+    archive_order: int
 
 
 def count_audio_files(music_dir: Path) -> int:
@@ -110,19 +124,37 @@ _OUTPUT_STEM_SEPARATOR_RE = re.compile(r"[\\/]+")
 _OUTPUT_STEM_SPACE_RE = re.compile(r"\s+")
 
 
-def _zip_member_lookup_candidates(filename: str) -> list[tuple[str, str]]:
+def _studio_track_prefix_aliases(stem: str) -> tuple[frozenset[str], int | None]:
+    """Studio の数字 prefix を剥がしてはじめて得られる候補と、そのトラック番号を返す。"""
+    base, studio_track_number = split_suno_studio_track_prefix(stem)
+    if studio_track_number is None:
+        return frozenset(), None
+    return frozenset(suno_name_lookup_candidates(base)), studio_track_number
+
+
+def _zip_member_lookup_candidates(filename: str) -> list[tuple[str, str, int | None]]:
     member_path = PurePosixPath(filename)
     relative_stem = member_path.with_suffix("").as_posix()
     raw_stems = [relative_stem, member_path.stem]
-    deduped: list[tuple[str, str]] = []
+    deduped: list[tuple[str, str, int | None]] = []
     for raw_stem in raw_stems:
         stem, duplicate_number = split_suno_duplicate_stem(raw_stem)
+        studio_aliases, studio_track_number = _studio_track_prefix_aliases(stem)
         variant = "b" if duplicate_number == 1 else "a"
-        for candidate in suno_name_lookup_candidates(stem):
-            item = (candidate, variant)
+        for candidate in suno_filename_lookup_candidates(stem):
+            # prefix を剥がしてはじめて照合できた候補だけを Studio トラックとして扱う。
+            # 数字始まりの曲名が prefix なしで一致した場合は既存どおり重複連番で variant を決める
+            is_studio_alias = candidate in studio_aliases and duplicate_number == 0
+            item = (candidate, variant, studio_track_number if is_studio_alias else None)
             if item not in deduped:
                 deduped.append(item)
     return deduped
+
+
+def _studio_track_sort_key(item: _ExtractedAudio) -> tuple[int, int]:
+    """Studio トラック番号を数値昇順に、同番号は ZIP 内の出現順に並べる。"""
+    track_number = item.studio_track_number
+    return (-1 if track_number is None else track_number, item.archive_order)
 
 
 def _sanitize_output_stem(stem: str) -> str:
@@ -160,15 +192,20 @@ def _build_name_to_index(coll_dir: Path, prompt_entries_reader: PromptEntriesRea
     return SunoNameIndex.build(alias_groups)
 
 
-def _music_stem_lookup_candidates(stem: str) -> list[tuple[str, int]]:
-    """非正準形 stem から (照合候補, 重複連番) を列挙する。重複連番 0 は suffix なしの基準ファイル。"""
-    candidates: list[tuple[str, int]] = []
-    for candidate in suno_name_lookup_candidates(stem):
-        candidates.append((candidate, 0))
+def _music_stem_lookup_candidates(stem: str) -> list[tuple[str, int, int | None]]:
+    """非正準形 stem から (照合候補, 重複連番, Studio トラック番号) を列挙する。
+
+    重複連番 0 は suffix なしの基準ファイル。Studio トラック番号は数字 prefix を
+    剥がしてはじめて照合できた候補にだけ付き、ZIP 経路と同じ順序で variant を決めるために使う。
+    """
+    candidates: list[tuple[str, int, int | None]] = []
+    studio_aliases, studio_track_number = _studio_track_prefix_aliases(stem)
+    for candidate in suno_filename_lookup_candidates(stem):
+        candidates.append((candidate, 0, studio_track_number if candidate in studio_aliases else None))
     base, dup_no = split_suno_duplicate_stem(stem)
     if dup_no:
         for candidate in suno_name_lookup_candidates(base):
-            item = (candidate, dup_no)
+            item = (candidate, dup_no, None)
             if item not in candidates:
                 candidates.append(item)
     return candidates
@@ -191,7 +228,9 @@ def canonicalize_noncanonical_music_files(
         return []
 
     occupied_variants: dict[int, set[str]] = {}
-    matched_files: dict[int, list[tuple[int, str, Path, str]]] = {}
+    # ソートキーは (重複連番, Studio トラック番号, ファイル名)。Studio トラック番号は数値で比較するため
+    # `2 Title.wav` と `10 Title.wav` がファイル名の辞書順で逆転しない。prefix なしは -1 で先頭に置く
+    matched_files: dict[int, list[tuple[int, int, str, Path, str]]] = {}
     for audio_path in sorted(music_dir.iterdir()):
         if not audio_path.is_file() or audio_path.suffix.lower() not in _AUDIO_EXTENSIONS:
             continue
@@ -202,11 +241,14 @@ def canonicalize_noncanonical_music_files(
             )
             continue
         lookup_candidates = _music_stem_lookup_candidates(audio_path.stem)
-        resolved = name_index.resolve_with_candidate(candidate for candidate, _ in lookup_candidates)
+        resolved = name_index.resolve_with_candidate(candidate for candidate, _, _ in lookup_candidates)
         if resolved is not None:
             track_num, lookup = resolved
-            dup_no = next(number for candidate, number in lookup_candidates if candidate == lookup)
-            matched_files.setdefault(track_num, []).append((dup_no, audio_path.name, audio_path, lookup))
+            dup_no, studio_track_number = next(
+                (number, studio) for candidate, number, studio in lookup_candidates if candidate == lookup
+            )
+            track_order = -1 if studio_track_number is None else studio_track_number
+            matched_files.setdefault(track_num, []).append((dup_no, track_order, audio_path.name, audio_path, lookup))
 
     renames: list[tuple[Path, Path]] = []
     planned_dests: set[str] = set()
@@ -214,11 +256,11 @@ def canonicalize_noncanonical_music_files(
         files.sort()
         free_variants = [v for v in ("a", "b") if v not in occupied_variants.get(track_num, set())]
         if len(files) > len(free_variants):
-            names = ", ".join(name for _, name, _, _ in files)
+            names = ", ".join(name for _, _, name, _, _ in files)
             raise ValueError(
                 f"entry {track_num:02d} へ照合されたファイルが variant (a/b) の空きを超えています: {names}"
             )
-        for (_, _, audio_path, lookup), variant in zip(files, free_variants, strict=False):
+        for (_, _, _, audio_path, lookup), variant in zip(files, free_variants, strict=False):
             new_name = f"{track_num:02d}{variant}-{_sanitize_output_stem(lookup)}{audio_path.suffix.lower()}"
             dest = music_dir / new_name
             if dest.exists() or new_name in planned_dests:
@@ -271,34 +313,66 @@ def _extract_and_rename_music_to_dir(
             audio_infos = [
                 info for info in infos if not info.is_dir() and Path(info.filename).suffix.lower() in _AUDIO_EXTENSIONS
             ]
-            extracted_audio: list[tuple[Path, str, int, str]] = []
-            for info in audio_infos:
+            extracted_audio: list[_ExtractedAudio] = []
+            for archive_order, info in enumerate(audio_infos):
                 if not _is_safe_zip_member(info.filename):
                     print(f"[yt-collection-serve] 危険な ZIP entry をスキップします: {info.filename}")
                     continue
                 extracted_path = Path(zf.extract(info, tmp_dir))
                 lookup_candidates = _zip_member_lookup_candidates(info.filename)
-                resolved = name_index.resolve_with_candidate(candidate for candidate, _ in lookup_candidates)
+                resolved = name_index.resolve_with_candidate(candidate for candidate, _, _ in lookup_candidates)
                 if resolved is None:
                     print(f"[yt-collection-serve] prompts に未対応の音声ファイルをスキップします: {info.filename}")
                     continue
                 track_num, lookup = resolved
-                variant = next(value for candidate, value in lookup_candidates if candidate == lookup)
-                extracted_audio.append((extracted_path, lookup, track_num, variant))
+                variant, studio_track_number = next(
+                    (variant, studio_track_number)
+                    for candidate, variant, studio_track_number in lookup_candidates
+                    if candidate == lookup
+                )
+                extracted_audio.append(
+                    _ExtractedAudio(
+                        path=extracted_path,
+                        lookup=lookup,
+                        track_num=track_num,
+                        variant=variant,
+                        studio_track_number=studio_track_number,
+                        archive_order=archive_order,
+                    )
+                )
+
+        studio_matches: dict[int, list[_ExtractedAudio]] = {}
+        occupied_variants: dict[int, set[str]] = {}
+        for item in extracted_audio:
+            if item.studio_track_number is None:
+                occupied_variants.setdefault(item.track_num, set()).add(item.variant)
+            else:
+                studio_matches.setdefault(item.track_num, []).append(item)
+        for track_num, matches in studio_matches.items():
+            # Studio のトラック番号は数値で昇順に並べる。同番号は ZIP 内の出現順で決める
+            matches.sort(key=_studio_track_sort_key)
+            free_variants = [
+                variant for variant in ("a", "b") if variant not in occupied_variants.get(track_num, set())
+            ]
+            if len(matches) > len(free_variants):
+                names = ", ".join(item.path.name for item in matches)
+                raise ValueError(f"entry {track_num:02d} matched more files than variants (a/b): {names}")
+            for item, variant in zip(matches, free_variants, strict=False):
+                item.variant = variant
 
         moved_count = 0
-        for extracted, lookup, track_num, variant in extracted_audio:
-            if not extracted.is_file():
-                print(f"[yt-collection-serve] ZIP entry の展開結果が見つかりません: {extracted}")
+        for item in extracted_audio:
+            if not item.path.is_file():
+                print(f"[yt-collection-serve] ZIP entry の展開結果が見つかりません: {item.path}")
                 continue
-            ext = extracted.suffix.lower()
+            ext = item.path.suffix.lower()
             if ext not in _AUDIO_EXTENSIONS:
                 continue
-            new_name = f"{track_num:02d}{variant}-{_sanitize_output_stem(lookup)}{ext}"
+            new_name = f"{item.track_num:02d}{item.variant}-{_sanitize_output_stem(item.lookup)}{ext}"
             dest = target_dir / new_name
             if dest.exists():
                 raise ValueError(f"ZIP extraction output name collision: {dest.name}")
-            shutil.move(str(extracted), str(dest))
+            shutil.move(str(item.path), str(dest))
             moved_count += 1
 
         print(f"[yt-collection-serve] 展開完了: {moved_count} files → {target_dir}")
