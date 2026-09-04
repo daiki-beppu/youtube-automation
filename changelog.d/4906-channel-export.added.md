@@ -1,0 +1,1 @@
+- workspace の channel を検証付きで独立リポジトリ用 directory へコピーする `yt-channel-export` を追加した（#4906）。

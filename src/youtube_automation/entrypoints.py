@@ -11,6 +11,7 @@ from youtube_automation.cli_stdio import configure_utf8_stdio
 
 _CHANNEL_OPTION_CONFLICTS = {
     "youtube_automation.commands.channel.channel",
+    "youtube_automation.commands.channel.channel_export",
     "youtube_automation.commands.channel.channel_import",
     "youtube_automation.commands.channel.workspace_status",
     "youtube_automation.commands.analytics.benchmark_collector",
@@ -89,6 +90,7 @@ yt_bulk_update_desc = _make_entrypoint("youtube_automation.commands.metadata.bul
 yt_bulk_update_synthetic_media = _make_entrypoint("youtube_automation.commands.metadata.bulk_update_synthetic_media")
 yt_captions_upload = _make_entrypoint("youtube_automation.commands.youtube.captions_upload")
 yt_channel = _make_entrypoint("youtube_automation.commands.channel.channel")
+yt_channel_export = _make_entrypoint("youtube_automation.commands.channel.channel_export")
 yt_channel_import = _make_entrypoint("youtube_automation.commands.channel.channel_import")
 yt_channel_init = _make_entrypoint("youtube_automation.commands.channel.channel_init")
 yt_channel_seed = _make_entrypoint("youtube_automation.commands.channel.channel_seed")
