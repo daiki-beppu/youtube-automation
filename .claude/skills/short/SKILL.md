@@ -92,7 +92,7 @@ generation = load_skill_config("short")[content_type]
 | `uv run yt-upload-shorts <collection-path>` | collection 型の全ショートを順次投稿 |
 | `uv run yt-shorts-bulk-update-loc --dry-run` | 投稿済み collection Shorts の localization 更新を確認 |
 | `uv run yt-generate-image --aspect-ratio "9:16" --prompt "<text>" --output <collection>/10-assets/short.png -y` | `--thumbnail` の 9:16 画像生成 |
-| `uv run yt-generate-shorts-loop <collection-path> -y` | `short.png` の 9:16 ループ動画化 |
+| `uv run yt-generate-shorts-loop <collection-path> [--engine veo\|fal] -y` | `short.png` の 9:16 ループ動画化 |
 
 ## Instructions
 

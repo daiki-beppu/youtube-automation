@@ -1,6 +1,6 @@
 # `--thumbnail` の手順
 
-collection 型ショートの素材として `10-assets/short.png`（9:16 縦型画像）と、必要に応じて `10-assets/short-loop.mp4`（Veo 3.1 の 9:16 ループ動画）を準備する。
+collection 型ショートの素材として `10-assets/short.png`（9:16 縦型画像）と、必要に応じて `10-assets/short-loop.mp4`（Veo または fal.ai の 9:16 ループ動画）を準備する。
 
 ## 完了条件
 
@@ -69,10 +69,16 @@ open <collection-path>/10-assets/short.png
 
 ## Step 5: ループ動画化する
 
-承認された `short.png` を Veo 3.1 で変換する。
+承認された `short.png` を既定の Veo で変換する。MiniMax H3 を使う場合は fal engine を明示する。
 
 ```bash
 uv run yt-generate-shorts-loop <collection-path> -y
+```
+
+fal.ai を使う場合（入力 768x1344、出力 1080x1920）:
+
+```bash
+uv run yt-generate-shorts-loop <collection-path> --engine fal -y
 ```
 
 カスタム動作も指定できる。
@@ -97,7 +103,7 @@ open <collection-path>/10-assets/short-loop.mp4
 
 | 配置 | 責務 |
 |---|---|
-| `.claude/skills/short/config.default.yaml` の `veo` 節 | Veo モデル / デフォルトプロンプト。未定義時は CLI 内蔵値 |
+| `.claude/skills/short/config.default.yaml` の `engine` / `veo` / `fal` | 既定 engine と engine 別モデル・生成設定。未定義時は CLI 内蔵値 |
 | `config/skills/short.yaml` | `yt-generate-shorts-loop` の skill-config 上書き |
 | `config/channel/meta.json` | channel name |
 | `config/channel/audio.json` | CTA に使う target duration |

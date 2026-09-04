@@ -51,10 +51,11 @@ collection の YouTube サムネイルを、競合の勝ちパターンとチャ
 
 `--loop` は確定済みの textless `main.png` / `main.jpg` を Veo、Gemini Omni Flash、または MiniMax H3 へ渡し、動画本編で繰り返せる `loop.mp4` を作ります。静止画の確定前には実行せず、生成後は継ぎ目と意図しない文字・動きをプレビューしてください。
 
+ショート向けの 9:16 ループでは `uv run yt-generate-shorts-loop <collection-path> --engine fal -y` を使うと、fal.ai の MiniMax H3 を選択できます。
+
 ## つまずいたら
 
 - **候補生成前に止まる** — `config/channel/`、対象 collection、参照画像を確認してください。チャンネル制作制約が未作成でも生成は続けられますが、先に `/channel-strategy --constraints` を実行すると判定基準を揃えられます
 - **provider の認証や quota で失敗する** — 自動では別 provider に切り替わりません。ADC、API key、利用上限を直すか、設定で provider を明示変更してから再実行してください
 - **`--compare` で不合格になる** — 正式画像へ確定せず、文字量、コントラスト、顔や主役の大きさを直した候補を生成して比較し直してください
 - **`--loop` が始まらない** — `main.png` または `main.jpg` が確定済みか、チャンネルで loop-video が有効かを確認してください
-
