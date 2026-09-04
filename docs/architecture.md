@@ -301,6 +301,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `application.live_chat.{codex,filters,history,models,runner}` | active broadcast のチャット取得、Codex 構造化判定、入出力フィルタ、PT 日次・時間・連続 user 上限、重複防止履歴、返信投稿 loop |
 | `commands.youtube.live_chat_reply` | `yt-live-chat-reply` 常駐 CLI。`comments.live_chat.enabled` を opt-in とし、VPS では独立した `live-chat-reply.service` から起動 |
 | `commands.system.skills_sync` | `yt-skills` 本体 |
+| `commands.system.channels` | channel registry の一覧表示と、適格な下流チャンネルを宣言順に `yt-automation-update apply` へ委譲する直列 fan-out CLI |
 | `commands.collections.collection_serve_discovery` | 固定 loopback endpoint の稼働 server registry、heartbeat、TTL、owner takeover |
 | `commands.media.audio_studio` | collection 音源の loopback 限定 API、Range 配信、static asset、server lifecycle |
 | `extensions/shared/server-discovery.ts` | registry schema v1 の検証と `/server-info` probe を両 helper 拡張へ提供 |
