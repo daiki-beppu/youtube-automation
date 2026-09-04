@@ -146,6 +146,19 @@ def test_load_minimal_sections(tmp_path, monkeypatch):
     assert config.pinned_comment.default_language == "en"
 
 
+def test_removed_minimax_music_engine_warns_as_unknown(tmp_path, monkeypatch, caplog):
+    sections = _minimal_sections()
+    sections["youtube.json"]["music_engine"] = "minimax"
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with caplog.at_level(logging.WARNING):
+        config = load_config()
+
+    assert config.youtube.music_engine == "minimax"
+    assert "music_engine='minimax' は未知の値です" in caplog.text
+
+
 def test_hashtag_line_prefixes_bare_tags_without_duplicate_hashes(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["content.json"]["descriptions"]["hashtags"] = [

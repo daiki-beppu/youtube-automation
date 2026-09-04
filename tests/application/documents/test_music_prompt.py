@@ -11,7 +11,7 @@ from youtube_automation.application.documents.music_prompt import (
     music_prompt_artifact_digest,
     write_music_prompt_document,
 )
-from youtube_automation.core.errors import DocumentMigrationError
+from youtube_automation.core.errors import DocumentMigrationError, DocumentValidationError
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
 
 
@@ -141,6 +141,25 @@ def test_review_failure_does_not_publish_or_update_state(tmp_path: Path, failure
         )
 
     assert state.read_bytes() == before
+    assert not target.exists()
+    assert not target.with_suffix(".html").exists()
+
+
+def test_removed_music_engine_is_rejected_by_schema_without_publishing(tmp_path: Path) -> None:
+    target = tmp_path / "20-documentation/removed-prompts.json"
+    target.parent.mkdir()
+    state = tmp_path / "workflow-state.json"
+    _state(state)
+
+    with pytest.raises(DocumentValidationError, match=r"schema keyword=enum pointer=/engine"):
+        write_music_prompt_document(
+            target,
+            state,
+            lambda: _document(engine="minimax"),
+            MarkdownMigrationDecision.NOT_REQUIRED,
+            machine_verify=lambda _document: None,
+        )
+
     assert not target.exists()
     assert not target.with_suffix(".html").exists()
 
