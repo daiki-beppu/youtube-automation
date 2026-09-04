@@ -77,9 +77,7 @@ def test_load_discards_output_path_mismatch(paths: tuple[Path, Path], tmp_path: 
 
 
 @pytest.mark.parametrize("missing", ["response_url", "status_url", "cancel_url"])
-def test_load_discards_state_missing_queue_url(
-    paths: tuple[Path, Path], tmp_path: Path, missing: str
-) -> None:
+def test_load_discards_state_missing_queue_url(paths: tuple[Path, Path], tmp_path: Path, missing: str) -> None:
     output, image = paths
     path = _save(output, image, tmp_path)
     data = json.loads(path.read_text())
