@@ -177,8 +177,7 @@ def test_cli_skip_download_sets_wire_contract(
     monkeypatch.setattr(
         suno_unattended_request,
         "register_unattended_request",
-        lambda _base_url, request: captured.append(request)
-        or "abcdefghijklmnopqrstuvwxyzABCDEFGH_1234567890",
+        lambda _base_url, request: captured.append(request) or "abcdefghijklmnopqrstuvwxyzABCDEFGH_1234567890",
     )
 
     assert (

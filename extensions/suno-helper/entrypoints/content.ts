@@ -149,6 +149,15 @@ import {
   type DurationOutlierPolicy,
 } from "../lib/yield-guard";
 
+const DOWNLOAD_SKIPPED_MESSAGE =
+  "ダウンロード未実行。Suno から手動で取得して 02-Individual-music/ へ配置してください。";
+
+function downloadCompletionMessage(
+  downloadEnabled: boolean
+): Pick<ProgressPayload, "message"> {
+  return downloadEnabled ? {} : { message: DOWNLOAD_SKIPPED_MESSAGE };
+}
+
 function advanceRunTimingReceipt(
   receipt: RunTimingReceipt,
   payload: ProgressPayload,
@@ -473,6 +482,25 @@ function assertOptionalDurationOutlierWarnings(
   );
 }
 
+function assertRetryDownloadSettings(record: Record<string, unknown>): {
+  downloadEnabled: boolean;
+  shouldDownload: boolean;
+} {
+  const shouldDownload = assertOptionalBoolean(
+    record.shouldDownload,
+    "retryPlaylist.shouldDownload"
+  );
+  const downloadEnabled =
+    assertOptionalBoolean(
+      record.downloadEnabled,
+      "retryPlaylist.downloadEnabled"
+    ) ?? true;
+  return {
+    downloadEnabled,
+    shouldDownload: shouldDownload === true && downloadEnabled,
+  };
+}
+
 function assertRetryPlaylistPayload(value: unknown): RetryPlaylistPayload & {
   downloadEnabled: boolean;
 } {
@@ -537,15 +565,7 @@ function assertRetryPlaylistPayload(value: unknown): RetryPlaylistPayload & {
       record.submittedClipIdsAreDurationFiltered,
       "retryPlaylist.submittedClipIdsAreDurationFiltered"
     ),
-    shouldDownload: assertOptionalBoolean(
-      record.shouldDownload,
-      "retryPlaylist.shouldDownload"
-    ),
-    downloadEnabled:
-      assertOptionalBoolean(
-        record.downloadEnabled,
-        "retryPlaylist.downloadEnabled"
-      ) ?? true,
+    ...assertRetryDownloadSettings(record),
     unattended,
   };
 }
@@ -2686,12 +2706,7 @@ export default defineContentScript({
         phase: PHASE.FINISHED,
         total,
         ...(downloadSummary === undefined ? {} : { downloadSummary }),
-        ...(!options.downloadEnabled
-          ? {
-              message:
-                "ダウンロード未実行。Suno から手動で取得して 02-Individual-music/ へ配置してください。",
-            }
-          : {}),
+        ...downloadCompletionMessage(options.downloadEnabled),
       });
       // run 一式完了時リロード (#1411 要件2)。playlist 追加で作った multi-select 状態は
       // Suno 内部 state に残り、同一タブの次 run の Cmd+P に混入するためページごと破棄する。
@@ -2928,7 +2943,7 @@ export default defineContentScript({
             emitProgress({ phase: PHASE.STOPPED, total: 0 });
             return;
           }
-          if (shouldDownload && downloadEnabled) {
+          if (shouldDownload) {
             const downloadContext = await resolveDownloadContext();
             assertUnattendedUiIsSafe();
             if (studioClipIds === null) {
@@ -2966,12 +2981,7 @@ export default defineContentScript({
           emitProgress({
             phase: PHASE.FINISHED,
             total: 0,
-            ...(!downloadEnabled
-              ? {
-                  message:
-                    "ダウンロード未実行。Suno から手動で取得して 02-Individual-music/ へ配置してください。",
-                }
-              : {}),
+            ...downloadCompletionMessage(downloadEnabled),
           });
           // retryPlaylist も playlist 追加で multi-select 状態を作るため完了時にページごと破棄する (#1411)。
           // リロード前に FINISHED snapshot を退避する（runAll の完了経路と同じ）。
