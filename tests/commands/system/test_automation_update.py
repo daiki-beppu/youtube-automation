@@ -1541,3 +1541,23 @@ def test_apply_pyproject_write_failure_is_step_failure(
     err = capsys.readouterr().err
     assert "'pyproject.toml の pin 書き換え' で失敗しました" in err
     assert "disk full" in err
+
+
+@pytest.mark.parametrize("staged", [False, True])
+def test_commit_apply_changes_includes_both_rename_paths(tmp_path: Path, staged: bool) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    _init_apply_git_repo(repo)
+    old = repo / "old.md"
+    old.write_text("skill contents\n")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "skill"], cwd=repo, check=True)
+    before = automation_update._git_status_paths(repo)
+    old.rename(repo / "new.md")
+    if staged:
+        subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    assert automation_update._git_status_paths(repo) == {"old.md", "new.md"}
+    automation_update._commit_apply_changes(repo, before, "v5.8.0")
+    assert subprocess.check_output(["git", "status", "--porcelain"], cwd=repo) == b""
+    tree = subprocess.check_output(["git", "ls-tree", "--name-only", "HEAD"], cwd=repo).splitlines()
+    assert b"new.md" in tree
+    assert b"old.md" not in tree

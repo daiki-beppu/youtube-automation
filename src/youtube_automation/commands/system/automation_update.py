@@ -199,6 +199,8 @@ def _git_status_paths(root: Path) -> set[str]:
             continue
         status = record[:2]
         paths.add(record[3:])
+        if "R" in status:
+            paths.add(records[index + 1])
         index += 2 if "R" in status or "C" in status else 1
     return paths
 
@@ -208,8 +210,9 @@ def _commit_apply_changes(root: Path, before_paths: set[str], ref: str) -> None:
     paths = sorted(_git_status_paths(root) - before_paths)
     if not paths:
         raise _StepFailed("apply 前後の git status に commit 対象の差分がありません")
+    existing = [p for p in paths if (root / p).exists() or (root / p).is_symlink()]
     commands = [
-        ["git", "add", "--", *paths],
+        *([["git", "add", "--", *existing]] if existing else []),
         ["git", "commit", "--only", "-m", f"chore: youtube-automation {ref} への追従", "--", *paths],
     ]
     for command in commands:
