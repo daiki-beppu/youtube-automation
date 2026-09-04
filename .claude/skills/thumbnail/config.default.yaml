@@ -21,6 +21,25 @@ loop:
   # 既存 loop.mp4 を loop-v{n}.mp4 へ退避するときの保持上限。
   max_backups: 3
 
+  # 全 engine で共有する構造化プロンプト。engine 節の同名キーで上書きできる。
+  # 強度語は motion_targets 側に含める。
+  motion_targets: []
+  static_targets: []
+
+  prompt_template: |
+    Locked camera, static composition, no camera movement.
+    The scene is a living painting: {static_clause} remain exactly as in the source image — same count, same shape, same position, perfectly still.
+    The only motion is {motion_clause}.
+    {base_rules}
+    Loop seamlessly with the first frame matching the last frame.
+
+  base_rules: |
+    Preserve the original lighting, color palette, depth, and framing.
+    No new objects, no new creatures, no smoke or magical particles appear; the world is closed and stable.
+    Lighting and contrast remain steady and gradual across the full frame.
+    The composition stays free of full-frame flashes, strobing, sudden brightness changes,
+    and close-up human faces; local candle-flame movement stays confined to each flame.
+
   veo:
     # Veo モデル ID。
     model: "veo-3.1-fast-generate-001"
@@ -33,24 +52,6 @@ loop:
       The composition stays free of full-frame flashes, strobing, sudden brightness changes,
       and close-up human faces; local candle-flame movement stays confined to each flame.
       Keep the scene calm and grounded, like a living painting.
-
-    # 構造化プロンプト。強度語は motion_targets 側に含める。
-    motion_targets: []
-    static_targets: []
-
-    prompt_template: |
-      Locked camera, static composition, no camera movement.
-      The scene is a living painting: {static_clause} remain exactly as in the source image — same count, same shape, same position, perfectly still.
-      The only motion is {motion_clause}.
-      {base_rules}
-      Loop seamlessly with the first frame matching the last frame.
-
-    base_rules: |
-      Preserve the original lighting, color palette, depth, and framing.
-      No new objects, no new creatures, no smoke or magical particles appear; the world is closed and stable.
-      Lighting and contrast remain steady and gradual across the full frame.
-      The composition stays free of full-frame flashes, strobing, sudden brightness changes,
-      and close-up human faces; local candle-flame movement stays confined to each flame.
 
     # Veo API 制約で現状 8 秒固定。
     duration_seconds: 8

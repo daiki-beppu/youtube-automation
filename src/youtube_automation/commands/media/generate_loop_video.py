@@ -102,7 +102,7 @@ def _parse_csv(value: str | None) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
-def resolve_prompt(args, veo_config: dict) -> str:
+def resolve_prompt(args, engine_config: dict, loop_config: dict | None = None) -> str:
     """CLI 引数と skill-config から最終プロンプトを決定する。
 
     優先順位:
@@ -117,8 +117,13 @@ def resolve_prompt(args, veo_config: dict) -> str:
             print("  [Warn]   --prompt が指定されたため --motion-targets / --static-targets は無視されます")
         return args.prompt
 
-    template = veo_config.get("prompt_template", "")
-    base_rules = veo_config.get("base_rules", "")
+    loop_config = loop_config or {}
+
+    def structured_value(key: str, default):
+        return engine_config[key] if key in engine_config else loop_config.get(key, default)
+
+    template = structured_value("prompt_template", "")
+    base_rules = structured_value("base_rules", "")
 
     cli_motion = _parse_csv(args.motion_targets)
     cli_static = _parse_csv(args.static_targets)
@@ -130,15 +135,15 @@ def resolve_prompt(args, veo_config: dict) -> str:
         except ValueError as e:
             print(f"  [Warn]   CLI structured prompt 構築失敗 ({e}) → default_prompt にフォールバック")
 
-    cfg_motion = list(veo_config.get("motion_targets") or [])
-    cfg_static = list(veo_config.get("static_targets") or [])
+    cfg_motion = list(structured_value("motion_targets", []) or [])
+    cfg_static = list(structured_value("static_targets", []) or [])
     if (cfg_motion or cfg_static) and template:
         try:
             return build_structured_prompt(cfg_motion, cfg_static, template, base_rules)
         except ValueError:
             pass
 
-    return veo_config.get("default_prompt") or DEFAULT_PROMPT
+    return engine_config.get("default_prompt") or DEFAULT_PROMPT
 
 
 def resolve_collection_paths(collection_path: Path) -> tuple[Path, Path]:
@@ -442,7 +447,7 @@ def main():
         "h3": DEFAULT_H3_MODEL,
     }[args.engine]
     model = args.model or engine_config.get("model", default_model)
-    prompt = resolve_prompt(args, engine_config)
+    prompt = resolve_prompt(args, engine_config, skill_config)
 
     collection_path = _resolve_collection_path(args, parser)
     image_path, output_path = resolve_collection_paths(collection_path)
