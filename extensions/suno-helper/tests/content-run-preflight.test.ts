@@ -724,6 +724,59 @@ describe("content unattended launch", () => {
     expect(location.hash).toBe("");
   });
 
+  it("Given skip-download の playlist checkpoint When unattended resume Then retryPlaylist も download を行わない", async () => {
+    setUnattendedLaunchHash({ skipDownload: true });
+    const entries = makePromptEntries(1);
+    harness.readResumeState.mockResolvedValue({
+      collectionId: "20260718-rjn-night-drive-collection",
+      failedIndex: 1,
+      total: 1,
+      timestamp: Date.now(),
+      submittedClipIds: ["clip-1", "clip-2"],
+      playlistExpectedClipCount: 2,
+      playlistUrlsBeforeCreate: [],
+    });
+    harness.sendMessage.mockImplementation((type: string) => {
+      if (type === "consumeUnattendedRequest") {
+        return Promise.resolve(harness.unattendedRequest);
+      }
+      if (type === "acquireUnattendedLease") {
+        return Promise.resolve({ acquired: true, token: "lease-token" });
+      }
+      if (type === "extensionVersionHandshake") {
+        return Promise.resolve({ version: "0.2.5", matches: true });
+      }
+      if (type === "fetchCollections") {
+        return Promise.resolve([
+          {
+            id: "20260718-rjn-night-drive-collection",
+            name: "night-drive",
+            theme: "night-drive",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+          },
+        ]);
+      }
+      if (type === "fetchCollectionPromptResponse") {
+        return Promise.resolve({ entries });
+      }
+      return Promise.resolve({ ok: true });
+    });
+
+    await loadContentScript();
+
+    await vi.waitFor(() =>
+      expect(harness.sendMessage).toHaveBeenCalledWith(
+        "retryPlaylist",
+        expect.objectContaining({
+          shouldDownload: false,
+          downloadEnabled: false,
+        })
+      )
+    );
+  });
+
   it("stops before generation when an existing playlist has no recovery clip ids", async () => {
     setUnattendedLaunchHash();
     harness.sendMessage.mockImplementation((type: string) => {

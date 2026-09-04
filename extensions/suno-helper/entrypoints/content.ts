@@ -3329,7 +3329,7 @@ export default defineContentScript({
             durationOutlierWarnings: resumeState?.durationOutlierWarnings,
             submittedClipIdsAreDurationFiltered:
               resumeState?.submittedClipIdsAreDurationFiltered,
-            shouldDownload: true,
+            shouldDownload: request.skipDownload !== true,
             downloadEnabled: request.skipDownload !== true,
             unattended: { request, deferredIndices: [], leaseToken },
           });
