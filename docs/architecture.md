@@ -71,15 +71,25 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 **チャンネルリポジトリ**: 1 チャンネル = 1 リポジトリ = 1 cwd で運用する下流リポジトリ（`CHANNEL_DIR` が指す先）。ADR-0029 以降の正規形であり、skills などの同梱資産は各リポジトリに実体コピーとして commit する。複数チャンネルの一元管理は置き場を 1 つにすることではなく、fan-out で操作を 1 回にすることで実現する。
 
-**workspace**: 複数チャンネルを `channels/<slug>/` として同居させる単一リポジトリ。共有物はルートに 1 セット、per-channel 状態は各チャンネル配下に置く。ADR-0029 で deprecated となり、警告リリースで警告、削除リリースで経路ごと撤去する（本項も同時に削除）。独立したチャンネルリポジトリへ戻す操作は channel export。
+**workspace**: 複数チャンネルを `channels/<slug>/` として同居させる単一リポジトリ。共有物はルートに 1 セット、per-channel 状態は各チャンネル配下に置く。ADR-0029 で deprecated となり、警告リリースで deprecated を告知、削除リリースで経路ごと撤去する（本項も同時に削除）。独立したチャンネルリポジトリへ戻す操作は channel export。
 
 **channel slug**: workspace 内でチャンネルを識別する `channels/` 直下のディレクトリ名。`--channel <slug>` または `CHANNEL=<slug>` で実行対象を指定する。workspace とともに ADR-0029 で deprecated（削除リリースで本項も削除）。
 
-**channel export（逆移行）**: workspace の `channels/<slug>/` を独立したチャンネルリポジトリへ copy + 検証で戻す操作。workspace 側は変更せず、git 履歴は引き継がない。ADR-0022 の import と対称。
+**channel export（逆移行）**: workspace の `channels/<slug>/` を独立したチャンネルリポジトリへ copy + 検証で戻す操作。workspace 側は変更せず、git 履歴は引き継がない。ADR-0022 の import と対称。最終段で channel registry の workspace エントリを同位置で戻し先のパスに置換する（一致が無ければ追加、戻し先が既にあれば no-op）。
+
+**旧チャンネルリポジトリ**: ADR-0022 の import で archive にした 001〜006ch の元リポジトリと、ツールキット以前の周辺リポジトリ。逆移行で新リポジトリを push した直後に削除し、復活させない。
+
+**dogfood チャンネル**: 逆移行を最初に適用し、独立したチャンネルリポジトリでフルライフサイクル 1 周を走らせて手順を検証する first-party チャンネル。002ch-deepfocus365。
+
+**フルライフサイクル 1 周**: 独立したチャンネルリポジトリで planning → upload → 公開後処理 → analytics → metadata 監査を 1 回ずつ通すこと。合格は移行起因の失敗 0 件。
+
+**凍結（workspace slug の）**: export 済みチャンネルの workspace 側 `channels/<slug>/` を書込不可にし、AI 向けの凍結中一覧と launchd 定期収集の停止で二重運用を防ぐ状態。workspace の削除までの暫定。
+
+**smoke check（逆移行の）**: dogfood チャンネル以外の 6 チャンネルに課す 4 点検査。export の等式 pass / doctor green / wf-status が collections を読める / analytics --status が返る。
 
 **competitor**: `analytics.benchmark.channels` に登録するベンチマーク分析対象の他者チャンネル。CLI フラグは `--competitor` であり、`--channel` は自チャンネル指定に予約する。
 
-**channel registry**: first-party チャンネルの絶対パス一覧を `~/.config/tayk/channels.json` に JSON 配列で保持するもの。表示名などは各チャンネルの `config/channel/meta.json` から解決する。dashboard の表示対象と fan-out の適格チャンネルの両方を列挙する台帳であり（ADR-0029）、channel export が戻し先のパスを追加する。
+**channel registry**: first-party チャンネルの絶対パス一覧を `~/.config/tayk/channels.json` に JSON 配列で保持するもの。表示名などは各チャンネルの `config/channel/meta.json` から解決する。dashboard の表示対象と fan-out の適格チャンネルの両方を列挙する台帳であり（ADR-0029）、channel export が workspace エントリを同位置で戻し先のパスに置換する（無ければ追加）。
 
 **fan-out**: channel registry の全エントリに同じ操作を 1 回の呼び出しで適用し、失敗をチャンネル単位で隔離する実行様式。表記は英字のまま。
 
@@ -91,7 +101,7 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 **local fix**: 同梱版と内容が異なる下流側の同期資産。追従は更新前 package との差分で検出し、明示の上書き指示なしには潰さない。
 
-**警告リリース**: workspace 経路が動作を維持したまま deprecation 警告を出し始めるリリース。
+**警告リリース**: workspace 経路が動作を維持したまま deprecated を告知するリリース。告知は CHANGELOG の `deprecated` fragment と逆移行ガイドの公開で行い、コード上の警告は出さない。廃止 hook の prune もここに入る。
 
 **削除リリース**: workspace 経路を物理削除するリリース。semver 規則上 major で、first-party 7 チャンネルの export 完了 + workspace archive をゲートにする。
 
