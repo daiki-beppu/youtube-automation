@@ -117,7 +117,7 @@ Chrome DevTools MCP は必須ではない。通常運用は browser use を prim
 6. `[data-suno-control="collection-select"]` で対象 collection を選ぶ。選択後、Playlist 名が表示されること、`data-suno-collection-id` が対象 id になることを確認する。
 7. 配信元または collection の選択後に自動取得が完了し、`role="status"` の live region が `N パターンを取得しました。` になること、`data-suno-entry-count` が 1 以上で `[data-suno-entry-list]` に entry 行が並ぶことを確認する。配信元候補は selector を開き、候補更新後に表示された対象を選択する。実行前に overlay 自体が更新されない場合だけページを再読み込みし、手順 3 からやり直す。
 8. 必要な entry だけを checkbox で残す。各行は `data-suno-entry-index` / `data-suno-entry-state` / `data-suno-entry-selected` を持つ。通常は全選択のままにする。
-9. `[data-suno-control="download-enabled"]` を確認する。既定 ON は Suno Studio・Premier が必要。Premier でない場合は OFF にし、playlist 追加で完了した後に Suno から手動取得して `02-Individual-music/` へ配置する。
+9. `[data-suno-control="download-enabled"]` を確認する。既定 ON は Suno Studio・Premier が必要。Premier でない場合は OFF にし、playlist 追加で完了した後に Suno から手動取得して `02-Individual-music/` へ配置する。この Switch は連続実行と再開に適用され、`[data-suno-control="download-only"]` の明示操作には適用されない。
 10. preset を確認し、`[data-suno-control="run"]`（表示文言: 全パターンを連続実行 / 選択したN件を連続実行）を押す。
 11. 実行中は Suno タブを reload / close せず、overlay の `data-suno-phase` と `role="status"` を監視する。agent は `finished` / `stopped` / `error` の終端 phase まで待つ。非終端 phase が変化しない場合は下記「無限待機を避ける監視ルール」で判断する。
 
@@ -151,6 +151,7 @@ browser use で Suno タブを前面にし、拡張アイコンをクリック�
 | 連続実行 | 実行時 | 開始 |
 | 停止 | 実行中のみ有効 | 任意中断 |
 | ダウンロードまで実行する | 任意 | 既定 ON。OFF は playlist 追加で完了し、Download から再開は表示しない |
+| ダウンロードのみ実行 | 任意 | Suno 上の選択中 clip を採用し、生成・playlist 追加をやり直さず Studio download を開始する。Switch が OFF でも実行可能 |
 
 agent が優先して使う DOM signal:
 
