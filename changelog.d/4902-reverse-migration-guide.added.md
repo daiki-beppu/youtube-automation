@@ -1,1 +1,0 @@
-- 逆移行ガイド `docs/migration/workspace-to-single-repo.md` を追加した。export・凍結 3 層・初回 commit の等式検証・GitHub 新設と旧リポジトリ削除・dogfood の 1 周と合格条件・残り 6 チャンネルの smoke check・切り戻し・完了判定を 1 チャンネル分の手順として書く（#4902）。

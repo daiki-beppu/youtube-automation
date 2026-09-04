@@ -1,2 +1,0 @@
-- `yt-generate-lyria-master` に `--loop` を追加し、少数の Lyria セグメント生成と反復マスター結合を単一コマンドで実行できるようにした（#4828）。
-- `yt-generate-lyria-master` のマスター結合で `config/channel/audio.json` の `audio.target_duration_max` を検証するようにし、`--allow-duration-outside-target` で明示的に上限を超えられるようにした（#4828）。

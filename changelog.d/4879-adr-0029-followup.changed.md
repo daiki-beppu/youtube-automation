@@ -1,3 +1,0 @@
-- ADR-0013 に、channel registry が dashboard 専用の読み取りファイルから fan-out と channel export が共有する台帳へ広がる Amendment を追記した（#4879）。
-- 用語集の dogfood を撤回済み cutover 計画専用の定義から first-party での 1 周実走という一般定義へ戻した（#4879）。
-- ADR-0029 に逆移行手段・廃止の仕方の Considered Options と、workspace の達成事項・first-party 固有物・ディスク二重化の記述を補った（#4879）。

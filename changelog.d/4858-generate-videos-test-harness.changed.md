@@ -1,1 +1,0 @@
-- `generate_videos.sh` の shell 契約テストで stub command を同一 shell 内から呼び、検出力を維持したまま実行時間を短縮
