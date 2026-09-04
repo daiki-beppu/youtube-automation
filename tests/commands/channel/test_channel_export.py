@@ -174,6 +174,7 @@ def test_export_cli_finds_workspace_from_channel_subdirectory(tmp_path: Path, mo
     assert channel_export.main(["demo", str(destination), "--dry-run"]) == 0
     assert not destination.exists()
 
+
 def test_export_replaces_workspace_registry_entry_and_dry_run_only_reports_plan(tmp_path: Path, capsys) -> None:
     workspace, source = _workspace(tmp_path)
     other = tmp_path / "other"
