@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from tests.helpers.paths import REPO_ROOT
 
@@ -149,7 +153,13 @@ esac
     )
     _write_executable(
         bin_dir / "uv",
-        "#!/bin/bash\nprintf '%s\\n' \"$TEST_CONTENT_MODEL\"\n",
+        """#!/bin/bash
+if [[ "$*" == *"shorts.release.languages"* ]]; then
+  printf '%s\\n' "$TEST_RELEASE_LANGUAGES"
+else
+  printf '%s\\n' "$TEST_CONTENT_MODEL"
+fi
+""",
     )
     env = os.environ.copy()
     env.update(
@@ -157,6 +167,7 @@ esac
             "PATH": f"{bin_dir}:/usr/bin:/bin",
             "FFMPEG_CALLS": str(calls),
             "FFMPEG_FAIL_PATTERN": fail_pattern,
+            "TEST_RELEASE_LANGUAGES": "jp en",
         }
     )
     return env, calls
@@ -568,3 +579,53 @@ def test_overlay_benchmark_propagates_candidate_failure_without_complete_results
     rows = (output_dir / "results.tsv").read_text(encoding="utf-8").splitlines()
     assert [row.split("\t")[0] for row in rows] == ["mode", "baseline"]
     assert "quality against baseline" not in result.stdout
+
+
+def _configured_release(tmp_path: Path, languages: list[str] | None) -> tuple[Path, dict[str, str], Path]:
+    channel = tmp_path / "channel"
+    shutil.copytree(ROOT / "tests/fixtures/sample_channel/config", channel / "config")
+    youtube = channel / "config/channel/youtube.json"
+    config = json.loads(youtube.read_text())
+    config["content_model"]["type"] = "release"
+    youtube.write_text(json.dumps(config))
+    (channel / "config/channel/shorts.json").write_text(
+        json.dumps({"shorts": {"release": {"languages": languages}}} if languages is not None else {"shorts": {}})
+    )
+    release = channel / "releases/01-blue-night"
+    (release / "video").mkdir(parents=True)
+    env, calls = _ffmpeg_env(tmp_path / "tools")
+    _write_executable(tmp_path / "tools/bin/uv", '#!/bin/bash\nshift 2\nexec "$TEST_PYTHON" "$@"\n')
+    env.update({"TEST_PYTHON": sys.executable, "PYTHONPATH": str(ROOT / "src"), "CHANNEL_DIR": str(channel)})
+    return release, env, calls
+
+
+@pytest.mark.parametrize("languages, expected", [(["jp"], ["jp"]), (None, ["jp", "en"])])
+def test_release_shorts_uses_only_configured_language(
+    tmp_path: Path, languages: list[str] | None, expected: list[str]
+) -> None:
+    release, env, calls = _configured_release(tmp_path, languages)
+    for lang in ("jp", "en"):
+        (release / f"video/blue-night-{lang}.mp4").write_bytes(b"source")
+    result = _run(SKILLS / "short/references/generate-shorts.sh", str(release), cwd=tmp_path, env=env)
+    assert result.returncode == 0, result.stderr
+    assert sorted(path.name for path in (release / "video").glob("short-*.mp4")) == sorted(
+        f"short-{lang}.mp4" for lang in expected
+    )
+    assert len(calls.read_text().splitlines()) == len(expected)
+
+
+def test_release_shorts_stops_before_encoding_when_configured_input_is_missing(tmp_path: Path) -> None:
+    release, env, calls = _configured_release(tmp_path, ["jp", "en"])
+    (release / "video/blue-night-jp.mp4").write_bytes(b"source")
+    result = _run(SKILLS / "short/references/generate-shorts.sh", str(release), cwd=tmp_path, env=env)
+    assert result.returncode != 0
+    assert "blue-night-en.mp4" in result.stderr
+    assert not calls.exists()
+
+
+def test_release_shorts_rejects_empty_language_configuration(tmp_path: Path) -> None:
+    release, env, calls = _configured_release(tmp_path, [])
+    result = _run(SKILLS / "short/references/generate-shorts.sh", str(release), cwd=tmp_path, env=env)
+    assert result.returncode != 0
+    assert "shorts.release.languages" in result.stderr
+    assert not calls.exists()
