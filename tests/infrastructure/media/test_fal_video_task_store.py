@@ -126,3 +126,19 @@ def test_clear_removes_state(paths: tuple[Path, Path], tmp_path: Path) -> None:
     store.clear(output, channel_root=tmp_path)
 
     assert not path.exists()
+
+
+def test_completed_result_retains_inputs_and_clears_raw_video(paths: tuple[Path, Path], tmp_path: Path) -> None:
+    output, image = paths
+    _save(output, image, tmp_path)
+    result = {"video": {"url": "https://v3.fal.media/out.mp4"}, "metrics": {"inference_time": 2.0}}
+    raw = store.raw_video_path(output, channel_root=tmp_path)
+    raw.write_bytes(b"downloaded-video")
+    store.save_result(output, result, channel_root=tmp_path)
+    loaded = store.load(output, channel_root=tmp_path)
+    assert loaded["result"] == result
+    assert loaded["request_id"] == "request-1"
+    assert loaded["input_image_sha256"]
+    store.clear(output, channel_root=tmp_path)
+    assert not raw.exists()
+    assert store.load(output, channel_root=tmp_path) is None

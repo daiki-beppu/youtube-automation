@@ -7,6 +7,8 @@ import json
 import os
 from pathlib import Path
 
+from youtube_automation.core.errors import GeneratorError
+
 _HASH_LEN = 16
 _REQUIRED_KEYS = {
     "request_id",
@@ -80,10 +82,28 @@ def save(
         "resolution": resolution,
         "prompt_expansion_mode": prompt_expansion_mode,
     }
+    _write_state(path, data)
+    return path
+
+
+def _write_state(path: Path, data: dict[str, object]) -> None:
     temporary = path.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     os.replace(temporary, path)
-    return path
+
+
+def raw_video_path(output_path: Path, *, channel_root: Path | None = None) -> Path:
+    """最終公開前の生動画を再開 state と同じキーで保持する。"""
+    return state_path(output_path, channel_root=channel_root).with_suffix(".mp4")
+
+
+def save_result(output_path: Path, result: dict[str, object], *, channel_root: Path | None = None) -> None:
+    """ダウンロード済みの結果を保存し、API の失効後も後処理を再開可能にする。"""
+    state = load(output_path, channel_root=channel_root)
+    if state is None:
+        raise GeneratorError("fal の再開 state が見つかりません")
+    state["result"] = result
+    _write_state(state_path(output_path, channel_root=channel_root), state)
 
 
 def load(output_path: Path, *, channel_root: Path | None = None) -> dict[str, object] | None:
@@ -139,4 +159,5 @@ def matches(
 
 def clear(output_path: Path, *, channel_root: Path | None = None) -> None:
     """保存済み state を削除する。"""
+    raw_video_path(output_path, channel_root=channel_root).unlink(missing_ok=True)
     state_path(output_path, channel_root=channel_root).unlink(missing_ok=True)
