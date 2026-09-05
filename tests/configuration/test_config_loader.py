@@ -1366,23 +1366,6 @@ def test_workflow_wf_next_must_be_object(tmp_path, monkeypatch):
         load_config()
 
 
-@pytest.mark.parametrize("legacy_value", [{}, [], "legacy", False, None])
-def test_comments_rules_are_rejected_by_key_presence(tmp_path, monkeypatch, legacy_value):
-    """廃止された comments.rules は値の形によらず拒否する."""
-    sections = _minimal_sections()
-    sections["comments.json"] = {
-        "comments": {
-            "enabled": True,
-            "rules": legacy_value,
-        }
-    }
-    ch = _setup_channel(tmp_path, sections)
-    monkeypatch.setenv("CHANNEL_DIR", str(ch))
-
-    with pytest.raises(ConfigError, match=r"comments\.rules"):
-        load_config()
-
-
 def test_comments_templates_must_be_object(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["comments.json"] = {"comments": {"templates": ["not", "an", "object"]}}
@@ -2098,6 +2081,7 @@ def test_comments_section_non_object_raises(tmp_path, monkeypatch, comments_raw)
 
 @pytest.mark.parametrize("legacy_value", [{}, [], "legacy", False, None, [{"name": "legacy"}]])
 def test_comments_rules_legacy_values_are_rejected(tmp_path, monkeypatch, legacy_value):
+    """廃止された comments.rules は値の形によらずキーの存在で拒否する。"""
     sections = _minimal_sections()
     sections["comments.json"] = {"comments": {"enabled": True, "rules": legacy_value}}
     ch = _setup_channel(tmp_path, sections)

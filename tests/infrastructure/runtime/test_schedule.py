@@ -59,13 +59,6 @@ def test_ensure_tz_aware_includes_context_in_message():
 # ─── now_in_schedule_tz（永続化用 timestamp 生成の集約, #533） ───
 
 
-def test_now_in_schedule_tz_returns_tz_aware_datetime():
-    now = now_in_schedule_tz(ScheduleConfig())
-
-    assert now.tzinfo is not None
-    assert now.utcoffset() == timedelta(hours=9)
-
-
 def test_now_in_schedule_tz_defaults_to_tokyo():
     now = now_in_schedule_tz(ScheduleConfig())
 
