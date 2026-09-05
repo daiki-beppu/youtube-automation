@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../lib/messaging", () => ({ sendMessage: vi.fn() }));
 
@@ -11,12 +11,26 @@ import {
   commitStudioInputValue,
   dispatchStudioPointerClick,
   exportStudioMultitrack,
+  findLibraryClip,
 } from "../lib/studio-export";
 
 const TITLE_BY_CLIP = new Map([
   ["clip-a", "Song A"],
   ["clip-b", "Song B"],
 ]);
+
+beforeEach(() => {
+  document.body.replaceChildren();
+  Object.defineProperty(globalThis, "CSS", {
+    configurable: true,
+    value: { escape: (value: string) => value },
+  });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  document.body.replaceChildren();
+});
 
 function createDeps(
   trackCount = 2,
@@ -39,6 +53,101 @@ function createDeps(
 }
 
 describe("Studio multitrack export", () => {
+  function appendLibraryClip(
+    scroller: HTMLElement,
+    clipId: string
+  ): HTMLElement {
+    const clip = document.createElement("div");
+    clip.dataset.clipId = clipId;
+    clip.draggable = true;
+    clip.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+    scroller.append(clip);
+    return clip;
+  }
+
+  function createLibrary(): {
+    scroller: HTMLElement;
+    setScrollHeight: (height: number) => void;
+  } {
+    const scroller = document.createElement("div");
+    scroller.style.overflowY = "auto";
+    let scrollHeight = 400;
+    let scrollTop = 0;
+    Object.defineProperties(scroller, {
+      clientHeight: { value: 200 },
+      scrollHeight: { get: () => scrollHeight },
+      scrollTop: {
+        get: () => scrollTop,
+        set: (value: number) => {
+          scrollTop = Math.min(value, scrollHeight - 200);
+        },
+      },
+    });
+    document.body.append(scroller);
+    return {
+      scroller,
+      setScrollHeight: (height: number) => {
+        scrollHeight = height;
+      },
+    };
+  }
+
+  it("Given 遅延読み込み境界の clip When 行が追加される Then スクロールを再開して見つける", async () => {
+    vi.useFakeTimers();
+    try {
+      const { scroller, setScrollHeight } = createLibrary();
+      appendLibraryClip(scroller, "visible-clip");
+      let lazyLoadScheduled = false;
+      scroller.addEventListener("scroll", () => {
+        if (lazyLoadScheduled || scroller.scrollTop < 200) return;
+        lazyLoadScheduled = true;
+        setTimeout(() => {
+          setScrollHeight(800);
+          appendLibraryClip(scroller, "lazy-clip");
+        }, 600);
+      });
+
+      const resultPromise = findLibraryClip("lazy-clip");
+      const assertion = expect(resultPromise).resolves.toHaveProperty(
+        "dataset.clipId",
+        "lazy-clip"
+      );
+      await vi.runAllTimersAsync();
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+      document.body.replaceChildren();
+    }
+  });
+
+  it("Given 存在しない clip When Library が増えない Then 遅延読み込み待ち後に失敗する", async () => {
+    vi.useFakeTimers();
+    try {
+      const { scroller } = createLibrary();
+      appendLibraryClip(scroller, "visible-clip");
+
+      const resultPromise = findLibraryClip("missing-clip");
+      const assertion = expect(resultPromise).rejects.toThrow(
+        "Studio Library に clip missing-clip が見つかりません"
+      );
+      await vi.advanceTimersByTimeAsync(2_400);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+      document.body.replaceChildren();
+    }
+  });
+
+  it("Given 最初の表示範囲に対象 clip When 探索 Then スクロールせず即座に返す", async () => {
+    const { scroller } = createLibrary();
+    const clip = appendLibraryClip(scroller, "visible-clip");
+
+    await expect(findLibraryClip("visible-clip")).resolves.toBe(clip);
+    expect(scroller.scrollTop).toBe(0);
+    document.body.replaceChildren();
+  });
+
   it("Given pointerdown で開く Studio menu When 操作 Then click() ではなく pointer sequence で開く", () => {
     const button = document.createElement("button");
     const menu = document.createElement("div");
