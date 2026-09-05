@@ -26,6 +26,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-captions-upload": "youtube_automation.commands.youtube.captions_upload",
     "yt-changelog-compile": "youtube_automation.commands.system.changelog_compile",
     "yt-channel": "youtube_automation.commands.channel.channel",
+    "yt-channel-export": "youtube_automation.commands.channel.channel_export",
     "yt-channel-import": "youtube_automation.commands.channel.channel_import",
     "yt-channel-init": "youtube_automation.commands.channel.channel_init",
     "yt-channel-seed": "youtube_automation.commands.channel.channel_seed",
