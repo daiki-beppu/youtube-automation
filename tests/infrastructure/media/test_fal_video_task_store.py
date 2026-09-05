@@ -29,6 +29,7 @@ def _save(output: Path, image: Path, root: Path) -> Path:
         duration_seconds=5,
         resolution="768P",
         prompt_expansion_mode="balanced",
+        input_canvas="16:9:1344x768",
         channel_root=root,
     )
 
@@ -76,7 +77,7 @@ def test_load_discards_output_path_mismatch(paths: tuple[Path, Path], tmp_path: 
     assert not path.exists()
 
 
-@pytest.mark.parametrize("missing", ["response_url", "status_url", "cancel_url"])
+@pytest.mark.parametrize("missing", ["response_url", "status_url", "cancel_url", "input_canvas"])
 def test_load_discards_state_missing_queue_url(paths: tuple[Path, Path], tmp_path: Path, missing: str) -> None:
     output, image = paths
     path = _save(output, image, tmp_path)
@@ -97,6 +98,8 @@ def test_load_discards_state_missing_queue_url(paths: tuple[Path, Path], tmp_pat
         ("duration_seconds", 10),
         ("resolution", "480P"),
         ("prompt_expansion_mode", "quality"),
+        ("input_canvas", "9:16:768x1344"),
+        ("input_canvas", "16:9:1920x1080"),
     ],
 )
 def test_matches_returns_false_for_each_input_difference(
@@ -116,6 +119,7 @@ def test_matches_returns_false_for_each_input_difference(
         duration_seconds=5,
         resolution="768P",
         prompt_expansion_mode="balanced",
+        input_canvas="16:9:1344x768",
     )
 
 

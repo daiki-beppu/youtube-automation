@@ -23,6 +23,7 @@ _REQUIRED_KEYS = {
     "duration_seconds",
     "resolution",
     "prompt_expansion_mode",
+    "input_canvas",
 }
 _INTEGER_KEYS = {"duration_seconds"}
 
@@ -63,6 +64,7 @@ def save(
     duration_seconds: int,
     resolution: str,
     prompt_expansion_mode: str,
+    input_canvas: str,
     channel_root: Path | None = None,
 ) -> Path:
     """元画像と生成条件を queue request の再開情報とともに保存する。"""
@@ -81,6 +83,7 @@ def save(
         "duration_seconds": duration_seconds,
         "resolution": resolution,
         "prompt_expansion_mode": prompt_expansion_mode,
+        "input_canvas": input_canvas,
     }
     _write_state(path, data)
     return path
@@ -145,6 +148,7 @@ def matches(
     duration_seconds: int,
     resolution: str,
     prompt_expansion_mode: str,
+    input_canvas: str,
 ) -> bool:
     """state の生成入力が現在の生成条件と一致するか判定する。"""
     return (
@@ -154,6 +158,7 @@ def matches(
         and state["duration_seconds"] == duration_seconds
         and state["resolution"] == resolution
         and state["prompt_expansion_mode"] == prompt_expansion_mode
+        and state["input_canvas"] == input_canvas
     )
 
 
