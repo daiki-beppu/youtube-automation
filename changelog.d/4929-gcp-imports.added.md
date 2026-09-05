@@ -1,0 +1,1 @@
+- 共有 GCP プロジェクト・API 6 件・Vertex AI IAM の宣言的 import と billing 管理、二重の削除保護を追加し、Terraform を唯一の変更経路とする ADR-0030 と取り込み検証手順を整備。

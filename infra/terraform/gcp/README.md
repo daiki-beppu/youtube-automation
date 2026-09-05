@@ -10,10 +10,11 @@
 
 ## 管理するリソース
 
-- `google_project`（`create_project=true` 時のみ）
-- `google_project_service` × 5
+- `google_project.this`（既存共有プロジェクトと billing 紐付け。`PREVENT` + `prevent_destroy` で削除保護）
+- `google_project_service` × 6
   - `youtube.googleapis.com`
   - `youtubeanalytics.googleapis.com`
+  - `youtubereporting.googleapis.com`
   - `aiplatform.googleapis.com`
   - `generativelanguage.googleapis.com`
   - `storage.googleapis.com`
@@ -27,7 +28,7 @@ Terraform apply 後に表示される Console URL を開き、**Branding** を�
 
 - `terraform` 1.15.x インストール済み
 - `gcloud auth application-default login` 実行済み（Terraform は ADC 経由で認証）
-- Project を新規作成する場合: Organization / Billing Account に対する権限保持
+- 既存プロジェクト、Billing 紐付け、API、IAM を読み取り・管理する権限保持
 
 ## 使い方
 
@@ -42,22 +43,32 @@ terraform init -backend-config="bucket=$(terraform -chdir=../bootstrap output -r
 terraform plan
 ```
 
-backend の bucket 名は `terraform -chdir=../bootstrap output -raw bucket_name` で取得するため、先に bootstrap stack の構築を完了しておく。GCP stack は未 apply で state が無いため初回設定となり、init 後も state は空のまま。既存リソースの import を行う #4929 まで apply は実行しない。
+backend の bucket 名は `terraform -chdir=../bootstrap output -raw bucket_name` で取得するため、先に bootstrap stack の構築を完了しておく。初回取り込みは次節の合格条件を確認してから実施する。
 
 Vertex AI の location はモデル用途別にアプリが決定する。project ID を一時的に上書きする必要がある実行だけ `GOOGLE_CLOUD_PROJECT` process env を使う。
 
-## 既存プロジェクトを流用する場合
+## 既存リソースの import
 
-`terraform.tfvars`:
+ADC を保持するこのマシンで人間が実施する。`terraform.tfvars` は gitignore のまま、実在する `project_id` / `billing_account` / `adc_email` をローカルに設定する。`org_id` / `folder_id` は null のままとし、表示名は実在する project ID と同じ値を使用する。
 
-```hcl
-project_id     = "existing-project-id"
-create_project = false
-adc_email      = "you@example.com"
-# billing_account は不要 (既存で設定済み前提)
+```bash
+cd infra/terraform/gcp
+terraform init -backend-config="bucket=$(terraform -chdir=../bootstrap output -raw bucket_name)"
+terraform plan -out=.terraform/import.tfplan
 ```
 
-`data.google_project` で既存を参照するため、API 有効化と IAM 付与のみ反映される。
+初回 plan の合格条件は **8 to import, 0 to add, 0 to change, 0 to destroy**（project 1 + API 6 + IAM 1）。それ以外の差分が 1 件でも出たら **apply せず停止**し、[#4929](https://github.com/daiki-beppu/youtube-automation/issues/4929) で原因を議論する。合格条件を満たす plan だけを確認して適用する。
+
+```bash
+terraform apply .terraform/import.tfplan
+terraform plan
+```
+
+plan / apply の出力と直後の **No changes** を #4929 のコメントに evidence として残す。`billing_account` / `adc_email` は sensitive として扱うが、provider の import ID や refresh ログにも個人値が現れる可能性があるため、投稿前に出力全体を確認してマスクする。保存した plan と state には sensitive の実値が含まれるため共有しない。
+
+`imports.tf` は apply 後も削除しない。取り込み済みリソースには no-op となり、state 喪失時の復旧でも同じ対象を使える。定義外で有効な 26 API、`roles/owner`、aiplatform サービスエージェントは管理外のままとし、無効化・削除しない。API と IAM は additive に管理し、owner は人間の break-glass として残す。
+
+取り込み後の変更経路と drift 解消原則は [ADR-0030](../../../docs/adr/0030-terraform-sole-change-path-for-gcp.md) に従う。
 
 ## Outputs
 
@@ -70,13 +81,13 @@ adc_email      = "you@example.com"
 ## トラブルシューティング
 
 ### `Error 403: The caller does not have permission`
-ADC ユーザーが Organization / Billing Account に対する必要な権限を持っていない。`roles/resourcemanager.projectCreator` と `roles/billing.user` が最低必要。
+ADC ユーザーの project / billing / API / IAM に対する権限を確認する。取り込みでは新規プロジェクト作成権限ではなく、既存リソースの読み取り権限が必要。権限エラーを解消して plan を再確認するまで apply しない。
 
 ### `Error: googleapi: Error 400: ... billingEnabled`
 `aiplatform.googleapis.com` を有効化するには Billing が必要。`billing_account` を正しく指定すること。
 
 ### `Error: project ... already exists but is not managed by this terraform configuration`
-プロジェクト ID がグローバルで衝突している。`project_id` を別名に変えるか、既存流用なら `create_project = false` に。
+`project_id` が既存の共有プロジェクトを指し、`imports.tf` が読み込まれていることを確認する。プロジェクトを新規作成して回避せず、上記の import 手順に戻る。
 
 ### `Permission denied` (apply 後の実行時)
 ADC を更新してから実行: `gcloud auth application-default login && gcloud auth application-default set-quota-project <project-id>`
