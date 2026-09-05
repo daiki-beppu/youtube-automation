@@ -155,7 +155,9 @@ Phase 3 で列挙した主仮説（全件）について、次の表から対応
 
 Phase 4 は改善策を適用せず、次の境界を守る:
 
-- `/audit --alignment`、`/channel-research --voice`、`/channel-strategy --persona`、`/channel-strategy --scene`、`/channel-strategy --direction` はスキルとして起動しない。これらは別成果物の保存または設定更新を完了条件に含むため、既存の検証済み `docs/plans/alignment-audit.json`、`docs/plans/viewer-voice-analysis.md`、`docs/channel/personas/persona-definition.md`、`docs/plans/viewing-scene-matrix.md` がある場合だけ read-only 入力として読む。alignment は HTML ではなく JSON だけを入力とする。必要な成果物がなければ、その仮説を理由付きの `未検証` とする
+- `/audit --alignment`、`/channel-research --voice`、`/channel-strategy --persona`、`/channel-strategy --scene`、`/channel-strategy --direction` はスキルとして起動しない。これらは別成果物の保存または設定更新を完了条件に含むため、検証済み成果物だけを read-only 入力として読む。
+
+対象は既存の検証済み `docs/plans/alignment-audit.json`、`docs/plans/viewer-voice-analysis.json`、`docs/channel/personas/persona-definition.json`、`docs/plans/viewing-scene-matrix.json` がある場合だけ read-only 入力として読む。各文書は既存 `read_published_json_document` で同 basename のHTMLとschemaを検証し、JSONだけを入力とする。alignment は `RepositorySchema.AUDIT_REPORT`、voice は `RepositorySchema.CHANNEL_RESEARCH_REPORT`、persona/scene は `RepositorySchema.CHANNEL_STRATEGY` を使う。persona/scene のID参照は既存 `validate_persona_scene_references` で照合する。必要な成果物がない場合もpair破損の場合も、その仮説を理由付きの `未検証` とし、欠落と検証エラーを区別する。現行pairだけで分析でき、旧Markdownの作成を要求しない
 - タイトル整合性は `/audit --alignment` を起動せず、対象コレクションの `workflow-state.json`、音楽プロンプト、実動画尺、検証済み A/B 履歴の現在サムネ候補を read-only で照合する。`config/channel/content.json`、タイトル、サムネイル、音源、方向性文書は変更しない
 - 差別化・市場性は `/channel-research --discover` や `/channel-strategy --direction` を起動せず、最新の既存 `data/benchmark_*.json` と `yt-theme-compare` の標準出力だけを使う。競合の追加、方向性決定、config 更新は行わない
 - `/thumbnail --compare` は分析成果物生成まで実行してよいが、Next Step の再生成・設定更新には進まない。`/audit --video` は起動せず、保存済み成果物だけを参照する
@@ -191,7 +193,7 @@ uv run python .claude/skills/analytics/references/verification.py --operation <t
 |------|----------------|------------------------|
 | サムネ訴求弱 | `/thumbnail --compare` の `data/thumbnail_compare/small/` にある対象・競合320px画像、検証済み A/B 履歴、`yt-thumbnail-correlate --metric views`（補助根拠） | `thumbnail` |
 | タイトル訴求弱 | 対象タイトル、全コレクション由来の語彙候補、対象の workflow-state・音楽prompt・実動画尺、現在サムネ候補の `composition.scene`。collection 型なので `actual_content_type=collection` | `title-alignment` |
-| ターゲット層ミスマッチ | `viewer-voice-analysis.md`、`persona-definition.md`、`viewing-scene-matrix.md` の主対象一致件数 | `hypothesis: target-mismatch` |
+| ターゲット層ミスマッチ | `viewer-voice-analysis.json`、`persona-definition.json`、`viewing-scene-matrix.json` の主対象一致件数 | `hypothesis: target-mismatch` |
 | 差別化不足 | 最新 benchmark 上位10本と `term-classification` の出力 | `hypothesis: differentiation` |
 | 中身の弱さ（音源 / 編集 / テーマ） | 対象と同じ冒頭クリップ窓で保存済みの `/audit --video` 成果物: 対象の `hook_structure.intro_sec` / `bgm_arc.peak` / `scene_timeline` / `editing_metrics.avg_cut_sec`、同ジャンル競合3本以上の `editing_metrics.avg_cut_sec` 中央値 `competitor_avg_cut_median`。retention 収集済みなら `yt-retention-timeline --video <video_id>` の `reports/retention_analysis/<video_id>.md` も引用 | `content-signals` |
 | サムネと中身の不一致 | `/audit --video` の `thumbnail_alignment.signature_present` | `hypothesis: thumbnail-content-alignment` |
