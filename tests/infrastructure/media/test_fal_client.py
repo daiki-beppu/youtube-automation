@@ -52,11 +52,12 @@ def test_submit_rejects_non_relative_endpoint(path: str, monkeypatch: pytest.Mon
         "https://user:pass@fal.run/request/1",
     ],
 )
-def test_get_url_rejects_unsafe_url(url: str, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("operation", ["get_url", "download"])
+def test_rejects_unsafe_url(url: str, operation: str, monkeypatch: pytest.MonkeyPatch) -> None:
     get = Mock()
     monkeypatch.setattr(fal_client.requests, "get", get)
     with pytest.raises(GeneratorError):
-        fal_client.get_url(url, timeout=1)
+        getattr(fal_client, operation)(url, timeout=1)
     get.assert_not_called()
 
 
