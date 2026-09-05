@@ -1,0 +1,1 @@
+- collection Shorts の投稿手順を生成番号ごとの `--short-num` 指定へ修正し、既存承認の再利用、投稿間隔による blocked、番号別の結果と state の照合・再開条件を明確にしました。

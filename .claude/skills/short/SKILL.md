@@ -7,7 +7,7 @@ description: "Use when collection 型（BGM テイスター）または release 
 ## 前後工程
 
 - `前工程`: `/setup`
-- `後工程`: `/publish --upload`
+- `後工程`: collection 型は投稿・state 照合まで本 skill で完結、release 型は投稿対象外
 - `委譲先`: `なし`
 
 ## 成果物
@@ -42,7 +42,7 @@ description: "Use when collection 型（BGM テイスター）または release 
 
 ## 完了条件
 
-- collection 型: 生成物のプレビュー後に `uv run yt-upload-shorts` の実投稿が完了し、`workflow-state.json::post_upload.shorts` に記録されている
+- collection 型: 生成した全番号をプレビューし、番号指定の実投稿結果と `workflow-state.json::post_upload.shorts` の `short_num`・`video_id` が一致する。blocked・失敗を含む場合は未完了として番号別に報告する（[投稿手順](references/collection.md#プレビュー投稿state-を確認する)）
 - release 型: `shorts.release.languages` の対象言語ぶん `video/short-<lang>.mp4` が生成され、プレビュー確認済み。アップロードは現時点ではスコープ外
 - `--thumbnail`: `10-assets/short.png` が生成・承認され、ループ動画化する場合は `short-loop.mp4` も確認済み
 
@@ -88,8 +88,8 @@ generation = load_skill_config("short")[content_type]
 | `bash .claude/skills/short/references/generate-shorts.sh <target-path>` | config の型に従いショートを生成 |
 | `bash .claude/skills/short/references/generate-shorts.sh <release-path> -s 30 -t 40` | release 型でサビ位置・尺を指定 |
 | `bash .claude/skills/short/references/test-crop-positions.sh <master> 30` | collection の loop-mp4 素材でクロップ候補を確認 |
-| `uv run yt-upload-shorts <collection-path> --plan` | collection 型の投稿内容を API なしで確認 |
-| `uv run yt-upload-shorts <collection-path>` | collection 型の全ショートを順次投稿 |
+| `uv run yt-upload-shorts <collection-path> --short-num <short-num> --plan` | 生成物の番号を指定して投稿内容を API なしで確認 |
+| `uv run yt-upload-shorts <collection-path> --short-num <short-num>` | 指定番号のショートを 1 本投稿し、結果の action を確認 |
 | `uv run yt-shorts-bulk-update-loc --dry-run` | 投稿済み collection Shorts の localization 更新を確認 |
 | `uv run yt-generate-image --aspect-ratio "9:16" --prompt "<text>" --output <collection>/10-assets/short.png -y` | `--thumbnail` の 9:16 画像生成 |
 | `uv run yt-generate-shorts-loop <collection-path> -y` | `short.png` の 9:16 ループ動画化 |
