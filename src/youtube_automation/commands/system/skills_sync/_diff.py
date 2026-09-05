@@ -80,30 +80,23 @@ def _diff_file_asset(asset: str, spec: dict[str, str], root: Path, target: Path)
 
 def _diff_settings_asset(spec: dict[str, str], root: Path, target: Path) -> int:
     from youtube_automation.commands.system.skills_sync._settings import (
-        merge_unique_strings,
-        missing_hooks,
-        read_json_object,
+        _report_hook_candidates,
+        _settings_changes,
     )
 
     try:
-        template = read_json_object(root / spec["source_filename"])
-        current = read_json_object(target, missing_ok=True)
-        missing_allow = merge_unique_strings(current, template, "allow")
-        missing_deny = merge_unique_strings(current, template, "deny")
-        hook_additions = missing_hooks(current, template)
+        changes = _settings_changes(root / spec["source_filename"], target)
     except (OSError, ValueError) as exc:
         print(f"settings の比較に失敗: {exc}", file=sys.stderr)
         return 1
-    if not (missing_allow or missing_deny or hook_additions):
+    if not (changes.missing_allow or changes.missing_deny or changes.hooks or changes.removals):
         print("差分なし。必要な settings はすべて存在します。")
         return 0
-    for value in missing_allow:
+    for value in changes.missing_allow:
         print(f"  + permissions.allow: {value}")
-    for value in missing_deny:
+    for value in changes.missing_deny:
         print(f"  + permissions.deny: {value}")
-    for event, group in hook_additions:
-        for hook in group["hooks"]:
-            print(f"  + hooks.{event}: {group.get('matcher')} / {hook.get('type')} / {hook.get('command')}")
+    _report_hook_candidates(changes)
     return 0
 
 
