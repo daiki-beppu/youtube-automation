@@ -80,7 +80,7 @@ plan / apply の出力と直後の **No changes** を #4929 のコメントに e
 |------|------|------|
 | project | `roles/browser` | project と billing 紐付けの取得 |
 | project | `roles/serviceusage.serviceUsageViewer` | 有効 API の取得 |
-| project | `roles/iam.securityReviewer` | project / SA / bucket IAM policy と custom role の取得 |
+| project | `roles/iam.securityReviewer` | project / SA / bucket IAM policy と custom role の取得。既定ロールには object list も含むが本文 get は含まない |
 | project | `roles/iam.workloadIdentityPoolViewer` | WIF pool / provider の取得 |
 | tfstate bucket（条件付き） | custom role `terraformStateGet`: `storage.objects.get` のみ | `resource.name.startsWith("projects/_/buckets/<bucket>/objects/gcp/")` に一致する state の本文取得 |
 | tfstate bucket | custom role `terraformStateList`: `storage.objects.list` のみ | backend の workspace 列挙。object の名前・メタデータのみで、他 stack の本文は許可しない |
@@ -97,9 +97,18 @@ terraform output -raw wif_provider_name
 terraform output -raw drift_service_account_email
 ```
 
-2026-09-05 の実環境では **15 added / 0 changed / 0 destroyed**（WIF API 3、pool / provider / SA / subject binding 4、project read binding 4、custom role 2、bucket binding 2）を適用した。import 済み 8 件は全て no-op。ローカル ADC からの SA impersonation は `iam.serviceAccounts.getAccessToken` 不足で拒否されたため、SA 自体の `gcp/` get 成功と `r2/` / `streaming/` get 拒否、GCS backend init の list 要否は **未実測**。この検証だけのために token creator を追加しない。
+2026-09-05 の実環境では **15 added / 0 changed / 0 destroyed**（WIF API 3、pool / provider / SA / subject binding 4、project read binding 4、custom role 2、bucket binding 2）を適用した。import 済み 8 件は全て no-op。ローカル ADC は通常 SA token 発行を許可されないため、ユーザー承認のもと `iam.serviceAccounts.getAccessToken` 1 件だけの一時 custom role を対象 SA / 現在の ADC に限定付与し、10 分 TTL の token で次を実測した。token と state 本文はログへ出していない。
 
-SA の `terraform plan -lock=false` が exit 0 / 2 で完走する最小権限の実証は #4932 の WIF 認証で行う。上記 storage の許可 / 拒否と init の実測も記録するまで #4931 の完了契約は未充足。認証成功後、state 本文をログへ出さず HTTP status のみを確認する。plan / apply のマスク済み出力、非 secret の output 2 件、および未検証事項を #4931 の evidence に残す。
+| 実測 | 結果 |
+|------|------|
+| `gcp/default.tfstate` 本文 get | HTTP 200 |
+| 実在する `streaming/default.tfstate` 本文 get | HTTP 403（他 stack の state を拒否） |
+| `r2/default.tfstate` get | HTTP 404。`r2/` の object は存在しないため拒否の実証には使わない |
+| gcp object list / GCS backend init | HTTP 200 / exit 0 |
+| IAM を変更せず list を禁止した downscoped token | gcp get は HTTP 200、list は HTTP 403、init は `storage.objects.list` 不足で exit 1。init には bucket list が必要 |
+| SA の `terraform plan -lock=false` | exit 1。`cloudresourcemanager.googleapis.com` が `SERVICE_DISABLED`。追加 API は未有効化 |
+
+一時 custom role / SA binding は検証後に Terraform で **0 added / 0 changed / 2 destroyed** として除去済み。IAM 伝播後、ADC の新規 token 発行が `IAM_PERMISSION_DENIED`（HTTP 403）に戻り、通常 post-plan が **No changes**（exit 0）であることを確認した。SA plan の完走は要件どおり #4932 で実証し、Cloud Resource Manager API 未有効の前提も解決してから最小権限集合を確定する。API の追加有効化を読み取り検証に混ぜない。plan / apply のマスク済み出力、非 secret の output 2 件、実測および一時権限の除去結果は #4931 の evidence に残す。
 
 ## Outputs
 
