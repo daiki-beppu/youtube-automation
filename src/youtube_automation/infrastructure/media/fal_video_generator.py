@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import time
 from collections.abc import Mapping
 from datetime import datetime, timezone
@@ -10,7 +11,7 @@ from pathlib import Path
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
-from youtube_automation.core.errors import ConfigError, GeneratorError, ValidationError
+from youtube_automation.core.errors import ConfigError, GenerationFailedError, GeneratorError, ValidationError
 from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.infrastructure.media import fal_client
 from youtube_automation.infrastructure.media import fal_video_task_store as task_store
@@ -22,6 +23,7 @@ DEFAULT_RESOLUTION = "768P"
 DEFAULT_PROMPT_EXPANSION_MODE = "balanced"
 DEFAULT_TIMEOUT_SEC = 600.0
 DEFAULT_POLL_INTERVAL_SEC = 2.0
+DEFAULT_MAX_POLL_RETRIES = 3
 DEFAULT_ALLOWED_MODELS = frozenset({DEFAULT_MODEL, "minimax/h3-max/image-to-video"})
 DEFAULT_CANVAS = {"16:9": (1344, 768), "9:16": (768, 1344)}
 _MAX_PROMPT_CHARS = 2000
@@ -136,24 +138,52 @@ def _is_expired(error: GeneratorError) -> bool:
     return error.status_code in {404, 410}
 
 
-def _poll(state: Mapping[str, object], *, timeout_sec: float, poll_interval_sec: float) -> dict[str, object]:
-    started = time.monotonic()
-    while True:
-        if time.monotonic() - started > timeout_sec:
+def _poll_get(url: str, *, deadline: float, poll_interval_sec: float, max_poll_retries: int) -> dict[str, object]:
+    for attempt in range(max_poll_retries + 1):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
             raise GeneratorError("fal polling が timeout しました")
-        status_body = fal_client.get_url(_text(state.get("status_url"), "status_url"), timeout=timeout_sec)
+        try:
+            return fal_client.get_url(url, timeout=remaining)
+        except GeneratorError as error:
+            if error.status_code not in {None, 408, 429, 500, 502, 503, 504} or attempt == max_poll_retries:
+                raise
+            time.sleep(min(poll_interval_sec, max(0, deadline - time.monotonic())))
+    raise GeneratorError("fal polling の再試行上限に達しました")
+
+
+def _poll(
+    state: Mapping[str, object], *, timeout_sec: float, poll_interval_sec: float, max_poll_retries: int
+) -> dict[str, object]:
+    deadline = time.monotonic() + timeout_sec
+
+    def get(key: str) -> dict[str, object]:
+        return _poll_get(
+            _text(state.get(key), key),
+            deadline=deadline,
+            poll_interval_sec=poll_interval_sec,
+            max_poll_retries=max_poll_retries,
+        )
+
+    while True:
+        status_body = get("status_url")
         status = _text(status_body.get("status"), "status")
         if status in {"IN_QUEUE", "IN_PROGRESS"}:
-            time.sleep(poll_interval_sec)
+            time.sleep(min(poll_interval_sec, max(0, deadline - time.monotonic())))
             continue
         if status != "COMPLETED":
             raise GeneratorError("fal status が契約外です")
         if status_body.get("error_type"):
-            raise GeneratorError("fal generation が失敗しました")
-        result = fal_client.get_url(_text(state.get("response_url"), "response_url"), timeout=timeout_sec)
+            raise GenerationFailedError("fal generation が失敗しました")
+        try:
+            result = get("response_url")
+        except GeneratorError as error:
+            if error.status_code == 422:
+                raise GenerationFailedError("fal generation が失敗しました") from None
+            raise
         if result.get("error_type"):
-            raise GeneratorError("fal generation が失敗しました")
-        return result
+            raise GenerationFailedError("fal generation が失敗しました")
+        return {**result, "metrics": status_body.get("metrics")}
 
 
 def _video_url(result: Mapping[str, object]) -> str:
@@ -176,6 +206,29 @@ def _persist(video: bytes, output_path: Path) -> None:
         raise GeneratorError("fal video を保存できません") from error
 
 
+def _finalize_video(
+    raw_video: Path,
+    output_path: Path,
+    result: Mapping[str, object],
+    *,
+    upscale_to: tuple[int, int] | None,
+    compression: dict | None,
+) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    staged = output_path.with_name(f".{output_path.stem}.fal-processing.mp4")
+    try:
+        shutil.copyfile(raw_video, staged)
+        crf, preset = resolve_smooth_codec(compression)
+        if not smooth_loop(staged, crossfade_sec=0.5, trim_tail_sec=1.0, scale_to=upscale_to, crf=crf, preset=preset):
+            raise GeneratorError("fal 動画のループ補正に失敗しました（生動画を保持し、次回は後処理から再開します）")
+        expanded = result.get("expanded_prompt")
+        if isinstance(expanded, str) and expanded:
+            output_path.with_suffix(".expanded-prompt.txt").write_text(expanded + "\n", encoding="utf-8")
+        os.replace(staged, output_path)
+    finally:
+        staged.unlink(missing_ok=True)
+
+
 def generate_loop_video(
     image_path: Path,
     output_path: Path,
@@ -188,6 +241,7 @@ def generate_loop_video(
     prompt_expansion_mode: str = DEFAULT_PROMPT_EXPANSION_MODE,
     timeout_sec: float = DEFAULT_TIMEOUT_SEC,
     poll_interval_sec: float = DEFAULT_POLL_INTERVAL_SEC,
+    max_poll_retries: int = DEFAULT_MAX_POLL_RETRIES,
     allowed_models: set[str] | frozenset[str] = DEFAULT_ALLOWED_MODELS,
     canvas: Mapping[str, tuple[int, int]] = DEFAULT_CANVAS,
     upscale_to: tuple[int, int] | None = (1920, 1080),
@@ -196,6 +250,8 @@ def generate_loop_video(
 ) -> bool:
     """入力を canvas 化し、再開可能な fal queue job として生成する。"""
     try:
+        if not isinstance(max_poll_retries, int) or isinstance(max_poll_retries, bool) or max_poll_retries < 0:
+            raise ValidationError("fal max_poll_retries は 0 以上の整数である必要があります")
         size = _validate(
             model=model,
             prompt=prompt,
@@ -225,10 +281,17 @@ def generate_loop_video(
                 timeout_sec=timeout_sec,
                 channel_root=channel_root,
             )
-            polled = _poll(submitted, timeout_sec=timeout_sec, poll_interval_sec=poll_interval_sec)
+            polled = _poll(
+                submitted,
+                timeout_sec=timeout_sec,
+                poll_interval_sec=poll_interval_sec,
+                max_poll_retries=max_poll_retries,
+            )
             return submitted, polled
 
+        raw_video = task_store.raw_video_path(output_path, channel_root=channel_root)
         state = task_store.load(output_path, channel_root=channel_root)
+        cached = False
         if state is not None and task_store.matches(
             state,
             image_path,
@@ -239,7 +302,18 @@ def generate_loop_video(
             prompt_expansion_mode=prompt_expansion_mode,
         ):
             try:
-                result = _poll(state, timeout_sec=timeout_sec, poll_interval_sec=poll_interval_sec)
+                saved_result = state.get("result")
+                cached = isinstance(saved_result, dict) and raw_video.is_file() and not raw_video.is_symlink()
+                result = (
+                    saved_result
+                    if cached
+                    else _poll(
+                        state,
+                        timeout_sec=timeout_sec,
+                        poll_interval_sec=poll_interval_sec,
+                        max_poll_retries=max_poll_retries,
+                    )
+                )
             except GeneratorError as error:
                 if not _is_expired(error):
                     raise
@@ -249,19 +323,21 @@ def generate_loop_video(
             if state is not None:
                 task_store.clear(output_path, channel_root=channel_root)
             state, result = submit_and_poll()
-        _persist(fal_client.download(_video_url(result), timeout=timeout_sec), output_path)
+        if not cached:
+            _persist(fal_client.download(_video_url(result), timeout=timeout_sec), raw_video)
+            task_store.save_result(output_path, result, channel_root=channel_root)
+        _finalize_video(raw_video, output_path, result, upscale_to=upscale_to, compression=compression)
+    except GenerationFailedError as error:
+        task_store.clear(output_path, channel_root=channel_root)
+        print(f"  [ERROR]  {error}")
+        return False
+    except OSError:
+        print("  [ERROR]  fal 動画の保存・後処理に失敗しました（再開情報は保持します）")
+        return False
     except (ConfigError, GeneratorError, ValidationError) as error:
         print(f"  [ERROR]  {error}")
         return False
 
-    crf, preset = resolve_smooth_codec(compression)
-    if not smooth_loop(output_path, crossfade_sec=0.5, trim_tail_sec=1.0, scale_to=upscale_to, crf=crf, preset=preset):
-        print("  [Warn]   fal 動画のループ補正に失敗しました（生成済み動画は保持します）")
-    expanded = result.get("expanded_prompt")
-    if isinstance(expanded, str) and expanded:
-        assets = collection_root / "10-assets"
-        assets.mkdir(parents=True, exist_ok=True)
-        (assets / "loop.expanded-prompt.txt").write_text(expanded + "\n", encoding="utf-8")
     metrics = result.get("metrics")
     inference = metrics.get("inference_time") if isinstance(metrics, Mapping) else None
     entry = cost_tracker.log_generation(

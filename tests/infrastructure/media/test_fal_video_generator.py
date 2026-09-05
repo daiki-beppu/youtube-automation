@@ -51,7 +51,7 @@ def test_submit_uses_one_resized_url_and_records_metadata_only(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     image = _image(tmp_path / "main.png")
-    output = tmp_path / "20-video" / "loop.mp4"
+    output = tmp_path / "10-assets" / "loop.mp4"
     submit = Mock(
         return_value={
             "request_id": "request-1",
@@ -62,11 +62,10 @@ def test_submit_uses_one_resized_url_and_records_metadata_only(
     )
     get_url = Mock(
         side_effect=[
-            {"status": "COMPLETED"},
+            {"status": "COMPLETED", "metrics": {"inference_time": 7.5}},
             {
                 "video": {"url": "https://v3.fal.media/video.mp4"},
                 "expanded_prompt": "expanded",
-                "metrics": {"inference_time": 7.5},
             },
         ]
     )
@@ -168,7 +167,7 @@ def _mock_successful_new_job(monkeypatch: pytest.MonkeyPatch) -> Mock:
 
 def test_mismatched_resume_state_is_cleared_before_submit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     image = _image(tmp_path / "main.png")
-    output = tmp_path / "20-video" / "loop.mp4"
+    output = tmp_path / "10-assets" / "loop.mp4"
     old_state = {"request_id": "request-old"}
     events: list[str] = []
     clear = Mock(side_effect=lambda *args, **kwargs: events.append("clear"))
@@ -176,6 +175,7 @@ def test_mismatched_resume_state_is_cleared_before_submit(tmp_path: Path, monkey
     monkeypatch.setattr(generator.task_store, "matches", Mock(return_value=False))
     monkeypatch.setattr(generator.task_store, "clear", clear)
     monkeypatch.setattr(generator.task_store, "save", Mock())
+    monkeypatch.setattr(generator.task_store, "save_result", Mock())
     submit = _mock_successful_new_job(monkeypatch)
     response = submit.return_value
     submit.side_effect = lambda *args, **kwargs: (events.append("submit"), response)[1]
@@ -196,7 +196,7 @@ def test_expired_status_url_clears_and_resubmits(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, status_code: int
 ) -> None:
     image = _image(tmp_path / "main.png")
-    output = tmp_path / "20-video" / "loop.mp4"
+    output = tmp_path / "10-assets" / "loop.mp4"
     resumed = {
         "request_id": "request-old",
         "response_url": "https://queue.fal.run/old/result",
@@ -208,6 +208,7 @@ def test_expired_status_url_clears_and_resubmits(
     monkeypatch.setattr(generator.task_store, "matches", Mock(return_value=True))
     monkeypatch.setattr(generator.task_store, "clear", clear)
     monkeypatch.setattr(generator.task_store, "save", Mock())
+    monkeypatch.setattr(generator.task_store, "save_result", Mock())
     submit = _mock_successful_new_job(monkeypatch)
     monkeypatch.setattr(
         generator.fal_client,
@@ -230,7 +231,7 @@ def test_completed_status_with_error_type_fails_without_download(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     image = _image(tmp_path / "main.png")
-    output = tmp_path / "20-video" / "loop.mp4"
+    output = tmp_path / "10-assets" / "loop.mp4"
     _mock_successful_new_job(monkeypatch)
     download = Mock()
     monkeypatch.setattr(generator.fal_client, "download", download)
@@ -263,3 +264,124 @@ def test_error_output_redacts_api_key_and_payload(
     output = capsys.readouterr().out
     assert secret not in output
     assert payload not in output
+
+
+def test_postprocessing_failure_keeps_previous_output_and_resumes_offline(tmp_path, monkeypatch):
+    image = _image(tmp_path / "main.png")
+    output = tmp_path / "10-assets" / "loop.mp4"
+    output.parent.mkdir()
+    output.write_bytes(b"previous-published-video")
+    submit = _mock_successful_new_job(monkeypatch)
+    monkeypatch.setattr(
+        generator.fal_client,
+        "get_url",
+        Mock(
+            side_effect=[
+                {"status": "COMPLETED", "metrics": {"inference_time": 7.5}},
+                {"video": {"url": "https://v3.fal.media/out.mp4"}, "expanded_prompt": "expanded"},
+            ]
+        ),
+    )
+    monkeypatch.setattr(generator, "smooth_loop", Mock(return_value=False))
+    assert not generator.generate_loop_video(image, output, generator.DEFAULT_MODEL, "motion", channel_root=tmp_path)
+    assert output.read_bytes() == b"previous-published-video"
+    generator.cost_tracker.log_generation.assert_not_called()
+    assert generator.task_store.load(output, channel_root=tmp_path) is not None
+    for name in ("get_url", "download", "upload_file"):
+        monkeypatch.setattr(generator.fal_client, name, Mock(side_effect=AssertionError("must resume offline")))
+    monkeypatch.setattr(generator, "smooth_loop", Mock(return_value=True))
+    assert generator.generate_loop_video(image, output, generator.DEFAULT_MODEL, "motion", channel_root=tmp_path)
+    assert output.read_bytes()[4:8] == b"ftyp"
+    submit.assert_called_once()
+    generator.cost_tracker.log_generation.assert_called_once()
+    assert generator.cost_tracker.log_generation.call_args.kwargs["metadata"]["inference_time_sec"] == 7.5
+    assert generator.task_store.load(output, channel_root=tmp_path) is None
+
+
+def test_terminal_failure_allows_a_new_request_on_next_invocation(tmp_path, monkeypatch):
+    image = _image(tmp_path / "main.png")
+    output = tmp_path / "10-assets" / "loop.mp4"
+    submit = _mock_successful_new_job(monkeypatch)
+    monkeypatch.setattr(
+        generator.fal_client,
+        "get_url",
+        Mock(
+            side_effect=[
+                {"status": "COMPLETED", "error_type": "provider_failure"},
+                {"status": "COMPLETED"},
+                {"video": {"url": "https://v3.fal.media/out.mp4"}},
+            ]
+        ),
+    )
+    assert not generator.generate_loop_video(image, output, generator.DEFAULT_MODEL, "motion", channel_root=tmp_path)
+    assert generator.task_store.load(output, channel_root=tmp_path) is None
+    assert generator.generate_loop_video(image, output, generator.DEFAULT_MODEL, "motion", channel_root=tmp_path)
+    assert submit.call_count == 2
+
+
+def test_inference_metrics_come_from_completed_status(tmp_path, monkeypatch):
+    image = _image(tmp_path / "main.png")
+    _mock_successful_new_job(monkeypatch)
+    monkeypatch.setattr(
+        generator.fal_client,
+        "get_url",
+        Mock(
+            side_effect=[
+                {"status": "COMPLETED", "metrics": {"inference_time": 7.5}},
+                {"video": {"url": "https://v3.fal.media/out.mp4"}, "timings": {"inference": 3.0}},
+            ]
+        ),
+    )
+    assert generator.generate_loop_video(
+        image, tmp_path / "10-assets" / "loop.mp4", generator.DEFAULT_MODEL, "motion", channel_root=tmp_path
+    )
+    assert generator.cost_tracker.log_generation.call_args.kwargs["metadata"]["inference_time_sec"] == 7.5
+
+
+def test_expanded_prompts_are_separate_for_each_output(tmp_path, monkeypatch):
+    image = _image(tmp_path / "main.png")
+    _mock_successful_new_job(monkeypatch)
+    for name in ("loop", "short-loop"):
+        monkeypatch.setattr(
+            generator.fal_client,
+            "get_url",
+            Mock(
+                side_effect=[
+                    {"status": "COMPLETED"},
+                    {"video": {"url": "https://v3.fal.media/out.mp4"}, "expanded_prompt": name},
+                ]
+            ),
+        )
+        assert generator.generate_loop_video(
+            image, tmp_path / "10-assets" / f"{name}.mp4", generator.DEFAULT_MODEL, "motion", channel_root=tmp_path
+        )
+    for name in ("loop", "short-loop"):
+        assert (tmp_path / "10-assets" / f"{name}.expanded-prompt.txt").read_text() == name + "\n"
+
+
+@pytest.mark.parametrize("failures,retries,expected", [(1, 3, True), (3, 2, False)])
+def test_poll_retries_are_bounded_without_resubmission(tmp_path, monkeypatch, failures, retries, expected):
+    image = _image(tmp_path / "main.png")
+    submit = _mock_successful_new_job(monkeypatch)
+    get = Mock(
+        side_effect=[generator.GeneratorError("temporary", status_code=503)] * failures
+        + [
+            {"status": "COMPLETED"},
+            {"video": {"url": "https://v3.fal.media/out.mp4"}},
+        ]
+    )
+    monkeypatch.setattr(generator.fal_client, "get_url", get)
+    assert (
+        generator.generate_loop_video(
+            image,
+            tmp_path / "10-assets" / "loop.mp4",
+            generator.DEFAULT_MODEL,
+            "motion",
+            channel_root=tmp_path,
+            max_poll_retries=retries,
+            poll_interval_sec=0,
+        )
+        is expected
+    )
+    submit.assert_called_once()
+    assert get.call_count == (failures + 2 if expected else retries + 1)
