@@ -489,7 +489,7 @@ def _build_youtube(merged: dict) -> YoutubeSection:
 
     music_engine = merged.get("music_engine", "suno")
     if music_engine not in ("suno", "lyria"):
-        logger.warning("music_engine='%s' は未知の値です（既知: 'suno' / 'lyria'）", music_engine)
+        raise ConfigError("music_engine は suno / lyria のいずれかを指定してください")
 
     overlays = _build_overlays(merged.get("overlays"))
 
