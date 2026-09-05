@@ -279,3 +279,114 @@ def test_dev_only_skills_are_listed_but_not_distributed(tmp_path, monkeypatch, c
     output = capsys.readouterr().out
     assert "automation-release (開発専用・downstream 配布対象外)" in output
     assert "shadcn (開発専用・downstream 配布対象外)" in output
+
+
+@pytest.fixture
+def guard_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    project = tmp_path / "channel with spaces"
+    monkeypatch.setattr(skills_sync, "_editable_root", lambda: REPO_ROOT)
+    assert (
+        skills_sync.main(
+            ["sync", "--asset", "skills", "--only", "automation", "--target", str(project / ".claude/skills")]
+        )
+        == 0
+    )
+    assert _run(REPO_ROOT, project / ".claude/settings.json", monkeypatch, "--accept-hooks") == 0
+    return project
+
+
+def _run_edit_guard(
+    tmp_path: Path, guard_project: Path, settings_file: str, payload: str
+) -> subprocess.CompletedProcess[str]:
+    settings_path = (
+        guard_project / ".claude/settings.json"
+        if settings_file == "settings.template.json"
+        else REPO_ROOT / ".claude/settings.json"
+    )
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    command = next(
+        hook["command"]
+        for group in settings["hooks"]["PreToolUse"]
+        if group["matcher"] == "Edit|Write"
+        for hook in group["hooks"]
+    )
+    return subprocess.run(
+        command,
+        shell=True,
+        cwd=tmp_path,
+        env={"PATH": os.environ["PATH"], "HOME": str(tmp_path), "CLAUDE_PROJECT_DIR": str(guard_project)},
+        input=payload,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize("settings_file", ["settings.template.json", "settings.json"])
+@pytest.mark.parametrize("tool", ["Edit", "Write"])
+@pytest.mark.parametrize("prefix", ["", "/tmp/channel/", "/tmp/channel with spaces/"])
+@pytest.mark.parametrize("name", [".env", "auth/token.json", "auth/client_secrets.json"])
+def test_edit_guard_blocks_standard_stdin(
+    tmp_path: Path, guard_project: Path, settings_file: str, tool: str, prefix: str, name: str
+) -> None:
+    payload = json.dumps(
+        {
+            "hook_event_name": "PreToolUse",
+            "tool_name": tool,
+            "tool_input": {"file_path": prefix + name, "content": "dummy-secret-content"},
+        }
+    )
+    result = _run_edit_guard(tmp_path, guard_project, settings_file, payload)
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert result.stderr
+    assert "dummy-secret-content" not in result.stderr
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        "",
+        "{broken",
+        "null",
+        "{}",
+        *[
+            json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": tool_input})
+            for tool_input in (None, {}, {"file_path": None}, {"file_path": ""})
+        ],
+    ],
+)
+def test_edit_guard_rejects_invalid_payload_without_echoing_input(
+    tmp_path: Path, guard_project: Path, payload: str
+) -> None:
+    result = _run_edit_guard(tmp_path, guard_project, "settings.template.json", payload)
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert result.stderr
+    assert "Traceback" not in result.stderr
+
+
+@pytest.mark.parametrize("settings_file", ["settings.template.json", "settings.json"])
+@pytest.mark.parametrize("tool", ["Edit", "Write"])
+@pytest.mark.parametrize(
+    "name",
+    ["README.md", "config/channel/meta.json", "/tmp/channel with spaces/auth/token.json.example", ".env.example"],
+)
+def test_edit_guard_allows_ordinary_files(
+    tmp_path: Path, guard_project: Path, settings_file: str, tool: str, name: str
+) -> None:
+    payload = json.dumps({"hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": {"file_path": name}})
+    result = _run_edit_guard(tmp_path, guard_project, settings_file, payload)
+    assert result.returncode == 0
+    assert result.stdout == result.stderr == ""
+
+
+@pytest.mark.parametrize("settings_file, expected", [("settings.template.json", 0), ("settings.json", 2)])
+@pytest.mark.parametrize("name", ["/tmp/channel/uv.lock", "/tmp/channel/flake.lock"])
+def test_edit_guard_preserves_repository_only_lock_protection(
+    tmp_path: Path, guard_project: Path, settings_file: str, expected: int, name: str
+) -> None:
+    payload = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": name}})
+    result = _run_edit_guard(tmp_path, guard_project, settings_file, payload)
+    assert result.returncode == expected
