@@ -1,0 +1,1 @@
+- thumbnail skillの入口で既定ai_burn_inとdeterministicの生成順序を明示し、Codex候補の確定を共通QA・digest検証・承認finalizerへ統一しました。
