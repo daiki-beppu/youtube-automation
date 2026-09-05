@@ -134,11 +134,7 @@ EXPECTED_ACTIVE_ROUTES = (
         "### Phase 4: 検証の自律実行",
         "- `/audit --alignment`、`/channel-research --voice`、`/channel-strategy --persona`、"
         "`/channel-strategy --scene`、`/channel-strategy --direction` はスキルとして起動しない。"
-        "これらは別成果物の保存または設定更新を完了条件に含むため、既存の検証済み "
-        "`docs/plans/alignment-audit.json`、`docs/plans/viewer-voice-analysis.md`、"
-        "`docs/channel/personas/persona-definition.md`、`docs/plans/viewing-scene-matrix.md` がある場合だけ "
-        "read-only 入力として読む。alignment は HTML ではなく JSON だけを入力とする。"
-        "必要な成果物がなければ、その仮説を理由付きの `未検証` とする",
+        "これらは別成果物の保存または設定更新を完了条件に含むため、検証済み成果物だけを read-only 入力として読む。",
     ),
     _route(
         "analytics/references/flop.md",
