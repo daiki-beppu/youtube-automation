@@ -110,6 +110,7 @@
       {"path": "collections/<id>/20-documentation/upload_tracking.json", "owner": "wf-next", "reason": "publish handoff state"}
     ],
     "other_writes": [
+      {"path": "reports/wf-new-batches/<batch-id>/contact-sheet.png", "owner": "wf-new", "reason": "binary contact sheet evidence for batch visual QA"},
       {"path": "collections/<id>/20-documentation/reviews/master-video-preview.html", "owner": "video", "reason": "preview master video review evidence without a structured JSON source"},
       {"path": "collections/<id>/20-documentation/reviews/master-video-full.html", "owner": "video", "reason": "full master video review evidence without a structured JSON source"},
       {"path": "docs/benchmarks/thumbnails/<channel>_<video-id>.jpg", "owner": "channel-research", "reason": "binary thumbnail evidence"},

@@ -6,7 +6,7 @@
 
 ## 成果物
 
-- `書き込む`: `reports/wf-new-batches/<batch-id>/plan-manifest.json`, `reports/wf-new-batches/<batch-id>/batch-ledger.json`
+- `書き込む`: `reports/wf-new-batches/<batch-id>/plan-manifest.json`, `reports/wf-new-batches/<batch-id>/batch-ledger.json`, `reports/wf-new-batches/<batch-id>/contact-sheet.png`
 - `読み込む`: 検証済み `collections/<id>/20-documentation/plan_proposals.json` + `.html`, `collections/<id>/workflow-state.json`
 
 ## Overview
@@ -96,7 +96,15 @@ plan は manifest 順に 1 件ずつ処理し、複数の `/wf-new` を並列に
 
 ## Done verification
 
-全 plan が `completed` になったら、manifest 件数と ledger 件数、plan-id/order、collection provenance をもう一度照合し、各 collection の通常 `/wf-new` 完了条件と hard artifacts を再検証する。全件成功後だけ batch status を `completed`、`current_plan_id` を `null` に atomic 更新する。
+全 plan が `completed` になったら、manifest 件数と ledger 件数、plan-id/order、collection provenance をもう一度照合し、各 collection の通常 `/wf-new` 完了条件と hard artifacts を再検証する。さらに全件の確定 thumbnail を collection 名付きの contact sheet にまとめ、`reports/wf-new-batches/<batch-id>/contact-sheet.png` に保存して縮小表示で確認する。manifest 順に全 collection を一度ずつ掲載し、元画像の縦横比と全領域、collection 名の対応が保たれていることを確認する。
+
+- 各画像のテーマ・人物設定と承認済み企画・channel config の整合、必要な文字の可読性、意図しない文字・ロゴ・透かし、明らかな描画破綻を確認する。生成 provider・参照画像の扱いは `/thumbnail` と channel config を正とする。
+- batch 内の重複に見える画像を比較し、承認済み企画と channel config が求める差異が実画像にもあることを確認する。意図したシリーズ共通の構図・色・人物を、似ているという理由だけで不合格にしない。
+- 画像形式や音楽成果物の検証は通常 `/wf-new` と各 owner の現行契約に従う。旧グローバル `wf-new-batch-ready` の validator は使わず、PNG 固定や旧 Markdown 必須の gate を重ねない。Suno helper server の確認結果は通常 `/wf-new` の結果をそのまま報告し、疎通失敗を追加の batch 完了 gate にしない。既存契約どおり `phase = "prepared"` を維持し、失敗時は再実行手順を添える。
+
+成果物検証と視覚QAの全件成功後だけ batch status を `completed`、`current_plan_id` を `null` に atomic 更新する。contact sheet を作れない・閲覧できない場合は、manifest 先頭の plan を確認待ちの代表として `batch-ledger.py transition --status blocked` で停止し、`reason` と確認を再開する `resume_action` を記録する。この遷移で batch も `blocked` になる。他 plan の完了状態と全 collection の成果物は保持する。
+
+視覚QAで個別画像が不合格なら、collection directory を ledger と照合して対象 `plan_id` を特定し、`batch-ledger.py transition --status blocked` を実行する。`reason` に collection 名、画像path、検出した問題を記録し、`resume_action` に当該 collection の `/thumbnail` での修復と `/wf-new --batch --resume <batch-id>` による再確認を指定する。合格済み collection は再生成しない。複数件が不合格なら manifest 順の最初の1件だけを active な `blocked` plan にし、残る不合格の collection 名と問題も `reason` に記録する。1件を修復するごとに全件QAを再実行し、未解決の次の1件を同じ手順で停止する。各 child の承認・state 更新契約に従い、batch layer が修復済みと推測して state を変更しない。
 
 1 件でも不一致なら該当 plan と batch を `blocked` に戻し、証拠と `resume_action` を残す。完了済みの他 plan は変更せず、修復後に `/wf-new --batch --resume <batch-id>` で再検証する。
 
@@ -106,4 +114,4 @@ plan は manifest 順に 1 件ずつ処理し、複数の `/wf-new` を並列に
 
 ## 完了報告
 
-`batch_id`、manifest / ledger path、completed / blocked / failed 件数、各 plan の collection directory と現在 phase、停止中なら理由と resume command を表示する。全件完了時も merge、release、production 変更は行わない。
+`batch_id`、manifest / ledger path、completed / blocked / failed 件数、各 plan の collection directory と現在 phase、停止中なら理由と resume command を表示する。contact sheet のpathと視覚QAの結果（問題があれば対象collectionと理由）を添える。全件完了時も merge、release、production 変更は行わない。
