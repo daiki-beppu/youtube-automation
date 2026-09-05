@@ -58,11 +58,12 @@ def _hook_signature(matcher: object, hook: object) -> tuple[object, object, obje
     return (matcher, hook.get("type"), hook.get("command")) if isinstance(hook, dict) else (matcher, None, None)
 
 
-def missing_hooks(target: dict[str, object], template: dict[str, object]) -> list[tuple[str, dict[str, object]]]:
-    target_hooks = target.get("hooks", {})
-    template_hooks = template.get("hooks", {})
-    if not isinstance(target_hooks, dict) or not isinstance(template_hooks, dict):
-        raise ValueError("hooks は object である必要があります")
+def _index_existing_hooks(
+    target_hooks: dict[str, object],
+) -> tuple[
+    dict[str, set[tuple[object, object, object]]],
+    dict[tuple[object, object, object], dict[str, object]],
+]:
     existing_by_event: dict[str, set[tuple[object, object, object]]] = {}
     replacements: dict[tuple[object, object, object], dict[str, object]] = {}
     for event, groups in target_hooks.items():
@@ -79,6 +80,15 @@ def missing_hooks(target: dict[str, object], template: dict[str, object]) -> lis
                 replacement = _KNOWN_REPLACED_HOOK_COMMANDS.get(hook.get("command"))
                 if replacement is not None:
                     replacements[(event, group.get("matcher"), replacement)] = {**hook, "command": replacement}
+    return existing_by_event, replacements
+
+
+def missing_hooks(target: dict[str, object], template: dict[str, object]) -> list[tuple[str, dict[str, object]]]:
+    target_hooks = target.get("hooks", {})
+    template_hooks = template.get("hooks", {})
+    if not isinstance(target_hooks, dict) or not isinstance(template_hooks, dict):
+        raise ValueError("hooks は object である必要があります")
+    existing_by_event, replacements = _index_existing_hooks(target_hooks)
     missing: list[tuple[str, dict[str, object]]] = []
     for event, groups in template_hooks.items():
         if not isinstance(groups, list):
@@ -171,9 +181,11 @@ def _report_hook_candidates(changes: _SettingsChanges) -> None:
         assert isinstance(group_hooks, list)
         for hook in group_hooks:
             assert isinstance(hook, dict)
-            print(f"  hook 追加候補: {event} / {group.get('matcher')} / {hook.get('type')} / {hook.get('command')}")
+            print(
+                f"  hook 追加候補: hooks.{event} / {group.get('matcher')} / {hook.get('type')} / {hook.get('command')}"
+            )
     for event, matcher, command in changes.removals:
-        print(f"  hook 除去候補: {event} / {matcher} / command / {command}")
+        print(f"  hook 除去候補: hooks.{event} / {matcher} / command / {command}")
 
 
 def _hooks_accepted(args: argparse.Namespace, *, has_changes: bool) -> bool:
