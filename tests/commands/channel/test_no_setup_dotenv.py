@@ -55,7 +55,6 @@ def test_terraform_public_schema_has_no_dotenv_output_or_location_input() -> Non
     assert variables == {
         "project_id",
         "project_name",
-        "create_project",
         "billing_account",
         "org_id",
         "folder_id",
