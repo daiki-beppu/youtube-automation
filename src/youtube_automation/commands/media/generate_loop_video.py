@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""コレクション用ループ動画背景を Veo / Omni / MiniMax H3 で生成する。
+"""コレクション用ループ動画背景を Veo / fal / Omni / MiniMax H3 で生成する。
 
 main.png を開始・終了フレーム両方に指定し、微細なアニメーション付きの
 シームレスなループ動画を生成する。
@@ -25,15 +25,40 @@ import time
 from pathlib import Path
 
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.domains.media.loop_engine import LoopEngineConfig
 from youtube_automation.domains.media.video_type import VideoType, VideoTypeConfig
 from youtube_automation.infrastructure.media.fal_video_generator import (
     DEFAULT_ALLOWED_MODELS as DEFAULT_FAL_ALLOWED_MODELS,
 )
 from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_ASPECT_RATIO as DEFAULT_FAL_ASPECT_RATIO,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
     DEFAULT_CANVAS as DEFAULT_FAL_CANVAS,
 )
 from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_DURATION_SECONDS as DEFAULT_FAL_DURATION_SECONDS,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_MAX_POLL_RETRIES as DEFAULT_FAL_MAX_POLL_RETRIES,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
     DEFAULT_MODEL as DEFAULT_FAL_MODEL,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_POLL_INTERVAL_SEC as DEFAULT_FAL_POLL_INTERVAL_SEC,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_PROMPT_EXPANSION_MODE as DEFAULT_FAL_PROMPT_EXPANSION_MODE,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_RESOLUTION as DEFAULT_FAL_RESOLUTION,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_TIMEOUT_SEC as DEFAULT_FAL_TIMEOUT_SEC,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_UPSCALE_TO as DEFAULT_FAL_UPSCALE_TO,
 )
 from youtube_automation.infrastructure.media.fal_video_generator import (
     generate_loop_video as generate_fal_loop_video,
@@ -223,7 +248,7 @@ def _build_parser() -> argparse.ArgumentParser:
     # RawTextHelpFormatter: help 文字列にハイフン入りモデル名が連なるため、
     # 80 桁折り返しで `veo-3.1-lite-` / `generate-preview` のように分断されないようにする。
     parser = argparse.ArgumentParser(
-        description="Veo 3.1 / Gemini Omni Flash / MiniMax H3 コレクションループ動画生成",
+        description="Veo 3.1 / fal.ai / Gemini Omni Flash / MiniMax H3 コレクションループ動画生成",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("collection", nargs="?", help="コレクションパス")
@@ -379,19 +404,19 @@ def _run_generate(
         fal_config = engine_config or {}
         raw_canvas = fal_config.get("canvas", {})
         canvas = {str(key): tuple(value) for key, value in raw_canvas.items()}
-        upscale = fal_config.get("upscale_to", [1920, 1080])
+        upscale = fal_config.get("upscale_to", DEFAULT_FAL_UPSCALE_TO)
         success = generate_fal_loop_video(
             image_path,
             output_path,
             model,
             prompt,
-            duration_seconds=int(fal_config.get("duration_seconds", 8)),
-            aspect_ratio=str(fal_config.get("aspect_ratio", "16:9")),
-            resolution=str(fal_config.get("resolution", "768P")),
-            prompt_expansion_mode=str(fal_config.get("prompt_expansion_mode", "balanced")),
-            timeout_sec=float(fal_config.get("timeout_seconds", 600)),
-            poll_interval_sec=float(fal_config.get("poll_interval_seconds", 2)),
-            max_poll_retries=fal_config.get("max_poll_retries", 3),
+            duration_seconds=int(fal_config.get("duration_seconds", DEFAULT_FAL_DURATION_SECONDS)),
+            aspect_ratio=str(fal_config.get("aspect_ratio", DEFAULT_FAL_ASPECT_RATIO)),
+            resolution=str(fal_config.get("resolution", DEFAULT_FAL_RESOLUTION)),
+            prompt_expansion_mode=str(fal_config.get("prompt_expansion_mode", DEFAULT_FAL_PROMPT_EXPANSION_MODE)),
+            timeout_sec=float(fal_config.get("timeout_seconds", DEFAULT_FAL_TIMEOUT_SEC)),
+            poll_interval_sec=float(fal_config.get("poll_interval_seconds", DEFAULT_FAL_POLL_INTERVAL_SEC)),
+            max_poll_retries=int(fal_config.get("max_poll_retries", DEFAULT_FAL_MAX_POLL_RETRIES)),
             allowed_models=frozenset(fal_config.get("allowed_models", DEFAULT_FAL_ALLOWED_MODELS)),
             canvas=canvas or DEFAULT_FAL_CANVAS,
             upscale_to=tuple(upscale) if upscale is not None else None,
@@ -459,9 +484,6 @@ def _run_generate(
 def main():
     parser = _build_parser()
     args = parser.parse_args()
-
-    # `--help` は checkout 外の設定や追加 domain module を解決せず完結させる。
-    from youtube_automation.domains.media.loop_engine import LoopEngineConfig
 
     skill_config = load_config()
     try:
