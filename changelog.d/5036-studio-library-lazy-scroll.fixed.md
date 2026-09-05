@@ -1,0 +1,1 @@
+- Studio Library の遅延読み込みを待ってから clip 探索を終了し、曲数が多い環境でも Multitrack export を継続できるようにした（#5036）。

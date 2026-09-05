@@ -3,6 +3,7 @@ import { sendMessage } from "./messaging";
 const STUDIO_CLIP_DRAG_TYPE = "application/x-suno-studio-clip";
 const DOM_TIMEOUT_MS = 30_000;
 const DOM_POLL_MS = 200;
+const LIBRARY_LAZY_LOAD_WAIT_MS = 2_000;
 
 export interface StudioExportRequest {
   collectionId: string;
@@ -213,7 +214,7 @@ function findLibraryScroller(element: Element): HTMLElement | null {
   return null;
 }
 
-async function findLibraryClip(clipId: string): Promise<HTMLElement> {
+export async function findLibraryClip(clipId: string): Promise<HTMLElement> {
   const selector = `[draggable="true"][data-clip-id="${CSS.escape(clipId)}"]`;
   const firstVisibleClip = await waitForElement(
     () =>
@@ -229,13 +230,35 @@ async function findLibraryClip(clipId: string): Promise<HTMLElement> {
     const clip = document.querySelector<HTMLElement>(selector);
     if (clip && isVisible(clip)) return clip;
     const before = scroller.scrollTop;
+    const beforeHeight = scroller.scrollHeight;
+    const beforeClipCount = document.querySelectorAll(
+      '[draggable="true"][data-clip-id]'
+    ).length;
     scroller.scrollTop = Math.min(
       scroller.scrollHeight,
       before + Math.max(200, scroller.clientHeight * 0.8)
     );
     scroller.dispatchEvent(new Event("scroll", { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
-    if (scroller.scrollTop === before) break;
+    if (scroller.scrollTop !== before) continue;
+
+    const lazyLoadDeadline = Math.min(
+      deadline,
+      Date.now() + LIBRARY_LAZY_LOAD_WAIT_MS
+    );
+    let libraryGrew = false;
+    while (Date.now() < lazyLoadDeadline) {
+      if (
+        scroller.scrollHeight > beforeHeight ||
+        document.querySelectorAll('[draggable="true"][data-clip-id]').length >
+          beforeClipCount
+      ) {
+        libraryGrew = true;
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
+    }
+    if (!libraryGrew) break;
   }
   throw new Error(`Studio Library に clip ${clipId} が見つかりません`);
 }
