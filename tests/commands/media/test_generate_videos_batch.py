@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -142,7 +143,7 @@ def test_run_batch_parallel_invokes_existing_script_concurrently(monkeypatch, tm
 def test_update_workflow_states_records_generated_video_for_success_only(tmp_path: Path) -> None:
     success = _collection(tmp_path, "planning", "success", audio="master.mp3", video=None)
     failed = _collection(tmp_path, "planning", "failed", audio="master.mp3", video=None)
-    (success / "01-master" / "Success-Master.mp4").touch()
+    (success / "01-master" / "Success-Master.mp4").write_bytes(b"generated video")
 
     updated = batch.update_workflow_states(
         [
@@ -155,9 +156,11 @@ def test_update_workflow_states_records_generated_video_for_success_only(tmp_pat
     failed_state = json.loads((failed / "workflow-state.json").read_text(encoding="utf-8"))
     assert updated == {success: "Success-Master.mp4"}
     assert success_state["assets"]["master_video"] == "Success-Master.mp4"
+    assert success_state["master_video_approved_digest"] == hashlib.sha256(b"generated video").hexdigest()
     assert success_state["future_section"] == {"keep": True}
     assert "updated_at" in success_state
     assert failed_state["assets"]["master_video"] is None
+    assert "master_video_approved_digest" not in failed_state
     assert (success / "workflow-state.json.lock").is_file()
 
 

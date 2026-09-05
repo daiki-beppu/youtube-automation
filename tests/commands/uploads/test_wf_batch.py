@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -398,6 +399,11 @@ class TestMainBatchRun:
             assert entry["video_url"] == f"https://youtu.be/vid-{slug}"
             assert entry["live_path"] == str(channel / "collections" / "live" / slug)
             assert (report_dir / f"{slug}.log").is_file()
+            live_state = json.loads(
+                (channel / "collections" / "live" / slug / "workflow-state.json").read_text(encoding="utf-8")
+            )
+            assert live_state["assets"]["master_video"] == "master.mp4"
+            assert live_state["master_video_approved_digest"] == hashlib.sha256(b"video").hexdigest()
 
     def test_one_failure_continues_to_next_collection(self, channel, monkeypatch):
         planning = channel / "collections" / "planning"

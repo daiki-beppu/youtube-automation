@@ -13,6 +13,7 @@ import pytest
 from tests.helpers.paths import REPO_ROOT
 from tests.helpers.video_description import write_video_description_pair
 from youtube_automation.application.master_video_review import VideoReviewPresentation, review_master_video
+from youtube_automation.commands.media.generate_videos_batch import update_workflow_states
 
 SCRIPT = REPO_ROOT / ".claude" / "skills" / "video" / "references" / "video-chain-state.py"
 
@@ -35,6 +36,15 @@ def _collection(tmp_path: Path, master_video: object) -> Path:
     return collection
 
 
+def _write_sample_video(path: Path) -> None:
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=black:s=32x32:d=0.2", "-c:v", "libx264", str(path)],
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
+
+
 def test_generate_runs_when_master_video_is_not_recorded(tmp_path: Path) -> None:
     module = _module()
     collection = _collection(tmp_path, None)
@@ -44,6 +54,7 @@ def test_generate_runs_when_master_video_is_not_recorded(tmp_path: Path) -> None
     assert code == module.EXIT_RUN
     assert result["decision"] == "run"
     assert result["reason"] == "master_video_missing"
+    assert result["next"]
 
 
 def test_generate_blocks_when_recorded_master_video_is_empty(tmp_path: Path) -> None:
@@ -138,12 +149,7 @@ def test_generate_resumes_only_current_approved_video(tmp_path: Path, damage: st
     module = _module()
     collection = _collection(tmp_path, None)
     video = collection / "01-master/sample-Master.mp4"
-    subprocess.run(
-        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=black:s=32x32:d=0.2", "-c:v", "libx264", str(video)],
-        check=True,
-        capture_output=True,
-        timeout=30,
-    )
+    _write_sample_video(video)
     state_path = collection / "workflow-state.json"
     state_path.write_text(json.dumps({"assets": {"master_audio": "sample.wav", "master_video": "sample-Master.mp4"}}))
     code, result = module.evaluate(collection, "generate")
@@ -180,3 +186,19 @@ def test_generate_resumes_only_current_approved_video(tmp_path: Path, damage: st
     assert code == (module.EXIT_RUN if damage == "missing" else module.EXIT_BLOCKED)
     assert result["next"]
     assert state_path.read_bytes() == before
+
+
+def test_generate_skips_video_recorded_by_batch_owner(tmp_path: Path) -> None:
+    module = _module()
+    collection = _collection(tmp_path, None).resolve()
+    _write_sample_video(collection / "01-master/sample-Master.mp4")
+    (collection / "workflow-state.json").write_text(
+        json.dumps({"assets": {"master_audio": "sample.wav", "master_video": None}}),
+        encoding="utf-8",
+    )
+
+    assert update_workflow_states([collection]) == {collection: "sample-Master.mp4"}
+    code, result = module.evaluate(collection, "generate")
+
+    assert code == module.EXIT_SKIP, result
+    assert result["artifacts"] == ["01-master/sample-Master.mp4"]

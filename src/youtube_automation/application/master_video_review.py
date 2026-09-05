@@ -67,9 +67,7 @@ class _VideoSource(ReviewSource):
         _require_pending_state(root)
         _validate_presentation(self.presentation)
         suffix = "Preview" if self.kind == "preview" else "Master"
-        paths = tuple(
-            p.resolve() for p in (root / "01-master").glob(f"*-{suffix}.mp4") if p.is_file() and not p.is_symlink()
-        )
+        paths = tuple(p.resolve() for p in (root / "01-master").glob(f"*-{suffix}.mp4") if _is_regular_file(p))
         if len(paths) != 1:
             raise ReviewError(f"{self.kind} master videoを一意に解決できません")
         self.path = paths[0]
@@ -187,8 +185,17 @@ def require_approved_master_video(path: Path, state_path: Path) -> None:
         raise ReviewError("master video は承認後に変更されました。修復後にfull reviewで再承認してください")
 
 
+def approve_generated_master_video(state: WorkflowState, video: Path) -> None:
+    """自動生成ownerが `assets.master_video` と承認digestを同じ遷移で記録する。"""
+    state.record_master_video_approval(video.name, sha256_file(video))
+
+
+def _is_regular_file(path: Path) -> bool:
+    return path.is_file() and not path.is_symlink()
+
+
 def _require_video_probe(path: Path) -> VideoProbe:
-    if not path.is_file() or path.is_symlink() or path.stat().st_size == 0:
+    if not _is_regular_file(path) or path.stat().st_size == 0:
         raise ReviewError(f"master videoの実体がありません: {path}")
     probe = probe_video(path)
     if probe is None:
@@ -210,4 +217,10 @@ def _record_master_video(state_path: Path, filename: str, digest: str) -> None:
     update_workflow_state(state_path, transition)
 
 
-__all__ = ["MasterVideoReviewResult", "VideoReviewPresentation", "require_approved_master_video", "review_master_video"]
+__all__ = [
+    "MasterVideoReviewResult",
+    "VideoReviewPresentation",
+    "approve_generated_master_video",
+    "require_approved_master_video",
+    "review_master_video",
+]

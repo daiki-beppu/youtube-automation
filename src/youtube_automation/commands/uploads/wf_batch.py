@@ -50,9 +50,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from youtube_automation.application.master_video_review import approve_generated_master_video
 from youtube_automation.configuration import channel_dir, load_config
 from youtube_automation.core.errors import (
     ConfigError,
+    ReviewError,
     ValidationError,
     WorkflowStateError,
     WorkflowStateSectionTypeError,
@@ -302,11 +304,13 @@ def _record_master_video(collection_dir: Path) -> str:
         raise ValidationError(f"workflow-state.json が見つかりません: {paths.workflow_state_path}")
 
     def record_master_video(state: WorkflowState) -> None:
-        state.record_master_video(video.name)
+        approve_generated_master_video(state, video)
         state.phase = "publishing"
 
     try:
         update_workflow_state(paths.workflow_state_path, record_master_video)
+    except ReviewError as error:
+        raise ValidationError(f"生成された master video を読み込めません: {video}: {error}") from error
     except WorkflowStateError as error:
         if isinstance(error, WorkflowStateSectionTypeError) and error.section == "assets":
             raise ValidationError("workflow-state.json::assets は object である必要があります") from error
