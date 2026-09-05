@@ -77,16 +77,26 @@ def test_load_discards_output_path_mismatch(paths: tuple[Path, Path], tmp_path: 
     assert not path.exists()
 
 
-@pytest.mark.parametrize("missing", ["response_url", "status_url", "cancel_url", "input_canvas"])
-def test_load_discards_state_missing_queue_url(paths: tuple[Path, Path], tmp_path: Path, missing: str) -> None:
-    output, image = paths
-    path = _save(output, image, tmp_path)
+def _discard_state_without(output: Path, image: Path, root: Path, missing: str) -> None:
+    path = _save(output, image, root)
     data = json.loads(path.read_text())
     del data[missing]
     path.write_text(json.dumps(data))
 
-    assert store.load(output, channel_root=tmp_path) is None
+    assert store.load(output, channel_root=root) is None
     assert not path.exists()
+
+
+@pytest.mark.parametrize("missing", ["response_url", "status_url", "cancel_url"])
+def test_load_discards_state_missing_queue_url(paths: tuple[Path, Path], tmp_path: Path, missing: str) -> None:
+    output, image = paths
+    _discard_state_without(output, image, tmp_path, missing)
+
+
+@pytest.mark.parametrize("missing", ["input_canvas", "prompt_expansion_mode"])
+def test_load_discards_state_missing_required_field(paths: tuple[Path, Path], tmp_path: Path, missing: str) -> None:
+    output, image = paths
+    _discard_state_without(output, image, tmp_path, missing)
 
 
 @pytest.mark.parametrize(
