@@ -389,6 +389,7 @@ def test_poll_retries_are_bounded_without_resubmission(tmp_path, monkeypatch, fa
 
 def test_real_postprocessing_publishes_only_silent_scaled_video(tmp_path, monkeypatch):
     import subprocess
+
     from youtube_automation.infrastructure.media import veo_generator
 
     raw = tmp_path / "raw.mp4"
