@@ -483,3 +483,39 @@ def test_changed_input_canvas_submits_new_job_after_postprocessing_failure(tmp_p
     assert submit.call_count == 2
     assert generator.fal_client.upload_file.call_count == 2
     assert generator.fal_client.download.call_count == 2
+
+
+def test_raw_dimensions_are_reported_before_upscale(tmp_path, monkeypatch, capsys):
+    from youtube_automation.infrastructure.media import probe
+
+    image = _image(tmp_path / "short.png", (800, 1400))
+    _mock_successful_new_job(monkeypatch)
+    monkeypatch.setattr(
+        generator.fal_client,
+        "get_url",
+        Mock(
+            side_effect=[
+                {"status": "COMPLETED"},
+                {"video": {"url": "https://v3.fal.media/out.mp4"}},
+            ]
+        ),
+    )
+
+    def smooth(*args, **kwargs):
+        stdout = capsys.readouterr().out
+        assert "fal 生出力: 720x1280" in stdout
+        assert "canvas 想定: 768x1344" in stdout
+        assert kwargs["scale_to"] == (1080, 1920)
+        return True
+
+    monkeypatch.setattr(generator, "smooth_loop", smooth)
+    monkeypatch.setattr(probe, "probe_video", Mock(return_value=probe.VideoProbe(8.0, 720, 1280, "h264")))
+    assert generator.generate_loop_video(
+        image,
+        tmp_path / "10-assets" / "short-loop.mp4",
+        generator.DEFAULT_MODEL,
+        "motion",
+        aspect_ratio="9:16",
+        upscale_to=(1080, 1920),
+        channel_root=tmp_path,
+    )

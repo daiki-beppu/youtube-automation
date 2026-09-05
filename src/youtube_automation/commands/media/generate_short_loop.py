@@ -153,6 +153,7 @@ def _generate(
         prompt_expansion_mode=str(engine_cfg.get("prompt_expansion_mode", "balanced")),
         timeout_sec=float(engine_cfg.get("timeout_seconds", 600)),
         poll_interval_sec=float(engine_cfg.get("poll_interval_seconds", 2)),
+        max_poll_retries=engine_cfg.get("max_poll_retries", 3),
         allowed_models=frozenset(engine_cfg.get("allowed_models", DEFAULT_FAL_ALLOWED_MODELS)),
         canvas=canvas or {SHORT_ASPECT_RATIO: (768, 1344)},
         upscale_to=tuple(upscale) if upscale is not None else None,
@@ -201,7 +202,7 @@ def main() -> None:
         print(f"  ファイル: {output_path}")
         video = probe_video(output_path)
         if video is not None:
-            print(f"  出力実寸: {video.width}x{video.height}")
+            print(f"  最終出力実寸: {video.width}x{video.height}")
         print(f"  時間:     {elapsed:.1f}秒")
     else:
         print("  Shorts ループ動画生成: 失敗")

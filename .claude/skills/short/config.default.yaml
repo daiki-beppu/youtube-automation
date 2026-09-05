@@ -26,6 +26,7 @@ fal:
   upscale_to: [1080, 1920]
   timeout_seconds: 600
   poll_interval_seconds: 2
+  max_poll_retries: 3
   default_prompt: |
     Gentle natural animation with a locked camera. Keep all text completely static and unchanged.
 

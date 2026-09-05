@@ -15,7 +15,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 from youtube_automation.core.errors import ConfigError, GenerationFailedError, GeneratorError, ValidationError
 from youtube_automation.infrastructure import cost_tracker
-from youtube_automation.infrastructure.media import fal_client
+from youtube_automation.infrastructure.media import fal_client, probe
 from youtube_automation.infrastructure.media import fal_video_task_store as task_store
 from youtube_automation.infrastructure.media.veo_generator import resolve_smooth_codec, smooth_loop
 
@@ -212,6 +212,12 @@ def _persist(video: bytes, output_path: Path) -> None:
         raise GeneratorError("fal video を保存できません") from error
 
 
+def _report_raw_dimensions(raw_video: Path, canvas: tuple[int, int]) -> None:
+    video = probe.probe_video(raw_video)
+    if video is not None:
+        print(f"  fal 生出力: {video.width}x{video.height}（canvas 想定: {canvas[0]}x{canvas[1]}）")
+
+
 def _finalize_video(
     raw_video: Path,
     output_path: Path,
@@ -332,6 +338,7 @@ def generate_loop_video(
         if not cached:
             _persist(fal_client.download(_video_url(result), timeout=timeout_sec), raw_video)
             task_store.save_result(output_path, result, channel_root=channel_root)
+        _report_raw_dimensions(raw_video, size)
         _finalize_video(raw_video, output_path, result, upscale_to=upscale_to, compression=compression)
     except GenerationFailedError as error:
         task_store.clear(output_path, channel_root=channel_root)

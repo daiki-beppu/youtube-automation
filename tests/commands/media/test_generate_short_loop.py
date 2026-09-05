@@ -259,6 +259,7 @@ class TestMain:
                 "fal": {
                     "canvas": {"9:16": [768, 1344]},
                     "upscale_to": [1080, 1920],
+                    "max_poll_retries": 7,
                 }
             }
             mocks["generate_fal_loop_video"].return_value = True
@@ -269,6 +270,7 @@ class TestMain:
         assert kwargs["aspect_ratio"] == "9:16"
         assert kwargs["canvas"] == {"9:16": (768, 1344)}
         assert kwargs["upscale_to"] == (1080, 1920)
+        assert kwargs["max_poll_retries"] == 7
 
     def test_success_prints_actual_output_dimensions(self, tmp_path, monkeypatch, capsys):
         from youtube_automation.commands.media import generate_short_loop as mod

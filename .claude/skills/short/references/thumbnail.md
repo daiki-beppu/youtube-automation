@@ -77,6 +77,8 @@ uv run yt-generate-shorts-loop <collection-path> -y
 
 fal.ai を選ぶ場合は `--engine fal` を付ける。入力は 768x1344 に事前リサイズし、最終出力は 1080x1920 へアップスケールする。
 
+fal 生成ではアップスケール前の「fal 生出力」と canvas 想定値を比較し、9:16 の実寸が推定 768x1344 と異なる場合は `config/skills/short.yaml::fal.canvas` を修正する。「最終出力実寸」は後処理後の 1080x1920 を表す。expanded prompt は `10-assets/short-loop.expanded-prompt.txt` に保存される。
+
 ```bash
 uv run yt-generate-shorts-loop <collection-path> --engine fal -y
 ```
