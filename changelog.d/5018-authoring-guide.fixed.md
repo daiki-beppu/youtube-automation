@@ -1,0 +1,1 @@
+- skill開発ガイドのlint説明を現行の検証範囲へ揃え、通常PRの変更履歴をchangelog fragment手順へ統一しました。CHANGELOG直接編集はrelease prepareのみの例外として維持します。
