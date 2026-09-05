@@ -38,28 +38,43 @@ if [[ "$CONTENT_MODEL" == "release" ]]; then
     esac
   done
 
+  RELEASE_LANGUAGES="$(uv run python -c '
+import re
+from youtube_automation.configuration import load_config
+languages = load_config().shorts.release.languages
+if not languages or any(not isinstance(lang, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]*", lang) for lang in languages):
+    raise SystemExit("shorts.release.languages must contain nonempty language identifiers")
+print(" ".join(languages))
+')"
+  read -ra LANGUAGES <<< "$RELEASE_LANGUAGES"
   MOTIF="$(basename "$TARGET_DIR" | sed 's/^[0-9]*-//')"
-  found=0
-  for LANG in jp en; do
+  for LANG in "${LANGUAGES[@]}"; do
+    SRC="${TARGET_DIR}/video/${MOTIF}-${LANG}.mp4"
+    if [[ ! -s "$SRC" ]]; then
+      echo "incomplete: configured release source missing or empty: ${SRC}" >&2
+      exit 1
+    fi
+  done
+  for LANG in "${LANGUAGES[@]}"; do
     SRC="${TARGET_DIR}/video/${MOTIF}-${LANG}.mp4"
     OUT="${TARGET_DIR}/video/short-${LANG}.mp4"
-    if [[ ! -f "$SRC" ]]; then
-      echo "skip: ${SRC} not found" >&2
-      continue
-    fi
-    found=1
-    ffmpeg -y -i "$SRC" \
+    if ffmpeg -y -i "$SRC" \
       -ss "$START" -t "$DUR" \
       -vf "crop=ih*9/16:ih,scale=1080:1920,fps=30" \
       -c:v libx264 -preset "${SHORT_PRESET:-slow}" -crf "${SHORT_CRF:-18}" -pix_fmt yuv420p \
       -c:a aac -b:a "${SHORT_AUDIO_BITRATE:-192k}" \
-      "$OUT"
+      "$OUT"; then
+      if [[ ! -s "$OUT" ]]; then
+        echo "incomplete: release output missing or empty: ${OUT}" >&2
+        exit 1
+      fi
+    else
+      rc=$?
+      echo "incomplete: release generation failed for ${LANG} (exit=${rc})" >&2
+      exit "$rc"
+    fi
     echo "✓ $OUT"
   done
-  if [[ "$found" -eq 0 ]]; then
-    echo "no release source videos found under ${TARGET_DIR}/video" >&2
-    exit 1
-  fi
   exit 0
 fi
 

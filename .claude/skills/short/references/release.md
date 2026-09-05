@@ -26,7 +26,7 @@ export SHORT_AUDIO_BITRATE=192k
 bash .claude/skills/short/references/generate-shorts.sh <release-path> -s 30 -t 40
 ```
 
-スクリプトは対象言語の本編を中央クロップし、1080x1920・30fps の H.264/AAC として `video/short-<lang>.mp4` へ出力する。対象動画が片方だけなら存在する言語だけ生成し、両方無ければ非 0 で停止する。
+スクリプトは対象言語の本編を中央クロップし、1080x1920・30fps の H.264/AAC として `video/short-<lang>.mp4` へ出力する。`load_config()` の `cfg.shorts.release.languages` に含まれる言語だけを生成する（既定JP/EN、JPのみ設定ならENは生成しない）。空の言語設定、設定対象の本編が欠落・空の場合は生成前に非0で停止する。ffmpeg失敗や出力欠落も未完了として非0で報告し、一部の成功を全言語の完了扱いにしない。開始秒・尺の `-s` / `-t` 上書きはそのまま使える。
 
 ## プレビューする
 
