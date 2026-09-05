@@ -26,8 +26,8 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 1. メインエージェントだけが owner CLI 経由で `workflow-state.json` の `assets` と制御面の `phase` / `stage` / `upload` / `updated_at` を更新する。subagent は委譲先 skill の入力確認に必要な場合だけ state を読み、書き込まない。
 2. AskUserQuestion、`skip_*_approval` の承認ゲート、候補選択、playlist 初期化などの承認はメインエージェントが完了させる。未承認の操作を subagent へ委譲しない。
-3. 各フェーズの生成・変換処理は Agent ツールで一作業ずつ subagent へ委譲する。委譲プロンプトには入力パス、実行する skill / CLI、期待成果物、state 書き込み禁止、完了報告形式を明記する。
-4. subagent 終了後、メインエージェントが期待成果物の存在と現在の `phase` / `assets` との整合を実ファイルで検証する。すべて PASS の場合だけ state を更新する。失敗、欠落、不整合時は state を変更せず、同じステップから再実行できる状態で停止する。
+3. 状態判定で選んだ一段（後述の公開フローを含む）を進め、その中の生成・変換処理は原則として Agent ツールで一作業ずつ subagent へ委譲する。唯一の並列例外は公開フローの「並列 A」で、動画生成と説明文生成の2 Agentだけを同時起動できる。別の段・collectionや他の作業へ並列許可を広げない。委譲プロンプトには入力パス、実行する skill / CLI、期待成果物、state 書き込み禁止、完了報告形式を明記する。
+4. subagent 終了後（並列 A は両 Agent の終了後）、メインエージェントが期待成果物の存在と現在の `phase` / `assets` との整合を実ファイルで検証する。すべて PASS の場合だけ state を更新する。失敗、欠落、不整合時は state を変更せず、同じステップから再実行できる状態で停止する。
 
 委譲プロンプトには上記 3 の要素を具体値で埋め、成果物は絶対パスで受け取る。subagent の `status: success` だけを更新根拠にせず、実ファイルで検証する。
 
