@@ -20,3 +20,6 @@ adc_email       = "you@example.com"
 #   "generativelanguage.googleapis.com",
 #   "storage.googleapis.com",
 # ]
+
+github_repository_owner_id = "140964131"
+tfstate_bucket             = "youtube-automation-tfstate"
