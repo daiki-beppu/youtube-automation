@@ -390,3 +390,84 @@ def test_edit_guard_preserves_repository_only_lock_protection(
     payload = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Write", "tool_input": {"file_path": name}})
     result = _run_edit_guard(tmp_path, guard_project, settings_file, payload)
     assert result.returncode == expected
+
+
+def test_settings_diff_and_dry_run_report_same_removed_hooks(tmp_path, monkeypatch, capsys) -> None:
+    target = tmp_path / "settings.json"
+    assert _run(REPO_ROOT, target, monkeypatch, "--accept-hooks") == 0
+    current = json.loads(target.read_text(encoding="utf-8"))
+    current["hooks"]["SessionStart"].append(
+        {"hooks": [{"type": "command", "command": "uv run yt-workspace-guard context"}]}
+    )
+    target.write_text(json.dumps(current), encoding="utf-8")
+    before = target.read_bytes()
+    capsys.readouterr()
+
+    assert skills_sync.main(["diff", "--asset", "settings", "--target", str(target)]) == 0
+    diff_output = capsys.readouterr().out
+    assert "hook 除去候補" in diff_output
+    assert "差分なし" not in diff_output
+    assert _run(REPO_ROOT, target, monkeypatch, "--dry-run", "--accept-hooks") == 0
+    dry_run_output = capsys.readouterr().out
+    assert [line for line in diff_output.splitlines() if "hook " in line] == [
+        line for line in dry_run_output.splitlines() if "hook " in line
+    ]
+    assert target.read_bytes() == before
+
+
+_LEGACY_SECRET_GUARD = (
+    'for f in $CLAUDE_FILE_PATHS; do case "$f" in '
+    "*auth/client_secrets.json|*auth/token.json|*.env) "
+    'echo "BLOCKED: $f は AI から直接編集禁止。専用ツール経由で更新してください" >&2; '
+    "exit 2;; esac; done"
+)
+
+
+def test_settings_upgrade_known_hooks_preserves_local_options(tmp_path, monkeypatch, capsys) -> None:
+    target = tmp_path / "settings.json"
+    current = json.loads((REPO_ROOT / ".claude/settings.template.json").read_text(encoding="utf-8"))
+    expected_guard = dict(current["hooks"]["PreToolUse"][0]["hooks"][0])
+    for event in ("PreToolUse", "PostToolUse"):
+        for group in current["hooks"][event]:
+            for hook in group["hooks"]:
+                if "yt-progress-hook" in hook["command"]:
+                    hook["command"] = "uv run yt-progress-hook"
+                    hook["timeout"] = 37
+    current["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = _LEGACY_SECRET_GUARD
+    local_hook = {"type": "command", "command": "uv run yt-progress-hook --local", "timeout": 71}
+    current["hooks"]["PreToolUse"][0]["hooks"].append(local_hook)
+    current["hooks"]["SessionStart"][0]["hooks"][0]["timeout"] = 83
+    target.write_text(json.dumps(current), encoding="utf-8")
+    before = target.read_bytes()
+
+    assert _run(REPO_ROOT, target, monkeypatch) == 0
+    assert target.read_bytes() == before
+    capsys.readouterr()
+    assert skills_sync.main(["diff", "--asset", "settings", "--target", str(target)]) == 0
+    diff_output = capsys.readouterr().out
+    assert _run(REPO_ROOT, target, monkeypatch, "--dry-run", "--accept-hooks") == 0
+    dry_run_output = capsys.readouterr().out
+    assert [line for line in diff_output.splitlines() if "hook " in line] == [
+        line for line in dry_run_output.splitlines() if "hook " in line
+    ]
+    assert target.read_bytes() == before
+    assert _run(REPO_ROOT, target, monkeypatch, "--accept-hooks") == 0
+    merged = json.loads(target.read_text(encoding="utf-8"))
+    for event in ("PreToolUse", "PostToolUse"):
+        progress = [
+            hook
+            for group in merged["hooks"][event]
+            for hook in group["hooks"]
+            if "yt-progress-hook" in hook["command"] and hook != local_hook
+        ]
+        assert len(progress) == 1
+        assert progress[0]["command"] == _DISTRIBUTED_PROGRESS_HOOK_COMMAND
+        assert progress[0]["timeout"] == 37
+    pre_hooks = [hook for group in merged["hooks"]["PreToolUse"] for hook in group["hooks"]]
+    assert local_hook in pre_hooks
+    assert expected_guard in pre_hooks
+    assert not any(hook["command"] == _LEGACY_SECRET_GUARD for hook in pre_hooks)
+    assert merged["hooks"]["SessionStart"][0]["hooks"][0]["timeout"] == 83
+    after = target.read_bytes()
+    assert _run(REPO_ROOT, target, monkeypatch, "--accept-hooks") == 0
+    assert target.read_bytes() == after

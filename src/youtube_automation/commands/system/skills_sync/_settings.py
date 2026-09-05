@@ -8,6 +8,14 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+_KNOWN_REPLACED_HOOK_COMMANDS = {
+    "uv run yt-progress-hook": 'uv run --project "$CLAUDE_PROJECT_DIR" yt-progress-hook',
+    'for f in $CLAUDE_FILE_PATHS; do case "$f" in '
+    "*auth/client_secrets.json|*auth/token.json|*.env) "
+    'echo "BLOCKED: $f は AI から直接編集禁止。専用ツール経由で更新してください" >&2; '
+    "exit 2;; esac; done": 'python3 "$CLAUDE_PROJECT_DIR/.claude/skills/automation/references/guard_secret_edit.py"',
+}
+
 _KNOWN_REMOVED_HOOK_COMMANDS = frozenset(
     {
         'for f in $CLAUDE_FILE_PATHS; do case "$f" in '
@@ -16,6 +24,7 @@ _KNOWN_REMOVED_HOOK_COMMANDS = frozenset(
         "data|data/*|*/data|*/data/*|auth|auth/*|*/auth|*/auth/*) "
         "uv run yt-workspace-guard check $CLAUDE_FILE_PATHS; exit $?;; esac; done; exit 0",
         "uv run yt-workspace-guard context",
+        *_KNOWN_REPLACED_HOOK_COMMANDS,
     }
 )
 
@@ -55,6 +64,7 @@ def missing_hooks(target: dict[str, object], template: dict[str, object]) -> lis
     if not isinstance(target_hooks, dict) or not isinstance(template_hooks, dict):
         raise ValueError("hooks は object である必要があります")
     existing_by_event: dict[str, set[tuple[object, object, object]]] = {}
+    replacements: dict[tuple[object, object, object], dict[str, object]] = {}
     for event, groups in target_hooks.items():
         if not isinstance(groups, list):
             raise ValueError("hooks の event は配列である必要があります")
@@ -63,6 +73,12 @@ def missing_hooks(target: dict[str, object], template: dict[str, object]) -> lis
             if not isinstance(group, dict) or not isinstance(group.get("hooks", []), list):
                 raise ValueError("hook group の形式が不正です")
             signatures.update(_hook_signature(group.get("matcher"), hook) for hook in group.get("hooks", []))
+            for hook in group.get("hooks", []):
+                if not isinstance(hook, dict) or hook.get("type") != "command":
+                    continue
+                replacement = _KNOWN_REPLACED_HOOK_COMMANDS.get(hook.get("command"))
+                if replacement is not None:
+                    replacements[(event, group.get("matcher"), replacement)] = {**hook, "command": replacement}
     missing: list[tuple[str, dict[str, object]]] = []
     for event, groups in template_hooks.items():
         if not isinstance(groups, list):
@@ -72,7 +88,13 @@ def missing_hooks(target: dict[str, object], template: dict[str, object]) -> lis
             if not isinstance(group, dict) or not isinstance(group.get("hooks", []), list):
                 raise ValueError("template hook group の形式が不正です")
             matcher = group.get("matcher")
-            hooks = [hook for hook in group["hooks"] if _hook_signature(matcher, hook) not in signatures]
+            hooks = [
+                {**hook, **replacements.get((event, matcher, hook.get("command")), {})}
+                if isinstance(hook, dict)
+                else hook
+                for hook in group["hooks"]
+                if _hook_signature(matcher, hook) not in signatures
+            ]
             if hooks:
                 missing.append((event, {"matcher": matcher, "hooks": hooks}))
                 signatures.update(_hook_signature(matcher, hook) for hook in hooks)

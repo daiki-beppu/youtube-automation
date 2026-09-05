@@ -1,0 +1,1 @@
+- settings の diff と sync dry-run で hook の追加・除去候補を一致させ、既知の旧 progress hook と秘密ファイル編集ガードを承認後に移行するよう修正しました。ローカル hook と timeout を保持し、再同期で重複追加しません。
