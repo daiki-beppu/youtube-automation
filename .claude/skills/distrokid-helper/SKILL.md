@@ -38,7 +38,7 @@ verify が green で、Chrome 拡張へのハンドオフ後にユーザーが�
 
 1. 対象コレクションの `02-Individual-music/*.mp3` が 1 件以上存在すること。無ければ前工程（`/music --generate` → `/music --master`、または `/music --generate`）を案内して停止する
 2. `config/channel/distrokid.json` の `distrokid.enabled` が `true` で、`distrokid.profile.artist` が配信アーティスト名になっていること。`false` / 未設定のチャンネルでは本スキルを使わず、設定方法はユーザーに確認する
-3. ジャケット生成に使用する `config/skills/thumbnail.yaml` が存在すること（`provider` / `brand_background` / `style_lock_clause` を参照する）。無ければ `/thumbnail` の設定整備を案内する
+3. 対象チャンネルで `load_skill_config("thumbnail")` を実行し、ジャケット生成に使う実効設定が検証を通ること。配布済み既定値に任意の `config/skills/thumbnail.yaml` override をマージするため、override がなくても続行し、不要な設定ファイルを作成しない。実効設定の `image_generation.provider` が `gemini` / `openai` / `codex` のいずれかで、以下のプロンプト組み立てで参照する背景・スタイル項目が文字列であることも確認する。`ConfigError`（不正な YAML や設定値など）またはこの確認の失敗時は修正対象を案内して停止し、既定値だけに切り替えて続行しない
 4. `config/channel/distrokid.json` の `distrokid.profile.songwriter`（作曲者の本名。`{ "first": "...", "last": "..." }` の nested 構造、`middle` は任意）が設定されているか確認する。schema 上は任意のため未設定でも停止しないが、未設定のまま進めると Chrome 拡張のフォーム一括入力で songwriter（本名）欄だけが空になり、DistroKid Web で曲ごとの手入力が必要になる。未設定の場合は **plan / build（ステップ 1 / 4）に進む前に** AskUserQuestion で以下の 2 択を提示し、選択に従う:
    - **設定して進める** — `config/channel/distrokid.json` に `profile.songwriter` を追記してから続行する。songwriter は PII（本名）のため、**追記する前に必ず `references/pii-gitignore.md` を Read し**、記入例とあわせてリポジトリの公開範囲・`.gitignore` 運用を確認する
    - **手入力を了承して進める** — 未設定のまま続行し、DistroKid Web フォームで songwriter 欄を曲ごとに手入力することを了承する
@@ -156,7 +156,7 @@ DistroKid の配信ジャケットは 1:1 正方形、テキスト・ロゴな�
 
 #### プロンプト組み立て
 
-`config/skills/thumbnail.yaml` から以下を読み取る:
+前提チェックで検証した `load_skill_config("thumbnail")` の実効設定から以下を読み取る:
 - `image_generation.gemini.brand_background` — チャンネル統一の背景テクスチャ・色味
 - `image_generation.gemini.single_step.style_lock_clause` — スタイル固定 clause
 
@@ -169,7 +169,7 @@ square album cover, NO text, NO typography, NO logo, NO letters, NO watermark, N
 
 #### provider 分岐
 
-`config/skills/thumbnail.yaml` の `image_generation.provider` を確認:
+同じ実効設定の `image_generation.provider` を確認:
 
 **provider が `gemini` または `openai` の場合:**
 
