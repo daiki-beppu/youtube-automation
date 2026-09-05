@@ -6,11 +6,17 @@ import json
 import mimetypes
 from collections.abc import Mapping
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import SplitResult, urlsplit
 
 import requests
 
 from youtube_automation.core.errors import GeneratorError
+from youtube_automation.infrastructure.media._http_support import (
+    http_status,
+    is_safe_https,
+    raise_transport_error,
+    response_json,
+)
 from youtube_automation.infrastructure.secrets import get_secret
 
 _QUEUE_BASE_URL = "https://queue.fal.run"
@@ -37,39 +43,16 @@ def _queue_url(path: str) -> str:
     return f"{_QUEUE_BASE_URL}/{path}"
 
 
+def _is_allowlisted_host(parsed: SplitResult) -> bool:
+    host = parsed.hostname
+    return host in _EXACT_HOSTS or (host is not None and host.endswith(".fal.media"))
+
+
 def _validated_url(url: str) -> str:
     parsed = urlsplit(url)
-    host = parsed.hostname
-    allowed = host in _EXACT_HOSTS or (host is not None and host.endswith(".fal.media"))
-    if parsed.scheme != "https" or not allowed or parsed.username is not None or parsed.password is not None:
+    if not is_safe_https(parsed) or not _is_allowlisted_host(parsed):
         raise GeneratorError("fal URL は許可された host の認証情報を含まない HTTPS URL である必要があります")
     return url
-
-
-def _status(response: requests.Response | None) -> int | None:
-    if response is None:
-        return None
-    return response.status_code if isinstance(response.status_code, int) else None
-
-
-def _raise_transport_error(operation: str, error: requests.RequestException) -> None:
-    if isinstance(error, requests.Timeout):
-        raise GeneratorError(f"fal {operation} が timeout しました") from None
-    if isinstance(error, requests.HTTPError):
-        status = _status(error.response)
-        detail = f" (status={status})" if status is not None else ""
-        raise GeneratorError(f"fal {operation} HTTP error{detail}") from None
-    raise GeneratorError(f"fal {operation} に失敗しました") from None
-
-
-def _response_json(response: requests.Response, operation: str) -> dict[str, object]:
-    try:
-        body = response.json()
-    except requests.exceptions.JSONDecodeError:
-        raise GeneratorError(f"fal {operation} response を JSON として解釈できません") from None
-    if not isinstance(body, dict):
-        raise GeneratorError(f"fal {operation} response は JSON object である必要があります")
-    return body
 
 
 def submit(path: str, payload: Mapping[str, object], *, timeout: float) -> dict[str, object]:
@@ -84,12 +67,12 @@ def submit(path: str, payload: Mapping[str, object], *, timeout: float) -> dict[
         )
         response.raise_for_status()
     except requests.RequestException as error:
-        _raise_transport_error("submit", error)
-    return _response_json(response, "submit")
+        raise_transport_error("fal submit", error)
+    return response_json(response, "fal submit")
 
 
 def _reject_redirect(response: requests.Response) -> None:
-    status = _status(response)
+    status = http_status(response)
     if status is not None and 300 <= status < 400:
         raise GeneratorError("fal redirect は許可されていません")
 
@@ -102,8 +85,8 @@ def get_url(url: str, *, timeout: float) -> dict[str, object]:
         _reject_redirect(response)
         response.raise_for_status()
     except requests.RequestException as error:
-        _raise_transport_error("GET", error)
-    return _response_json(response, "GET")
+        raise_transport_error("fal GET", error)
+    return response_json(response, "fal GET")
 
 
 def download(url: str, *, timeout: float) -> bytes:
@@ -114,7 +97,7 @@ def download(url: str, *, timeout: float) -> bytes:
         _reject_redirect(response)
         response.raise_for_status()
     except requests.RequestException as error:
-        _raise_transport_error("download", error)
+        raise_transport_error("fal download", error)
     return response.content
 
 
@@ -135,16 +118,18 @@ def upload_file(path: Path, *, timeout: float) -> str:
         )
         response.raise_for_status()
     except requests.RequestException as error:
-        _raise_transport_error("storage initiate", error)
+        raise_transport_error("fal storage initiate", error)
 
-    body = _response_json(response, "storage initiate")
+    body = response_json(response, "fal storage initiate")
     upload_url = body.get("upload_url")
     file_url = body.get("file_url")
     if not isinstance(upload_url, str) or not isinstance(file_url, str):
         raise GeneratorError("fal storage initiate response に必要な URL がありません")
     _validated_url(file_url)
-    parsed_upload = urlsplit(upload_url)
-    if parsed_upload.scheme != "https" or not parsed_upload.netloc or parsed_upload.username or parsed_upload.password:
+    # signed PUT 先は fal 側が採番する任意 host のため host allowlist の対象外とし、
+    # 認証済み initiate response（TLS 経由の rest.alpha.fal.ai）を信頼する。
+    # 認証情報なしの HTTPS であることだけは呼び出し前に必ず確認する。
+    if not is_safe_https(urlsplit(upload_url)):
         raise GeneratorError("fal storage upload URL が安全な HTTPS URL ではありません")
     try:
         data = path.read_bytes()
@@ -159,5 +144,5 @@ def upload_file(path: Path, *, timeout: float) -> str:
         )
         put_response.raise_for_status()
     except requests.RequestException as error:
-        _raise_transport_error("storage upload", error)
+        raise_transport_error("fal storage upload", error)
     return file_url
