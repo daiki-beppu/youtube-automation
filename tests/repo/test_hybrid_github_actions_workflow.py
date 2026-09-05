@@ -96,7 +96,6 @@ def test_workflow_bootstraps_authenticated_claude_runner_before_sandwich_script(
     assert {
         key: env[key]
         for key in (
-            "YTA_CHANNEL_SLUG",
             "YTA_COLLECTION",
             "YTA_COLLECTION_DIR",
             "YTA_AGENT",
@@ -104,15 +103,16 @@ def test_workflow_bootstraps_authenticated_claude_runner_before_sandwich_script(
             "YTA_AUTOMATION_PROMPT",
         )
     } == {
-        "YTA_CHANNEL_SLUG": "${{ vars.YTA_CHANNEL_SLUG }}",
         "YTA_COLLECTION": "${{ vars.YTA_COLLECTION }}",
         "YTA_COLLECTION_DIR": "${{ vars.YTA_COLLECTION_DIR }}",
         "YTA_AGENT": "${{ vars.YTA_AGENT }}",
         "YTA_STAGE": "${{ vars.YTA_STAGE || 'planning' }}",
         "YTA_AUTOMATION_PROMPT": "${{ vars.YTA_AUTOMATION_PROMPT || '/wf-new --auto' }}",
     }
+    assert "YTA_CHANNEL_SLUG" not in env
     command = runner_step["run"]
     assert '--stage "$YTA_STAGE"' in command
+    assert "--channel-slug" not in command
 
     diagnostics = named_steps["Report Claude Code failure log"]
     assert diagnostics["if"] == "${{ failure() }}"

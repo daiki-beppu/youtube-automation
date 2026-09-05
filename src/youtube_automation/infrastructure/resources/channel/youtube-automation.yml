@@ -36,7 +36,6 @@ jobs:
         env:
           REPOSITORY_URL: ${{ github.server_url }}/${{ github.repository }}.git
           REPOSITORY_REF: ${{ github.ref_name }}
-          YTA_CHANNEL_SLUG: ${{ vars.YTA_CHANNEL_SLUG }}
           YTA_COLLECTION: ${{ vars.YTA_COLLECTION }}
           YTA_COLLECTION_DIR: ${{ vars.YTA_COLLECTION_DIR }}
           YTA_AGENT: ${{ vars.YTA_AGENT }}
@@ -55,7 +54,6 @@ jobs:
           --ref "$REPOSITORY_REF"
           --workspace "${{ runner.temp }}/yta-hybrid"
           --
-          --channel-slug "$YTA_CHANNEL_SLUG"
           --collection "$YTA_COLLECTION"
           --collection-dir "$YTA_COLLECTION_DIR"
           --agent "$YTA_AGENT"

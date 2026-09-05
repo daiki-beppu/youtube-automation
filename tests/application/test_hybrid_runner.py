@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 from decimal import Decimal
@@ -644,7 +645,15 @@ def test_posix_script_completes_local_pull_run_push(tmp_path: Path) -> None:
         HandoffIdentity("003ch", "demo", "suno-download"),
         (HandoffSource(source, "song.mp3"),),
     )
-    remote, _, _ = _repositories(tmp_path, "003ch/demo/suno-download/manifest.json", manifest.root_sha256)
+    remote, seed, _ = _repositories(tmp_path, "003ch/demo/suno-download/manifest.json", manifest.root_sha256)
+    shutil.copytree(REPO_ROOT / "tests/fixtures/sample_channel/config", seed / "config")
+    meta_path = seed / "config/channel/meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["channel"]["short"] = "003ch"
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+    _git(seed, "add", "config")
+    _git(seed, "commit", "-m", "add channel config")
+    _git(seed, "push")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     uv = bin_dir / "uv"
@@ -692,6 +701,7 @@ exec "$YTA_TEST_PYTHON" "$YTA_AGENT_SCRIPT"
     env.update(
         {
             "PATH": f"{bin_dir}:{env['PATH']}",
+            "PYTHONPATH": str(root / "src"),
             "YTA_TEST_PYTHON": sys.executable,
             "YTA_AGENT_SCRIPT": str(agent_script),
             "YTA_HUMAN_TASKS_ARGS": str(tmp_path / "human-tasks-args"),
@@ -708,8 +718,6 @@ exec "$YTA_TEST_PYTHON" "$YTA_AGENT_SCRIPT"
             "--workspace",
             str(tmp_path / "job"),
             "--",
-            "--channel-slug",
-            "003ch",
             "--collection",
             "demo",
             "--collection-dir",
@@ -747,7 +755,7 @@ exec "$YTA_TEST_PYTHON" "$YTA_AGENT_SCRIPT"
     assert "r2_retained=" in result.stderr
     assert "projected_actions_minutes=" in result.stderr
     assert (tmp_path / "human-tasks-args").read_text(encoding="utf-8").strip() == (
-        "run --frozen yt-human-tasks --channel 003ch"
+        "run --frozen yt-human-tasks --channel-dir ."
     )
     verify = tmp_path / "script-verify"
     subprocess.run(["git", "clone", "--branch", "main", str(remote), str(verify)], check=True, capture_output=True)

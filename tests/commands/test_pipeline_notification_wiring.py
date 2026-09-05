@@ -183,10 +183,19 @@ def test_hybrid_command_resolves_workspace_channel_from_slug(monkeypatch, tmp_pa
     assert result == 0
 
 
-def test_hybrid_command_rejects_unknown_workspace_channel_before_execution(
+@pytest.mark.parametrize(
+    ("slug_args", "message"),
+    [
+        (["--channel-slug", "missing"], "--channel-slug='missing' に対応するチャンネルがありません"),
+        ([], "workspace では --channel-slug が必要です"),
+    ],
+)
+def test_hybrid_command_rejects_invalid_workspace_channel_before_execution(
     monkeypatch,
     tmp_path: Path,
     capsys,
+    slug_args: list[str],
+    message: str,
 ) -> None:
     (tmp_path / "channels" / "ambient-lab" / "config" / "channel").mkdir(parents=True)
     runner = MagicMock(side_effect=AssertionError("runner must not execute"))
@@ -196,8 +205,7 @@ def test_hybrid_command_rejects_unknown_workspace_channel_before_execution(
         [
             "--channel-dir",
             str(tmp_path),
-            "--channel-slug",
-            "missing",
+            *slug_args,
             "--collection",
             "night-rain",
             "--collection-dir",
@@ -210,7 +218,7 @@ def test_hybrid_command_rejects_unknown_workspace_channel_before_execution(
     )
 
     assert result == 1
-    assert "--channel-slug='missing' に対応するチャンネルがありません" in capsys.readouterr().err
+    assert message in capsys.readouterr().err
     runner.assert_not_called()
 
 

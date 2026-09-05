@@ -26,20 +26,6 @@ checkout=$workspace/channel
 git clone --quiet --branch "$repository_ref" --single-branch "$repository_url" "$checkout"
 cd "$checkout"
 
-channel_slug=
-expect_channel_slug=false
-for argument in "$@"; do
-  if [ "$expect_channel_slug" = true ]; then
-    channel_slug=$argument
-    break
-  fi
-  case "$argument" in
-    --channel-slug) expect_channel_slug=true ;;
-    --channel-slug=*) channel_slug=${argument#*=}; break ;;
-  esac
-done
-[ -n "$channel_slug" ] || usage
-
 # Cloud and local use the same uv-direct path. Provider-specific workflow syntax belongs outside this script.
 uv run --frozen yt-hybrid-runner --channel-dir . "$@"
-uv run --frozen yt-human-tasks --channel "$channel_slug"
+uv run --frozen yt-human-tasks --channel-dir .
