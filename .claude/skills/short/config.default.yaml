@@ -5,6 +5,31 @@
 #
 # チャンネル側上書きは config/skills/short.yaml。
 
+# Shorts ループ動画の既定 engine。fal は低コストの opt-in。
+engine: veo
+
+veo:
+  model: "veo-3.1-fast-generate-001"
+  default_prompt: |
+    Gentle natural animation with a locked camera. Keep all text completely static and unchanged.
+
+fal:
+  model: "minimax/h3-max-turbo/image-to-video"
+  allowed_models:
+    - "minimax/h3-max-turbo/image-to-video"
+    - "minimax/h3-max/image-to-video"
+  duration_seconds: 8
+  resolution: "768P"
+  prompt_expansion_mode: balanced
+  canvas:
+    "9:16": [768, 1344]
+  upscale_to: [1080, 1920]
+  timeout_seconds: 600
+  poll_interval_seconds: 2
+  max_poll_retries: 3
+  default_prompt: |
+    Gentle natural animation with a locked camera. Keep all text completely static and unchanged.
+
 collection:
   # generate-shorts.sh の env デフォルト
   duration_sec: 20          # 1 ショートあたりの尺

@@ -1,0 +1,2 @@
+- `yt-generate-shorts-loop` に fal.ai を使う `--engine fal` と 9:16 用のリサイズ設定を追加。
+- fal 生出力の実寸をアップスケール前に canvas 想定値と併記し、最終出力寸法と区別します。Shorts の polling 再試行回数も設定できます。
