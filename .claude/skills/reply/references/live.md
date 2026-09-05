@@ -6,10 +6,11 @@
 
 以下を上から確認し、1 件でも FAIL なら示した前工程を案内して停止する。後続 Step へ進まない。
 
-- `config/channel/comments.json` が存在し、`comments.live_chat.enabled` が `true`。無ければ `examples/channel_config.example/comments.json` から作成する
-- `terraform version` が 1.10 以上で、`infra/terraform/streaming/` と `.claude/skills/streaming/references/deploy_live_chat.sh` が存在する。無ければ automation を更新して `/streaming` を実行する
-- `terraform -chdir=infra/terraform/streaming output -raw instance_ip` で配信 VPS を解決し、`ssh root@$INSTANCE_IP 'systemctl is-active youtube-stream'` が `active` を返す。VPS 未構築、接続失敗、service 非 active は前提未達として停止し、`/streaming` の構築・復旧を案内する。active broadcast がまだ無いだけなら daemon の待機契約を維持して続行する
-- `auth/client_secrets.json` と `auth/token.json`、`${CODEX_HOME:-$HOME/.codex}/auth.json` が存在する。認証が必要なら AI が `uv run yt-oauth` / `codex login` を起動して完了まで待ち、人間はブラウザ上のログイン・アカウント選択・同意だけを行う
+- 最初に [Terraform 資産と実行場所の確定](../../streaming/references/upstream-checkout.md) を実行し、上流 `AUTOMATION_ROOT`・対象 `CHANNEL_DIR`・`TF_DIR` を確定する。資産が無ければ取得先を示して停止する
+- `$CHANNEL_DIR/config/channel/comments.json` が存在し、`comments.live_chat.enabled` が `true`。無ければ Step 1 の配布済み設定モデルから生成・確認してから再判定する
+- `terraform version` が上流 README の要件を満たすこと。以降の Terraform / 配備 helper は上流 root、設定・認証の準備はチャンネル root で実行する
+- `terraform -chdir="$TF_DIR" output -raw instance_ip` で配信 VPS を解決し、`ssh root@$INSTANCE_IP 'systemctl is-active youtube-stream'` が `active` を返す。VPS 未構築、接続失敗、service 非 active は前提未達として停止し、`/streaming` の構築・復旧を案内する。active broadcast がまだ無いだけなら daemon の待機契約を維持して続行する
+- `$CHANNEL_DIR/auth/client_secrets.json` と `$CHANNEL_DIR/auth/token.json`、`${CODEX_HOME:-$HOME/.codex}/auth.json` が存在する。認証が必要なら AI が `uv run yt-oauth` / `codex login` を起動して完了まで待ち、人間はブラウザ上のログイン・アカウント選択・同意だけを行う
 - 1Password CLI `op` が利用でき、session が有効。未認証なら AI が `op signin` を起動し、人間が 1Password app 上で承認する。JSON 本文をチャット、argv、tfvars、リポジトリへ出さない
 
 ## 完了条件
@@ -35,7 +36,23 @@
 
 ## Step 1: 設定を確定する
 
-`examples/channel_config.example/comments.json` の `comments.live_chat` を channel へ反映する。初回は次を維持する。
+`$CHANNEL_DIR/config/channel/comments.json` が無い場合は、インストール済みの設定モデルを使いチャンネル root で次を実行する。既存ファイルは上書きせず、その `comments.live_chat` だけを確認する。
+
+```bash
+uv run python - <<'PYCONFIG'
+from dataclasses import asdict
+import json
+from pathlib import Path
+from youtube_automation.configuration.comments import Comments
+
+path = Path("config/channel/comments.json")
+with path.open("x", encoding="utf-8") as output:
+    json.dump({"comments": asdict(Comments())}, output, ensure_ascii=False, indent=2)
+    output.write("\n")
+PYCONFIG
+```
+
+既定は無効。対象チャンネルの live chat 返信を有効にすることを確認して `comments.live_chat.enabled` を `true` にし、以下を維持する。
 
 - `process_initial_messages: false`: 起動時 backlog を履歴へ記録するだけで返信しない
 - `max_replies_per_hour: 12` / `max_consecutive_per_user: 2`: 過剰返信を抑止
@@ -56,7 +73,7 @@ Codex auth が無ければ AI が `codex login` を起動し、表示された�
 AI が次を実行する。`write_op_secret` は JSON template を stdin で `op` へ渡すため、secret は argv に載らない。
 
 ```bash
-CHANNEL_DIR=/absolute/path/to/channel uv run python - <<'PY'
+uv run python - <<'PY'
 import os
 from pathlib import Path
 from youtube_automation.infrastructure.secrets import write_op_secret
@@ -85,7 +102,7 @@ export OP_CODEX_AUTH_REF='op://Personal/YouTube_Live_Chat/codex_auth_json'
 `/streaming` の通常 secret と 3 参照を環境へ設定後、AI が PTY / background session で次を起動する。
 
 ```bash
-"$(git rev-parse --show-toplevel)/.claude/skills/streaming/references/deploy_live_chat.sh" /absolute/path/to/channel
+"$AUTOMATION_ROOT/.claude/skills/streaming/references/deploy_live_chat.sh" --tf-dir "$TF_DIR" "$CHANNEL_DIR"
 ```
 
 Terraform の apply 確認 prompt で外部反映ゲートを実施する。承認後だけ `yes`、キャンセルなら `no` を送る。
@@ -93,7 +110,7 @@ Terraform の apply 確認 prompt で外部反映ゲートを実施する。承�
 ## Step 5: 完了を検証する
 
 ```bash
-INSTANCE_IP=$(terraform -chdir=infra/terraform/streaming output -raw instance_ip)
+INSTANCE_IP=$(terraform -chdir="$TF_DIR" output -raw instance_ip)
 ssh root@$INSTANCE_IP 'systemctl is-active youtube-stream live-chat-reply'
 ssh root@$INSTANCE_IP 'stat -c "%a %U %n" /var/lib/live-chat-reply/channel/auth/{token.json,client_secrets.json} /var/lib/live-chat-reply/codex/auth.json'
 ssh root@$INSTANCE_IP 'journalctl -u live-chat-reply -n 100 --no-pager'

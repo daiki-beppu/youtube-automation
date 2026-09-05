@@ -1,0 +1,1 @@
+- streaming / reply live で非配布の Terraform 資産を上流 checkout から確認・利用する手順を明確にし、欠損時は取得先を示して停止するよう修正しました。comments 設定は配布済み設定モデルから新規生成でき、既存 state や秘密情報のコピーは不要です。
