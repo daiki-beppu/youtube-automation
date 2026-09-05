@@ -1,0 +1,2 @@
+- `yt-generate-loop-video` に fal.ai のループ動画生成 engine と skill-config による既定 engine 選択を追加。
+- `loop.fal.max_poll_retries` を生成境界へ渡し、一時的な polling 障害の再試行回数を設定できます。

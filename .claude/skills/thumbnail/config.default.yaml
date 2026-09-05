@@ -6,6 +6,9 @@
 # テキストなし main.png/jpg からループ動画背景を生成する --loop mode。
 # 旧 config/skills/loop-video.yaml override は loader がこの節へ deep-merge する。
 loop:
+  # 既定は GCP に集約できる Veo。fal は低コストの opt-in。
+  engine: veo
+
   # 動画の構成タイプ。現行 generator は loop のみを実装する。
   video_type: loop
 
@@ -56,6 +59,24 @@ loop:
     # Veo API 制約で現状 8 秒固定。
     duration_seconds: 8
     crossfade_sec: 0.5
+
+  # fal.ai queue 経由の MiniMax H3 image-to-video。
+  fal:
+    model: "minimax/h3-max-turbo/image-to-video"
+    allowed_models:
+      - "minimax/h3-max-turbo/image-to-video"
+      - "minimax/h3-max/image-to-video"
+    duration_seconds: 8
+    aspect_ratio: "16:9"
+    resolution: "768P"
+    prompt_expansion_mode: balanced
+    upscale_to: [1920, 1080]
+    canvas:
+      "16:9": [1344, 768]
+      "9:16": [768, 1344]
+    timeout_seconds: 600
+    poll_interval_seconds: 2
+    max_poll_retries: 3
 
   # Gemini Developer API Interactions API の代替エンジン。
   omni:

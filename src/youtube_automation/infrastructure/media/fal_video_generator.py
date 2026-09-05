@@ -21,6 +21,7 @@ from youtube_automation.infrastructure.media.veo_generator import resolve_smooth
 
 DEFAULT_MODEL = "minimax/h3-max-turbo/image-to-video"
 DEFAULT_DURATION_SECONDS = 5
+DEFAULT_ASPECT_RATIO = "16:9"
 DEFAULT_RESOLUTION = "768P"
 DEFAULT_PROMPT_EXPANSION_MODE = "balanced"
 DEFAULT_TIMEOUT_SEC = 600.0
@@ -28,6 +29,7 @@ DEFAULT_POLL_INTERVAL_SEC = 2.0
 DEFAULT_MAX_POLL_RETRIES = 3
 DEFAULT_ALLOWED_MODELS = frozenset({DEFAULT_MODEL, "minimax/h3-max/image-to-video"})
 DEFAULT_CANVAS = {"16:9": (1344, 768), "9:16": (768, 1344)}
+DEFAULT_UPSCALE_TO = (1920, 1080)
 _MAX_PROMPT_CHARS = 2000
 _RESOLUTIONS = {"480P", "768P"}
 _MODES = {"balanced", "quality"}
@@ -238,7 +240,7 @@ def generate_loop_video(
     prompt: str,
     *,
     duration_seconds: int = DEFAULT_DURATION_SECONDS,
-    aspect_ratio: str = "16:9",
+    aspect_ratio: str = DEFAULT_ASPECT_RATIO,
     resolution: str = DEFAULT_RESOLUTION,
     prompt_expansion_mode: str = DEFAULT_PROMPT_EXPANSION_MODE,
     timeout_sec: float = DEFAULT_TIMEOUT_SEC,
@@ -246,7 +248,7 @@ def generate_loop_video(
     max_poll_retries: int = DEFAULT_MAX_POLL_RETRIES,
     allowed_models: Collection[str] = DEFAULT_ALLOWED_MODELS,
     canvas: Mapping[str, tuple[int, int]] = DEFAULT_CANVAS,
-    upscale_to: tuple[int, int] | None = (1920, 1080),
+    upscale_to: tuple[int, int] | None = DEFAULT_UPSCALE_TO,
     compression: dict | None = None,
     channel_root: Path | None = None,
 ) -> bool:

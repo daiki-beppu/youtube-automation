@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""コレクション用ループ動画背景を Veo / Omni / MiniMax H3 で生成する。
+"""コレクション用ループ動画背景を Veo / fal / Omni / MiniMax H3 で生成する。
 
 main.png を開始・終了フレーム両方に指定し、微細なアニメーション付きの
 シームレスなループ動画を生成する。
@@ -25,7 +25,44 @@ import time
 from pathlib import Path
 
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.domains.media.loop_engine import LoopEngineConfig
 from youtube_automation.domains.media.video_type import VideoType, VideoTypeConfig
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_ALLOWED_MODELS as DEFAULT_FAL_ALLOWED_MODELS,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_ASPECT_RATIO as DEFAULT_FAL_ASPECT_RATIO,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_CANVAS as DEFAULT_FAL_CANVAS,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_DURATION_SECONDS as DEFAULT_FAL_DURATION_SECONDS,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_MAX_POLL_RETRIES as DEFAULT_FAL_MAX_POLL_RETRIES,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_MODEL as DEFAULT_FAL_MODEL,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_POLL_INTERVAL_SEC as DEFAULT_FAL_POLL_INTERVAL_SEC,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_PROMPT_EXPANSION_MODE as DEFAULT_FAL_PROMPT_EXPANSION_MODE,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_RESOLUTION as DEFAULT_FAL_RESOLUTION,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_TIMEOUT_SEC as DEFAULT_FAL_TIMEOUT_SEC,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    DEFAULT_UPSCALE_TO as DEFAULT_FAL_UPSCALE_TO,
+)
+from youtube_automation.infrastructure.media.fal_video_generator import (
+    generate_loop_video as generate_fal_loop_video,
+)
 from youtube_automation.infrastructure.media.genai_client import create_veo_genai_client
 from youtube_automation.infrastructure.media.minimax_video_generator import (
     DEFAULT_ASPECT_RATIO as DEFAULT_H3_ASPECT_RATIO,
@@ -211,15 +248,15 @@ def _build_parser() -> argparse.ArgumentParser:
     # RawTextHelpFormatter: help 文字列にハイフン入りモデル名が連なるため、
     # 80 桁折り返しで `veo-3.1-lite-` / `generate-preview` のように分断されないようにする。
     parser = argparse.ArgumentParser(
-        description="Veo 3.1 / Gemini Omni Flash / MiniMax H3 コレクションループ動画生成",
+        description="Veo 3.1 / fal.ai / Gemini Omni Flash / MiniMax H3 コレクションループ動画生成",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("collection", nargs="?", help="コレクションパス")
     parser.add_argument(
         "--engine",
-        choices=("veo", "omni", "h3"),
-        default="veo",
-        help="動画生成エンジン (default: veo)",
+        choices=("veo", "fal", "omni", "h3"),
+        default=None,
+        help="動画生成エンジン (default: loop.engine、未設定時 veo)",
     )
     parser.add_argument(
         "--prompt",
@@ -363,7 +400,30 @@ def _run_generate(
         _backup_existing_loop(output_path, max_backups=max_backups)
 
     start_time = time.monotonic()
-    if engine == "h3":
+    if engine == "fal":
+        fal_config = engine_config or {}
+        raw_canvas = fal_config.get("canvas", {})
+        canvas = {str(key): tuple(value) for key, value in raw_canvas.items()}
+        upscale = fal_config.get("upscale_to", DEFAULT_FAL_UPSCALE_TO)
+        success = generate_fal_loop_video(
+            image_path,
+            output_path,
+            model,
+            prompt,
+            duration_seconds=int(fal_config.get("duration_seconds", DEFAULT_FAL_DURATION_SECONDS)),
+            aspect_ratio=str(fal_config.get("aspect_ratio", DEFAULT_FAL_ASPECT_RATIO)),
+            resolution=str(fal_config.get("resolution", DEFAULT_FAL_RESOLUTION)),
+            prompt_expansion_mode=str(fal_config.get("prompt_expansion_mode", DEFAULT_FAL_PROMPT_EXPANSION_MODE)),
+            timeout_sec=float(fal_config.get("timeout_seconds", DEFAULT_FAL_TIMEOUT_SEC)),
+            poll_interval_sec=float(fal_config.get("poll_interval_seconds", DEFAULT_FAL_POLL_INTERVAL_SEC)),
+            # 不正な型を丸めず、生成境界の整数検証へ渡す。
+            max_poll_retries=fal_config.get("max_poll_retries", DEFAULT_FAL_MAX_POLL_RETRIES),
+            allowed_models=frozenset(fal_config.get("allowed_models", DEFAULT_FAL_ALLOWED_MODELS)),
+            canvas=canvas or DEFAULT_FAL_CANVAS,
+            upscale_to=tuple(upscale) if upscale is not None else None,
+            compression=compression,
+        )
+    elif engine == "h3":
         h3_config = engine_config or {}
         success = generate_h3_loop_video(
             image_path,
@@ -432,6 +492,7 @@ def main():
             skill_config,
             config_path="config/skills/loop-video.yaml::video_type",
         ).video_type
+        configured_engine = LoopEngineConfig.from_mapping(skill_config).engine.value
     except ConfigError as e:
         print(f"[ERROR] {e}", file=sys.stderr)
         sys.exit(1)
@@ -449,15 +510,20 @@ def main():
             file=sys.stderr,
         )
         sys.exit(1)
-    engine_config = skill_config.get(args.engine, {})
+    engine = args.engine or configured_engine
+    engine_config = skill_config.get(engine, {})
     compression_config = skill_config.get("compression", {})
     max_backups = int(skill_config.get("max_backups", DEFAULT_MAX_BACKUPS))
     default_model = {
         "veo": DEFAULT_MODEL,
+        "fal": DEFAULT_FAL_MODEL,
         "omni": DEFAULT_OMNI_MODEL,
         "h3": DEFAULT_H3_MODEL,
-    }[args.engine]
+    }[engine]
     model = args.model or engine_config.get("model", default_model)
+    if engine == "fal" and model not in engine_config.get("allowed_models", DEFAULT_FAL_ALLOWED_MODELS):
+        print("[ERROR] fal model は loop.fal.allowed_models に含まれる必要があります", file=sys.stderr)
+        sys.exit(1)
     prompt = resolve_prompt(args, engine_config, skill_config)
 
     collection_path = _resolve_collection_path(args, parser)
@@ -475,7 +541,7 @@ def main():
         output_path,
         model,
         prompt,
-        engine=args.engine,
+        engine=engine,
         engine_config=engine_config,
         assume_yes=args.yes,
         max_backups=max_backups,
