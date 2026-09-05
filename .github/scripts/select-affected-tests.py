@@ -80,6 +80,14 @@ PATH_TEST_MAP: Final = (
             "tests/repo/test_skill_page_generation_contract.py",
         ),
     ),
+    (
+        ".github/workflows/terraform-drift.yml",
+        ("tests/repo/test_terraform_workflows.py", "tests/repo/test_terraform_drift_script.py"),
+    ),
+    (
+        ".github/scripts/terraform-drift.sh",
+        ("tests/repo/test_terraform_drift_script.py", "tests/repo/test_terraform_workflows.py"),
+    ),
     (".github/workflows/terraform-static.yml", ("tests/repo/test_terraform_workflows.py",)),
     (".github/scripts/", ("tests/repo/test_select_affected_tests.py",)),
     (".github/scripts/any-usage-gate.sh", ("tests/repo/test_any_usage_gate.py",)),

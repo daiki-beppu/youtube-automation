@@ -133,3 +133,40 @@ ADC ユーザーの project / billing / API / IAM に対する権限を確認す
 
 ### `Permission denied` (apply 後の実行時)
 ADC を更新してから実行: `gcloud auth application-default login && gcloud auth application-default set-quota-project <project-id>`
+
+## drift の解消
+
+`.github/workflows/terraform-drift.yml` は毎日 21:17 UTC（翌日 06:17 JST）、手動 dispatch、gcp 定義を変更した main push で読み取り専用 SA `terraform-drift` の WIF 認証を使う。main 以外と fork PR は実行しない。required status check にはしない。実行本体は `.github/scripts/terraform-drift.sh` で、backend init 後に `plan -detailed-exitcode -lock=false` を行い、state の lock object を書き込まない。同時実行は 1 本。
+
+- schedule / dispatch の差分: **drift 検知**
+- main push の差分: **apply 待ち**（マージ後の未適用）
+- init / plan の失敗: **job 失敗**（workflow も失敗扱い）
+- 差分なし: 通知なし。通知送信に失敗した場合も workflow を失敗させる。
+
+Discord の本文は種別と run URL のみで、plan 本文を転送しない。認証・Terraform インストール以前の失敗は Actions の失敗を確認する。
+
+通知が来たら **Terraform が正**。run のログで対象を確認し、ADC を持つローカル環境でこのディレクトリの `terraform plan` をレビューしてから `terraform apply` し、実体をコードへ戻す。意図した変更なら先に Terraform 定義を PR で修正してから apply する。現在の実体に合わせるためだけにコードを書き換える方向は採らない。doctor から Terraform は起動しない。
+
+### HUMAN STEP: secrets と実証
+
+GitHub repository secrets は運用者が `gh secret set <名前>` の stdin へ `op read` の結果を渡して登録する。値をチャット、issue、シェル履歴へ貼らない。
+
+| Secret | 値の取得元 |
+|---|---|
+| `TF_VAR_project_id` / `TF_VAR_billing_account` / `TF_VAR_adc_email` | 既存の共有 GCP 設定の 1Password 参照 |
+| `TF_VAR_github_repository_owner_id` | #4931 の tfvars に設定した GitHub owner numeric ID |
+| `GCP_WIF_PROVIDER` / `GCP_DRIFT_SERVICE_ACCOUNT` | #4931 の `wif_provider_name` / `drift_service_account_email` output |
+| `TFSTATE_BUCKET` | bootstrap の `bucket_name` output。backend と `TF_VAR_tfstate_bucket` の両方に注入 |
+| `DISCORD_WEBHOOK_URL` | 既存 1Password `YouTube_Stream_Discord_Webhook` |
+
+`cloudresourcemanager.googleapis.com` は drift SA の project 読み取りに必要なため、承認済みの #4932 で `drift-resource-manager.tf` の CI 前提 API として追加する。既存の管理対象 6 API は維持し、この API を別 resource で管理する。Console や drift job から有効化しない。
+
+main WIF による SA plan と Discord の検知→解消の本番実測は、ユーザー承認によりマージ後の確認事項として残す。ローカル ADC の No changes は WIF / Discord の実測完了を意味しない。初回実行時は SA での plan 成功を確認し、後続の読み取り権限エラーが出たら権限を自動拡張せず診断する。
+
+main へマージし前提を解決したら、次の証拠を #4932 に残す（本実装のローカル stub テストは実環境の代用にしない）。
+
+1. `gh workflow run terraform-drift.yml --ref main` を実行し、No changes の run URL を記録する。
+2. 検知経路を検証するための HUMAN STEP として、管理対象 project に無害な一時 label を Console で 1 個追加する。管理対象 API の一時無効化はしない。
+3. dispatch し **drift 検知** の run URL と Discord 到達を記録する。
+4. ローカル ADC で plan をレビューして apply し、一時 label を宣言どおり戻す。
+5. 再度 dispatch し No changes の run URL を記録する。これで検知→解消の 1 周を閉じる。

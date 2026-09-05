@@ -48,3 +48,40 @@ def test_static_workflow_requires_no_credentials() -> None:
             assert not re.search(r"\bsecrets\s*[.\[]|\bid-token\b", line, re.IGNORECASE)
     for line in yaml.dump(document.get("env", {})).splitlines():
         assert not re.search(r"\bsecrets\s*[.\[]", line, re.IGNORECASE)
+
+
+def test_drift_runs_only_on_main_without_write_permissions() -> None:
+    workflow = read_file(REPO_ROOT / ".github/workflows/terraform-drift.yml")
+    document = yaml.load(workflow, Loader=yaml.BaseLoader)
+    assert set(document["on"]) == {"schedule", "workflow_dispatch", "push"}
+    assert document["on"]["push"]["branches"] == ["main"]
+    assert "infra/terraform/gcp/**" in document["on"]["push"]["paths"]
+    assert len(document["on"]["schedule"]) == 1
+    assert document["on"]["schedule"][0]["cron"].split()[2:] == ["*", "*", "*"]
+    assert document["permissions"] == {"contents": "read", "id-token": "write"}
+    assert document["concurrency"]["group"]
+    for job in document["jobs"].values():
+        assert job["if"] == "github.ref == 'refs/heads/main'"
+        assert "permissions" not in job
+        for step in job["steps"]:
+            assert not re.search(r"\bterraform\s+apply\b", step.get("run", ""))
+    script = read_file(REPO_ROOT / ".github/scripts/terraform-drift.sh")
+    assert not re.search(r"\bterraform\s+apply\b", script)
+
+
+def test_drift_credentials_are_injected_from_secrets() -> None:
+    document = yaml.load(read_file(REPO_ROOT / ".github/workflows/terraform-drift.yml"), Loader=yaml.BaseLoader)
+    job = document["jobs"]["drift"]
+    variables = read_file(REPO_ROOT / "infra/terraform/gcp/variables.tf")
+    for name in re.findall(r'variable "([^"]+)"', variables):
+        block = extract_block(variables, rf'variable "{name}"')
+        assert block is not None
+        if re.search(r"\bdefault\s*=", block):
+            continue
+        value = job["env"][f"TF_VAR_{name}"]
+        assert re.fullmatch(r"\$\{\{ secrets\.\w+ }}", value)
+    for name in ("TFSTATE_BUCKET", "DISCORD_WEBHOOK_URL"):
+        assert re.fullmatch(r"\$\{\{ secrets\.\w+ }}", job["env"][name])
+    auth = next(step for step in job["steps"] if step.get("uses", "").startswith("google-github-actions/auth@"))
+    for name in ("workload_identity_provider", "service_account"):
+        assert re.fullmatch(r"\$\{\{ secrets\.\w+ }}", auth["with"][name])

@@ -4,6 +4,8 @@
 
 accepted (2026-09-05)。Wayfinder map [#4714](https://github.com/daiki-beppu/youtube-automation/issues/4714)、起草 [#4929](https://github.com/daiki-beppu/youtube-automation/issues/4929)。決定の正本は #4719（ADR 番号の訂正を含む）、#4720 §12、#4721 §11。
 
+amended (2026-09-05, #4932): `.github/workflows/terraform-drift.yml` と読み取り専用 SA `terraform-drift` で drift を検知する。解消原則・secrets 登録・実証手順は `infra/terraform/gcp/README.md`「drift の解消」に実装。実環境の検知→解消 evidence は HUMAN STEP として別途記録する。
+
 ## Context
 
 ADR-0010 の単一共有プロジェクトには既存リソースがあるが、Terraform の定義と doctor / bootstrap の変更経路が併存していた。存在確認だけの data source ではプロジェクトの billing 紐付けを drift として検出できず、複数の変更経路は構成の正本を曖昧にする。
