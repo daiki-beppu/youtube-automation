@@ -124,6 +124,7 @@ def test_matching_state_resumes_without_submit(tmp_path: Path, monkeypatch: pyte
         duration_seconds=5,
         resolution="768P",
         prompt_expansion_mode="balanced",
+        input_canvas="16:9:1344x768",
         channel_root=tmp_path,
     )
     submit = Mock()
@@ -450,3 +451,35 @@ def test_real_postprocessing_publishes_only_silent_scaled_video(tmp_path, monkey
     assert len(streams) == 1
     assert (streams[0]["codec_type"], streams[0]["width"], streams[0]["height"]) == ("video", 192, 108)
     assert sorted(p.name for p in output.parent.iterdir()) == ["loop.mp4"]
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"canvas": {"16:9": (1008, 576)}},
+        {"aspect_ratio": "9:16", "canvas": {"9:16": (1344, 768)}},
+    ],
+)
+def test_changed_input_canvas_submits_new_job_after_postprocessing_failure(tmp_path, monkeypatch, overrides):
+    image = _image(tmp_path / "main.png")
+    output = tmp_path / "loop.mp4"
+    submit = _mock_successful_new_job(monkeypatch)
+    monkeypatch.setattr(
+        generator.fal_client,
+        "get_url",
+        Mock(
+            side_effect=[
+                {"status": "COMPLETED"},
+                {"video": {"url": "https://v3.fal.media/out.mp4"}},
+            ]
+            * 2
+        ),
+    )
+    monkeypatch.setattr(generator, "smooth_loop", Mock(side_effect=[False, True]))
+    assert not generator.generate_loop_video(image, output, generator.DEFAULT_MODEL, "motion", channel_root=tmp_path)
+    assert generator.generate_loop_video(
+        image, output, generator.DEFAULT_MODEL, "motion", channel_root=tmp_path, **overrides
+    )
+    assert submit.call_count == 2
+    assert generator.fal_client.upload_file.call_count == 2
+    assert generator.fal_client.download.call_count == 2

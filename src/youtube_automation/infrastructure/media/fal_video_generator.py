@@ -96,6 +96,7 @@ def _submit(
     output_path: Path,
     *,
     source_image_path: Path | None = None,
+    input_canvas: str,
     model: str,
     prompt: str,
     duration_seconds: int,
@@ -130,6 +131,7 @@ def _submit(
         duration_seconds=duration_seconds,
         resolution=resolution,
         prompt_expansion_mode=prompt_expansion_mode,
+        input_canvas=input_canvas,
         channel_root=channel_root,
         **state,
     )
@@ -264,6 +266,7 @@ def generate_loop_video(
             timeout_sec=timeout_sec,
             poll_interval_sec=poll_interval_sec,
         )
+        input_canvas = f"{aspect_ratio}:{size[0]}x{size[1]}"
         prepared = task_store.input_image_path(output_path, channel_root=channel_root)
         _validate_and_resize(image_path, prepared, size)
 
@@ -272,6 +275,7 @@ def generate_loop_video(
                 prepared,
                 output_path,
                 source_image_path=image_path,
+                input_canvas=input_canvas,
                 model=model,
                 prompt=prompt,
                 duration_seconds=duration_seconds,
@@ -299,6 +303,7 @@ def generate_loop_video(
             duration_seconds=duration_seconds,
             resolution=resolution,
             prompt_expansion_mode=prompt_expansion_mode,
+            input_canvas=input_canvas,
         ):
             try:
                 saved_result = state.get("result")
