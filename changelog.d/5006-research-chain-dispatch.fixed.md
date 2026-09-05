@@ -1,0 +1,1 @@
+- channel-research 一括実行を各 step に対応する reference へ振り分け、skip 後も次工程へ進むよう手順を修正しました。voice を含む四工程の状態を全体の完了条件とし、blocked・error は停止を維持します。

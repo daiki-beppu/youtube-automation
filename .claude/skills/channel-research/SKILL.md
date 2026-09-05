@@ -64,16 +64,16 @@ uv run python .claude/skills/channel-research/references/channel-research-chain-
 
 | exit | `decision` | 処理 |
 |---:|---|---|
-| 0 | `skip` | 鮮度内の成果物が揃っているため完了として終了する |
-| 10 | `run` | `references/benchmark.md` を読み、同じ一段を実行する |
+| 0 | `skip` | その段の成果物条件を満たしているため記録し、manifest の次の段の状態判定へ進む |
+| 10 | `run` | 判定した `step` に `--` を付けてモード表の reference を引き、その段だけを実行する（例: `voice` → `--voice` → `references/voice.md`） |
 | 20 | `blocked` | 不足している前提と解消方法を表示して停止する |
 | その他 | `error` | config / manifest / script のエラーとして停止する |
 
-実行後は状態判定を再実行し、exit 0 にならなければ完了扱いにしない。途中失敗時はその段で止め、再発動時は同じ判定から安全に再開する。
+実行後は同じ `step` の状態判定を再実行し、exit 0 になった段だけ次へ進む。`run` のままなら成果物が未完了、`blocked` / `error` なら理由を示してその段で止める。先頭や途中の `skip` で chain 全体を終了しない。再発動時は manifest の先頭から状態を確認し、完了済みの段を飛ばして未完了の段へ進む。
 
 ## 完了条件
 
-- フラグなし: `benchmark`、`discover`、`market` が `skip` または実行後 `skip` になっている
+- フラグなし: manifest の四工程 `benchmark`、`discover`、`voice`、`market` がすべて `skip` または実行後 `skip` になっている。全段が最初から `skip` なら収集・分析を再実行せず完了する
 - `--benchmark`: `references/benchmark.md` の完了条件を満たしている
 - `--discover`: `references/discover.md` の完了条件を満たしている
 - `--market`: `references/market.md` が自動選択した branch の完了条件を満たしている
