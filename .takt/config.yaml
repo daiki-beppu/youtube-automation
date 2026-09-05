@@ -1,4 +1,5 @@
-# Repository defaults only. Workflow definitions are provided by takt's builtin catalog.
+# Legacy configuration retained for historical reference.
+# Development runs directly in worktrees; do not use takt in this repository.
 draft_pr: false
 base_branch: main
 auto_requeue_max_attempts: 0

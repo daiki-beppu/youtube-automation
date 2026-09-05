@@ -4,7 +4,7 @@ This file provides guidance to Codex CLI (developers.openai.com/codex) when work
 
 **プロジェクト概要・アーキテクチャ・開発規約（設定アクセス / エラーハンドリング / Import / 依存ポリシー / スクリプト配置 / テスト / パッケージング / セキュリティ / CHANGELOG ゲート / 開発ワークフロー）は `CLAUDE.md` に一元化している。実装・レビューに着手する前に必ず `CLAUDE.md` を読むこと。**
 
-詳細ドキュメント: `docs/architecture.md`（責務境界・依存方向・公開/内部境界・新規ファイル配置規則・変更時の参照対応表を含むモジュール構成）/ `docs/development.md`（パッケージング・extensions・品質ゲート）/ `docs/takt-operations.md`（issue / worktree 運用。標準実装経路は takt + builtin workflow）。
+詳細ドキュメント: `docs/architecture.md`（責務境界・依存方向・公開/内部境界・新規ファイル配置規則・変更時の参照対応表を含むモジュール構成）/ `docs/development.md`（パッケージング・extensions・品質ゲート）/ `docs/takt-operations.md`（issue / worktree 運用。worktree 上のエージェントセッションで直接実装する）。
 
 ## Codex CLI 固有の注意
 

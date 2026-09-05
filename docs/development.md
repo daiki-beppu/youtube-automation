@@ -20,7 +20,7 @@ nix develop
 - **非対話 shell / agent**: `nix develop --command <command> [args...]` を正規入口とする。例: `nix develop --command uv run pytest tests/commands/system/test_doctor.py -q`
 - **依存同期を fail-closed にしたい場合**: `nix develop --command uv sync` を明示実行する。exit 非 0 なら依存は同期されていないので、後続コマンドを実行しない
 
-worktree の生成・命名・issue / PR 運用は [`docs/takt-operations.md`](takt-operations.md) を参照する。標準実装経路は takt + builtin workflow。
+worktree の生成・命名・issue / PR 運用は [`docs/takt-operations.md`](takt-operations.md) を参照する。実装・検証は worktree 上のエージェントセッションで直接進める。
 
 ## プロジェクト固有コマンド（全量）
 
@@ -58,7 +58,7 @@ python .github/scripts/run-affected-tests.py                              # work
 
 - **既定は直列**（`addopts` には入れない）。単一ファイル・単一テストのデバッグ実行で worker 起動オーバーヘッドを毎回払わないため、また `-x` / `--pdb` など直列前提のオプションと干渉しないため。フルスイートを回すときに明示的に `-n auto` を付ける
 - **marker の境界**: `repo_contract` は production behavior を起動せず repository 内の docs / CI / workflow / packaging を読むテスト、`slow` は実 Nix・ffmpeg・socket TTL・外部 tool/process・意図的待機を含むテストに付ける。分類の単一 registry は `tests/conftest.py` にあり、module は basename、個別 node は basename と test 識別子で登録するため、`tests/` 以下の配置に依存しない。同じ basename の source module は登録できない。存在・CI無選別の回帰契約は `tests/repo/test_pytest_lane_contract.py` が担う。両方に該当するテストは両 marker を持つ
-- **fast lane の位置づけ**: behavioral fast lane は Python product code の短い red/green loop 用で、repository-only / slow test と `tests/integration/` を除く。変更した対象の直接テストは marker にかかわらず別途実行する。PR CI と takt `ci_verify` は marker lane ではなく共通selectorを使い、選別漏れの最終担保はCIの `main` pushが実行する無選別full suiteとする
+- **fast lane の位置づけ**: behavioral fast lane は Python product code の短い red/green loop 用で、repository-only / slow test と `tests/integration/` を除く。変更した対象の直接テストは marker にかかわらず別途実行する。PR CI は marker lane ではなく共通selectorを使い、選別漏れの最終担保はCIの `main` pushが実行する無選別full suiteとする
 
 変更種別ごとの最小入口:
 
@@ -282,7 +282,7 @@ uv run pytest tests/repo/test_skills_sync_installed_wheel.py -q
   - **pyscn の new-only 差分ゲート**: 閾値ゲートは既存債務を追認した実測値がそのまま上限になるため、独立した step `.github/scripts/pyscn-diff-gate.py` が PR の base commit を一時 worktree へ展開して base / HEAD の 2 回 `pyscn analyze --json` を実行し、**base に無い finding（complexity high risk 関数 / dead code）が増えたときだけ** fail する（issue #4616。`extensions/` の Fallow `audit.gate: new-only` と同じ運用モデル）。突き合わせ鍵はファイルパス + finding 種別 + シンボル名で、行番号を含めないため無関係な行ずれでは fail しない。比較元をリポジトリにコミットした baseline にしないのは、再生成忘れによる亡霊エントリ（`extensions/.fallow-dupes-baseline.json` の既知の運用負債）を再生産しないため。基準点は CI がイベント種別から解決して `PYSCN_DIFF_BASE` で渡し（PR は base sha、`main` push は `github.event.before`、空・全 0 は `HEAD^`）、ローカル単体実行（`nix develop --command uv run python .github/scripts/pyscn-diff-gate.py`）では `origin/main` → `main` の merge-base へフォールバックする。突き合わせ契約は `tests/repo/test_pyscn_diff_gate_contract.py` が機械担保する
 - **changelog ジョブ**: 実コード（`src/youtube_automation/` / `.claude/skills/` / `.claude/CLAUDE.template.md` / `pyproject.toml`）を変更したのに `changelog.d/` の fragment 追加または `CHANGELOG.md` の更新が無ければ fail する。加えて、ラベルや path filter に関係なく `changelog.d/` 全件のファイル名 type と bullet 体裁を `.github/scripts/validate-changelog-fragments.py` が `yt-changelog-compile` と同じ実装で検証する（ローカルでも `python .github/scripts/validate-changelog-fragments.py` で単体実行できる）。fragment の書式は `changelog.d/README.md` を参照する。意図的に省く場合は PR に `skip-changelog` ラベルを付与する
 - **any-gate ジョブ**: 広すぎる型注釈ゲート。基準点からの新規追加行だけを対象に、ディレクトリを問わず全 `*.py` / `*.ts` / `*.tsx` の Python の typing module 経由の Any 型、または TypeScript の any 型注釈を検出したら fail する。既存行は対象外。ロジック本体は `.github/scripts/any-usage-gate.sh`（ローカルでも `bash .github/scripts/any-usage-gate.sh` で単体実行できる）
-  - **基準点の解決順**: `PRE_PUSH_DIFF_BASE`（CI の any-gate ジョブが PR の base sha を渡す）→ `origin/main` → `main`。実際の diff 基準は解決した ref と HEAD の merge-base。`main` へのフォールバックは、remote を 1 つも持たない隔離クローンで takt がタスクを実行するため（クローンのローカル `main` はクローン時点の main そのものなので基準点は変わらない）。この経路が無いと `ci_verify` が push 前に再現すべき 4 ゲートのうち any-gate だけが常に self-skip する（issue #3048）。どの ref も解決できないときは、試した ref を列挙して skip する。解決順そのものは `tests/repo/test_any_usage_gate.py` が機械担保する
+  - **基準点の解決順**: `PRE_PUSH_DIFF_BASE`（CI の any-gate ジョブが PR の base sha を渡す）→ `origin/main` → `main`。実際の diff 基準は解決した ref と HEAD の merge-base。`main` へのフォールバックは、旧 takt 運用の remote を持たない隔離クローンにも対応した経緯によるもの（クローンのローカル `main` はクローン時点の main そのものなので基準点は変わらない）。当時はこの経路が無いと push 前の any-gate が常に self-skip していた（issue #3048）。どの ref も解決できないときは、試した ref を列挙して skip する。解決順そのものは `tests/repo/test_any_usage_gate.py` が機械担保する
   - **Python**: `.github/scripts/any_usage_python_resolver.py` が `ast` でファイルを解析し、`typing.Any` の修飾アクセス（`import typing` / `import typing as t` 経由）と `from typing import Any`（複数行の括弧 import・`as` alias 含む）の直接 import 経由の裸 `Any` の両方を、実際に参照されている行番号として解決する。コメント・docstring・文字列リテラル中の "Any" は AST 上に現れないため誤検知しない。`python3` が無い場合は警告を出して Python 側の検出のみ省略する
   - **TypeScript**: `: any` 直書きに加え、`Array<any>` / `Record<string, any>` のようなジェネリック引数、union / intersection、tuple 要素、型エイリアス代入（`type X = any;`）、アロー関数戻り値（`() => any`）、型アサーション（`value as any`）などの型位置の `any` を検出する。正規表現で候補行を検出したのち `.github/scripts/any_usage_ts_line_cleaner.py` で行コメント（`//...`）と文字列・テンプレートリテラルの中身を取り除いてから再判定するため、コメントや文字列リテラル中の "any"（型注釈っぽい表記を含む）は誤検知しない
 
@@ -297,7 +297,6 @@ devShell の運用:
 - **worktree 間の依存境界**: 共有するのは uv cache と pnpm content-addressable store だけとし、`.venv` / `node_modules` は各 worktree で生成する。親 checkout や sibling worktree の環境を symlink・コピーせず、branch ごとの lockfile、editable path、entry point を実行中 checkout と一致させる
 - **TMPDIR の worktree 分離**: macOS の TMPDIR は per-user のグローバル値のため、複数 worktree の並行 pytest が同一パスへ書くと一時ディレクトリが run 間で干渉しうる（issue #2088）。shellHook は `.nix/worktree-tmpdir.sh` の出力を `TMPDIR` へ export し、共有 TMPDIR 配下の worktree ごとの決定的なサブディレクトリ（`yt-automation-tmp-<slug>-<cksum>`）へ分離する。TMPDIR が既に checkout 内へ隔離済みの場合はその値を尊重し、解決に失敗した場合は共有 TMPDIR のまま fail-open で続行する
 - **Nix キャッシュの worktree 分離**: 並列 worktree が同一 fingerprint の flake を同時評価すると、ユーザーグローバルの Nix キャッシュ（既定 `~/.cache/nix` の eval-cache / fetcher-cache SQLite）への同時書込みが競合し、「error (ignored): SQLite database ... is busy」を stderr へ出しつつキャッシュ書込みを破棄し続ける（issue #2089）。`.envrc` / shellHook は Nix 専用の `NIX_CACHE_HOME` を worktree 分離 TMPDIR 配下（`<worktree_tmpdir>/nix-cache`）へ export し、各 worktree が自分の評価結果だけを参照する。`XDG_CACHE_HOME` には触れないため uv 等の他ツールのキャッシュは共有のまま変わらない。継承値は別 worktree の値がシェル経由でリークし得るため尊重せず、解決に失敗した場合は共有キャッシュのまま fail-open で続行する
-- **sandbox worker での挙動**: takt worker は `.takt/runtime-prepare.sh` が TMPDIR / XDG_* / UV_CACHE_DIR を run ごとの runtime root 配下へ再構成する（issue #2163）
 - refactor / fix でも src を触れば changelog fragment が要る。tests / docs だけの変更はゲート対象外（CI が自動 skip）
 
 ### changelog fragment（conflict 回避）

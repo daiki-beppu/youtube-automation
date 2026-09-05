@@ -2,7 +2,7 @@ name: CI autofix
 
 # PR をゲートする workflow の失敗を claude-code-action が診断し、修正 commit を
 # PR ブランチへ push する post-push の保険。ローカルで green にする一次経路
-# (takt の ci_verify / issue-direct の fix ループ)を置き換えるものではない
+# (worktree 上で直接実装・検証する fix ループ)を置き換えるものではない
 on:
   workflow_run:
     workflows:
