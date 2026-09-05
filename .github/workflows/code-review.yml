@@ -139,7 +139,7 @@ jobs:
             - `gh pr comment` 等でのコメント投稿(投稿は workflow step の責務)
             - ツール許可不足やローカルの full suite 未実行を、CI 未検証・サンドボックス制限の
               finding として報告すること
-          # takt が PR を大量生成するため、コスト対策として sonnet 系を既定にする
+          # PR レビューのコスト対策として sonnet 系を既定にする
           claude_args: |
             --model sonnet
             --allowedTools "Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr checks:*),Bash(gh issue view:*),Bash(git log:*),Bash(git diff:*),Bash(git show:*),Bash(git status:*),Bash(git branch:*),Bash(git rev-parse:*),Bash(git merge-base:*)"

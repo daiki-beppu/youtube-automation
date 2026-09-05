@@ -1,6 +1,6 @@
-# Issue / worktree 運用(takt 正規経路)
+# Issue / worktree 運用
 
-> このリポジトリの標準実装経路は takt + builtin workflow である。workflow 定義は takt 本体の catalog を正とし、リポジトリ固有の workflow 資産は持たない。
+> 開発方針の正本は `CLAUDE.md`「開発ワークフロー」。実装・検証・レビュー対応は worktree 上のエージェントセッションで直接進める。ファイル名は既存リンクとの互換性のため維持する。
 
 ## issue の粒度
 
@@ -24,31 +24,14 @@
 
 ## 正規ルート
 
-1. `gh issue create` または `/issue` で issue を起票する。
-2. workflow を選んでタスクを投入する(`auto_pr` を必ず有効化する):
+1. issue がある作業は要件・完了条件・依存関係を確認する。新規起票が必要な場合は `gh issue create` または `/issue` を使う。
+2. 最新の main から作業専用の linked worktree を作成する（issue がある場合は issue ごと）。
+3. worktree 上のエージェントセッションで直接実装し、変更に必要なテストと品質ゲートを実行する。監査・レビューは対象に合う skill（例: `/improve` や `/code-review`）で行う。
+4. PR 作成を依頼された場合は `gh stack` で commit → push → PR 作成を行い、CI とレビュー指摘に対応する。マージはユーザーの指示に従う。
 
-   ```bash
-   takt add '#<issue番号>'   # 対話で workflow と auto_pr を設定
-   takt run                  # pending タスクを実行
-   ```
+既存 issue の `takt:*` ラベルは履歴メタデータとしてのみ扱い、新規に付与しない。
 
-3. workflow が完走すると takt の `auto_pr` がサンドボックス外で commit → push → PR 作成を行う。
-4. PR の CI・レビュー指摘への対応は人間が判断する。必要なら fix issue を起票して再キューする。**マージは人間が行う。**
-5. 関連する PR が複数できたら `gh stack link <下段PR> <上段PR> ...` で stack にまとめ、`gh stack merge <stack番号> --yes --squash` で atomic merge する(「commit / push / PR(gh stack 前提)」節)。
-
-`takt:*` ラベルは使わない(workflow の選択はタスク投入時に行う。既存 issue に残る `takt:*` ラベルは履歴メタデータとしてのみ扱う)。
-
-### 対話用の代替ルート: `/issue-direct`
-
-要件が固まっていない探索的タスクや、人間と対話しながら進めたい issue は takt に載せず `/issue-direct <N>`(または同等の手動手順)を使う。判断基準: **workflow の途中で人間に質問する必要が予見できるなら `/issue-direct`**、そうでなければ takt。
-
-## workflow の使い分け
-
-`takt add` が表示する builtin catalog から、機能追加・不具合修正・文書更新・保守などタスクの性質に合う workflow を選ぶ。workflow 名と内部 step は takt のバージョンに追従するため、リポジトリの文書やテストで固定しない。利用可能な選択肢と構成は実行環境の `takt catalog` で確認する。
-
-監査は takt のリポジトリ固有レーンではなく、対象に合う skill（例: `/improve` や `/code-review`）で行う。builtin catalog に相当する workflow がない場合は、自作 workflow を追加せず対話用の代替ルートを使う。
-
-## linked worktree(`/issue-direct` 用)
+## linked worktree
 
 親 checkout は main の同期と worktree 管理に使い、実装は行わない。作業開始時は main を fast-forward してから、issue ごとの branch と worktree を作る。
 
@@ -60,9 +43,9 @@ cd .claude/worktrees/issue-<N>-<slug>
 nix develop
 ```
 
-stack を組まない単独 PR の base branch は `main` 固定とする。stack の上段 branch は直下の branch を base に取るが、その chain は `gh stack` が管理するものであり、手で別 issue の未マージ branch を base に指定しない。stack に載せない依存 issue は、依存 PR の merge 後に main を更新し、rebase してから検証する。takt が生成する worktree(`<repo-parent>/takt-worktrees/`)は takt CLI が管理し、この規約の対象外。
+stack を組まない単独 PR の base branch は `main` 固定とする。stack の上段 branch は直下の branch を base に取るが、その chain は `gh stack` が管理するものであり、手で別 issue の未マージ branch を base に指定しない。stack に載せない依存 issue は、依存 PR の merge 後に main を更新し、rebase してから検証する。
 
-worktree の置き場は `$REPO_ROOT/.claude/worktrees/<slug>/` に統一する(グローバル規約と同じ)。takt が生成する `<repo-parent>/takt-worktrees/` だけが例外で、takt CLI が管理する。
+worktree の置き場は `$REPO_ROOT/.claude/worktrees/<slug>/` に統一する(グローバル規約と同じ)。
 
 1 worktree = 1 stack とする。旧い置き場 `.worktrees/` にはローカル環境によって `codex/*` の worktree が残っていることがあり、同じ branch が 2 箇所にチェックアウトされていると stack の branch 移動が exit 6 で失敗するため、stack 用の branch 名はそれらと衝突させない。`.gitignore` は移行期間中どちらの置き場も無視する。
 
@@ -70,7 +53,7 @@ worktree の置き場は `$REPO_ROOT/.claude/worktrees/<slug>/` に統一する(
 
 PR は **stacked PR** を前提とする。1 PR = 1 振る舞い変更(テストと実装をセットにし、レビュアーが 1 つの意思決定で可否を判断できる単位。目安 200 行以内)に絞り、関連する変更は `gh stack` で積んでレビューと atomic merge を行う。
 
-- commit: 日本語 Conventional Commits を使い、タイトル末尾に `(#<N>)` を付ける(takt 経路では auto_pr が生成する)
+- commit: 日本語 Conventional Commits を使い、タイトル末尾に `(#<N>)` を付ける
 - push: stack に属する branch だけを push する
 - PR: `Closes #<N>`、変更概要、検証コマンド、参照した公式資料を本文へ記載する
 - merge: required CI 成功後に `gh stack merge` で行う。チェックの削除・弱体化で green にしない
@@ -85,20 +68,7 @@ git config rerere.enabled true
 
 `remote.pushDefault` は必須。`gh stack checkout` / `trunk` は `--remote` フラグを持たず、複数リモート下で default が無いと非対話実行がエラーになる。
 
-### takt 経路: 生成された PR を後から link する
-
-takt は 1 run = 1 branch = 1 PR、`base_branch: main` 固定で、ローカルに stack を作らない。関連する issue をそれぞれ takt へ投入し、できた PR を後から stack にまとめる。
-
-```bash
-gh stack link <下段PR> <上段PR> [...]     # 引数は bottom → top の順
-gh stack link <stack番号> <追加PR>        # 既存 stack の上へ追加する
-```
-
-`link` はローカル追跡状態を作らず、base branch の chain を自動補正する(既存 PR の base が chain と食い違っていれば直す)。
-
-**前提**: 各 issue が main ベースで独立に実装できる粒度であること。takt worker は他 issue の未マージ変更を見られないため、実装順に依存がある issue は `addBlockedBy` で順序を表し、下段 PR の merge 後に上段を投入する。
-
-### `/issue-direct` 経路: worktree 内で stack を積む
+### worktree 内で stack を積む
 
 ```bash
 gh stack init <下段branch>     # trunk は既定ブランチ(main)
@@ -138,7 +108,7 @@ gh stack merge <stack番号|PR番号> --yes --squash
 
 ## PR 自動コードレビュー(マージ前ゲート)
 
-draft ではなく、head ref が `release/` で始まらない PR の opened / ready_for_review / synchronize で `.github/workflows/code-review.yml` が発火し、claude-code-action が mattpocock code-review(Standards / Spec の 2 軸)+ simplify 観点(reuse / simplification / efficiency)で差分をレビューして severity 付きの集約コメントを投稿する。生成経路(takt / `/issue-direct` / 手動)によらず同じゲートが効く。
+draft ではなく、head ref が `release/` で始まらない PR の opened / ready_for_review / synchronize で `.github/workflows/code-review.yml` が発火し、claude-code-action が mattpocock code-review(Standards / Spec の 2 軸)+ simplify 観点(reuse / simplification / efficiency)で差分をレビューして severity 付きの集約コメントを投稿する。すべての対象 PR に同じゲートが効く。
 
 - **critical 指摘が 1 件以上あると `Code review` check が fail する**。warning / info のみなら success。`gh stack merge` の CI green 待ちにはこの check も含まれる
 - review workflow 自体は `contents: read` のまま指摘の生成だけを担う。集約コメントに critical / warning / info が 1 件以上あれば、後続の CI autofix が全指摘の修正を試みる
@@ -148,7 +118,7 @@ draft ではなく、head ref が `release/` で始まらない PR の opened / 
 
 ## CI 失敗の自動修正(post-push の保険)
 
-PR をゲートする 5 workflow(CI / Dashboard / Extensions / Audio Studio / Release notes site)のいずれかが PR で失敗した場合、または `Code review` の集約コメントに critical / warning / info の指摘がある場合、`.github/workflows/ci-autofix.yml` が `workflow_run` で発火する。claude-code-action は失敗ログまたはレビューコメントを診断し、修正 commit を PR ブランチへ push する。レビューが指摘 0 件なら何もせず終了する。ローカルで green にする一次経路(takt の `ci_verify` / `/issue-direct` の fix ループ)はそのままに、push 後に発生した回帰への保険として重ねる。
+PR をゲートする 5 workflow(CI / Dashboard / Extensions / Audio Studio / Release notes site)のいずれかが PR で失敗した場合、または `Code review` の集約コメントに critical / warning / info の指摘がある場合、`.github/workflows/ci-autofix.yml` が `workflow_run` で発火する。claude-code-action は失敗ログまたはレビューコメントを診断し、修正 commit を PR ブランチへ push する。レビューが指摘 0 件なら何もせず終了する。worktree 上で修正・検証する一次経路に加えて、push 後に発生した回帰への保険として重ねる。
 
 - **push は claude-code-action 既定の OIDC → Claude GitHub App トークン交換で行う**(`id-token: write`)。App トークンの push は `pull_request: synchronize` を発火させ、修正 commit の CI が自動で再検証される。code-review.yml が `contents: read` + 明示 `GITHUB_TOKEN` でレビューに閉じるのと対で、push 経路は本 workflow だけが持つ
 - **修正試行は CI 起点・レビュー起点を通算して PR あたり 1 回。** commit body の `[ci-autofix]` マーカーで判定し、修正後の再レビューや CI で問題が残っても 2 回目以降はコメント報告のみ(コスト暴走・修正ループ防止)
@@ -161,10 +131,10 @@ PR をゲートする 5 workflow(CI / Dashboard / Extensions / Audio Studio / Re
 
 親 checkout と新規 worktree の両方で devShell に入る。direnv があれば `direnv allow` で `.envrc` を allow し、なければ `nix develop` を使う。どちらも shellHook が `uv sync` を自動実行する。非対話 shell は `nix develop --command <command>` を使う。
 
-ローカル git hook は存在しない。品質ゲート(ruff / CHANGELOG / any 型)は CI が担保し(`docs/development.md` の「品質ゲート(CI)」)、takt 経路では `ci_verify` step が push 前に同等の検査をローカル実行する。
-
-takt worker のサンドボックス対策(direnv / uv cache の TAKT_RUNTIME_ROOT 配下への再構成)は `.takt/runtime-prepare.sh` が行う(#2532)。
+ローカル git hook は存在しない。品質ゲート(ruff / CHANGELOG / any 型)は CI が担保し(`docs/development.md` の「品質ゲート(CI)」)、push 前に変更に必要な検査を worktree 上で実行する。
 
 ## 旧 takt 状態
+
+既存の `.takt/` 設定・runtime スクリプトは旧運用の残存資産であり、新規タスクの投入・実行には使わない。
 
 `.takt/runs/` 配下の過去 run、`.takt/tasks.yaml` の完了済み task 履歴は過去実績の参照用。古い failed / pending task や `takt-worktrees/` の残骸を新しい作業へ再利用しない。不要な runtime 状態を掃除する場合は対象を明示して確認し、通常の issue worktree や未マージ変更を巻き込まない。
