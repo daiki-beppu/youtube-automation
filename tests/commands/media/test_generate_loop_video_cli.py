@@ -293,6 +293,38 @@ def _args(prompt=None, motion=None, static=None) -> argparse.Namespace:
 
 
 class TestResolvePrompt:
+    def test_loop_template_is_used_when_engine_has_no_structured_prompt(self):
+        engine_config = {"default_prompt": "engine default"}
+        loop_config = {
+            "prompt_template": _TEMPLATE,
+            "base_rules": _BASE_RULES,
+            "motion_targets": ["shared-motion"],
+            "static_targets": ["shared-static"],
+        }
+
+        result = resolve_prompt(_args(), engine_config, loop_config)
+
+        assert "shared-motion" in result
+        assert "shared-static" in result
+
+    def test_engine_structured_prompt_overrides_loop_fields(self):
+        engine_config = {
+            "prompt_template": "Engine: {motion_clause}; {static_clause}; {base_rules}",
+            "base_rules": "engine rules",
+            "motion_targets": ["engine-motion"],
+            "static_targets": ["engine-static"],
+        }
+        loop_config = {
+            "prompt_template": _TEMPLATE,
+            "base_rules": _BASE_RULES,
+            "motion_targets": ["shared-motion"],
+            "static_targets": ["shared-static"],
+        }
+
+        result = resolve_prompt(_args(), engine_config, loop_config)
+
+        assert result == "Engine: engine-motion; engine-static; engine rules"
+
     def test_prompt_overrides_everything(self):
         # 優先順位 1: --prompt は最強
         veo_config = {
@@ -433,11 +465,15 @@ _THUMBNAIL_DEFAULT_CONFIG = REPO_ROOT / ".claude" / "skills" / "thumbnail" / "co
 _INTENSITY_SOFTENERS = ("subtle", "gentle", "barely perceptible")
 
 
-def _default_veo_config() -> dict:
+def _default_loop_config() -> dict:
     import yaml
 
     with _THUMBNAIL_DEFAULT_CONFIG.open(encoding="utf-8") as f:
-        return yaml.safe_load(f)["loop"]["veo"]
+        return yaml.safe_load(f)["loop"]
+
+
+def _default_veo_config() -> dict:
+    return _default_loop_config()["veo"]
 
 
 class TestMotionIntensityControlledByTargets:
@@ -453,7 +489,7 @@ class TestMotionIntensityControlledByTargets:
         veo_config = _default_veo_config()
         args = _args(motion="clearly rolling ocean waves", static="the boat (count remains 1)")
 
-        result = resolve_prompt(args, veo_config)
+        result = resolve_prompt(args, veo_config, _default_loop_config())
 
         assert "clearly rolling ocean waves" in result
         for softener in _INTENSITY_SOFTENERS:
@@ -464,7 +500,7 @@ class TestMotionIntensityControlledByTargets:
         veo_config = _default_veo_config()
         args = _args()
 
-        result = resolve_prompt(args, veo_config)
+        result = resolve_prompt(args, veo_config, _default_loop_config())
 
         assert result == veo_config["default_prompt"]
         assert "subtle" in result  # 静的シーン向けの微動意図が保たれている
@@ -474,7 +510,7 @@ class TestMotionIntensityControlledByTargets:
         veo_config = _default_veo_config()
         args = _args(motion="subtle steam rising from coffee")
 
-        result = resolve_prompt(args, veo_config)
+        result = resolve_prompt(args, veo_config, _default_loop_config())
 
         assert "subtle steam rising from coffee" in result
 
@@ -484,7 +520,8 @@ class TestAttentionGuardDefaults:
 
     @pytest.mark.parametrize("field", ("default_prompt", "base_rules"))
     def test_veo_prompt_guards_attention_grabbing_elements(self, field):
-        value = _default_veo_config()[field]
+        config = _default_loop_config()
+        value = config["veo"][field] if field == "default_prompt" else config[field]
 
         for forbidden_visual in (
             "full-frame flashes",
