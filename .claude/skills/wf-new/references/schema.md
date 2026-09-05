@@ -33,6 +33,7 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
   "phase": "planning | prepared | cloud_owned | mastered | publishing | complete",
   "selected_plan": "A | B | C | D | E",
   "track_count": 12,
+  "music_prompt_approved_digest": "SHA-256 of approved music prompt JSON",
   "planning": {
     "activities": "Working",
     "playlists": ["rain-city-nights"],

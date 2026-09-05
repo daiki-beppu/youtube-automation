@@ -15,6 +15,7 @@ from youtube_automation.application.documents.migration import (
 )
 from youtube_automation.application.documents.projection import publish_and_project
 from youtube_automation.core.errors import DocumentMigrationError
+from youtube_automation.domains.collections.workflow_state import read_or_none
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.documents.schema_registry import RepositorySchema, validate_repository_document
 from youtube_automation.infrastructure.documents.publishing import read_published_json_document
@@ -84,6 +85,19 @@ def music_prompt_artifact_digest(json_path: Path) -> str:
     return digest.hexdigest()
 
 
+def require_approved_music_prompt(json_path: Path, workflow_state_path: Path) -> None:
+    """既存 pair と承認 digest を読み取りだけで検証する。"""
+    current_digest = music_prompt_artifact_digest(json_path)
+    state = read_or_none(workflow_state_path)
+    if state is None or state.assets is None or state.assets.get("music_prompts") is not True:
+        raise DocumentMigrationError("music prompt は未承認です")
+    approved_digest = state.music_prompt_approved_digest
+    if approved_digest is None:
+        raise DocumentMigrationError("music prompt 承認 digest がありません。既存成果物を再承認してください")
+    if not secrets.compare_digest(current_digest, approved_digest):
+        raise DocumentMigrationError("music prompt は承認後に変更されました。現在の成果物を再承認してください")
+
+
 def finalize_music_prompt_review(
     json_path: Path,
     workflow_state_path: Path,
@@ -112,7 +126,7 @@ def finalize_music_prompt_review(
             return
 
         def transition(state):
-            state.set_asset("music_prompts", True)
+            state.record_music_prompt_approval(current_digest)
             return state
 
         update_workflow_state(workflow_state_path, transition)
