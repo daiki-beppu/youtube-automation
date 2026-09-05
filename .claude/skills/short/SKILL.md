@@ -7,7 +7,7 @@ description: "Use when collection 型（BGM テイスター）または release 
 ## 前後工程
 
 - `前工程`: `/setup`
-- `後工程`: collection 型は投稿・state 照合まで本 skill で完結、release 型は投稿対象外
+- `後工程`: `なし`
 - `委譲先`: `なし`
 
 ## 成果物
