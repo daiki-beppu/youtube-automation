@@ -1,0 +1,1 @@
+- `yt-channels list` で channel registry の各 path を適格・workspace・不在に分類し、pin 種別とともに表示できるようにした
