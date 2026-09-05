@@ -391,6 +391,7 @@ def _run_generate(
             prompt_expansion_mode=str(fal_config.get("prompt_expansion_mode", "balanced")),
             timeout_sec=float(fal_config.get("timeout_seconds", 600)),
             poll_interval_sec=float(fal_config.get("poll_interval_seconds", 2)),
+            max_poll_retries=fal_config.get("max_poll_retries", 3),
             allowed_models=frozenset(fal_config.get("allowed_models", DEFAULT_FAL_ALLOWED_MODELS)),
             canvas=canvas or DEFAULT_FAL_CANVAS,
             upscale_to=tuple(upscale) if upscale is not None else None,

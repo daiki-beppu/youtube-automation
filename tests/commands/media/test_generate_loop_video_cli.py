@@ -1442,3 +1442,23 @@ class TestMainVideoType:
         assert excinfo.value.code == 1
         assert mocks["create_veo_genai_client"].call_count == 0
         assert mocks["generate_loop_video"].call_count == 0
+
+
+def test_fal_retry_override_reaches_generator(tmp_path):
+    from youtube_automation.commands.media import generate_loop_video as mod
+
+    image = tmp_path / "main.png"
+    image.write_bytes(b"image")
+    with patch.object(mod, "generate_fal_loop_video", return_value=True) as generate:
+        with pytest.raises(SystemExit) as exc:
+            mod._run_generate(
+                image,
+                tmp_path / "loop.mp4",
+                "minimax/h3-max-turbo/image-to-video",
+                "motion",
+                engine="fal",
+                engine_config={"max_poll_retries": 7},
+                assume_yes=True,
+            )
+    assert exc.value.code == 0
+    assert generate.call_args.kwargs["max_poll_retries"] == 7
