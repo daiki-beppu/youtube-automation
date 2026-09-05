@@ -22,7 +22,7 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
 
 ## Step D1: 分析レポートの読み込みとサマリー
 
-`docs/channel-research.json` + `.html` pair を検証できれば JSON だけを読み込み、なければ `docs/channel/ttp-seed-confirmation.md`、
+`docs/channel-research.json` + `.html` pair を既存 `read_published_json_document(..., RepositorySchema.CHANNEL_RESEARCH_REPORT)` で検証し、JSONだけを読み込む。片方だけのpairや検証失敗は修復を案内して停止する。両方ともない場合だけ `docs/channel/ttp-seed-confirmation.md`、
 `docs/channel/competitor-branding-snapshot.json`、`config/channel/analytics.json::benchmark.channels`
 を読み込んでユーザーに要点をサマリーで提示:
 
@@ -122,47 +122,28 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
 `references/structured-documents.md` に従い、決定事項を `document_type: direction`、`direction.summary` / `positioning` / `differentiation`、`evidence`、`status` を持つ `docs/channel/channel-direction.json` + `.html` pair に保存する。
 ディレクトリが存在しなければ `mkdir -p docs/channel` で作成してから書き出す。
 
-雛形:
+candidate JSONの雛形（日時と値は今回の合意内容・実在する根拠パスへ置換する）:
 
-```markdown
-# チャンネル方向性
-
-## 基本情報
-- チャンネル名: {name}
-- 短縮名: {short}
-- ジャンル: {primary} / {style} / {context}
-- コアメッセージ: {core_message}
-
-## ポジショニング
-- 差別化ポイント: ...
-- ターゲット視聴者: ...
-- 主な利用シーン: ...
-
-## コンテンツ戦略
-- 動画の長さ: {target_duration_min}分
-- 投稿頻度: ...
-- テーマの幅: ...
-
-## ビジュアルアイデンティティ
-- サムネイル方針: ...
-- トーン＆マナー: ...
-- ブランド背景色: ...
-- TTP 対象サムネ:
-  - `/channel-research --benchmark` 未実行: 手動選定メモ ...
-  - `/channel-research --benchmark` 実行済み:
-    - `data/thumbnail_compare/benchmark/<channel>-<vid1>.jpg`
-    - `data/thumbnail_compare/benchmark/<channel>-<vid2>.jpg`
-    - `data/thumbnail_compare/benchmark/<channel>-<vid3>.jpg`
-
-## 音楽設定（Suno / Lyria 共通）
-- `genre_line`（英語直訳）: ...
-- `exclude_styles`: ...
-- BGM 構造方針: ...
-- 1 コレクションあたりの楽曲数（track 戦略）: ...
-
-## 決定の根拠
-[各決定のデータ根拠をまとめる]
+```json
+{
+  "schema_version": 1,
+  "document_type": "direction",
+  "updated_at": "2026-09-05T00:00:00Z",
+  "status": "confirmed",
+  "direction": {
+    "summary": "チャンネル名・短縮名・ジャンル・コアメッセージと制作方針の合意内容",
+    "positioning": "TTP転写対象・ターゲット視聴者・利用シーンの合意内容",
+    "differentiation": "競合の型を土台に重ねる独自要素と採用理由"
+  },
+  "evidence": [{
+    "id": "direction-evidence-1",
+    "source_path": "docs/channel/ttp-seed-confirmation.md",
+    "observation": "決定の根拠となった具体的な観察"
+  }]
+}
 ```
+
+D3の基本情報・コンテンツ戦略・ビジュアル方針・音楽設定・config引き継ぎ項目を `direction.summary` / `positioning` / `differentiation` に漏れなく記載し、根拠を `evidence` へ対応付ける。未検証の仮説は `status: hypothesis` とし、合意と事実確認を混同しない。Markdown雛形を別の正本として保存せず、candidateを既存writerで検証・公開する。configへの転記はD5の `/setup --regenerate` に委ねる。
 
 ## Step D5: 次フェーズへの案内
 

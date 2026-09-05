@@ -20,12 +20,12 @@
 
 | 工程 | `○` の条件（すべて必須） | `×` の条件（1つでも該当） | `×` の次アクション |
 |---|---|---|---|
-| 1. シーン定義 | `ttp_wf_new_readiness` の `message` に `persona-definition.md` の不足診断がなく、`docs/plans/viewing-scene-matrix.md` が存在し、persona に `viewing-scene 未検証` がない | doctor に persona 不足診断がある、scene ファイルがない、または未検証注記がある | doctor の `next_action` または `/channel-strategy --scene` |
-| 2. 制約翻訳 | `docs/channel/creative-constraints.md` が存在し、レベル2見出し `音` `映像` `サムネ` `タイトル` `測定` が各1件ある | ファイルがない、または必須見出しが1つでもない | `/channel-strategy --constraints` |
+| 1. シーン定義 | doctorのpersona診断がなく、検証済みpersona/scene JSONのID参照が成立する（legacyは下記互換判定） | doctorにpersona不足・不正pair診断がある、sceneが欠落・不正、または参照未検証 | doctor の `next_action` または `/channel-strategy --scene` |
+| 2. 制約翻訳 | 検証済み `docs/channel/creative-constraints.json` のconstraintsにaudio / video / thumbnail / title / measurementの全categoryがある（legacyは下記互換判定） | pairが欠落・不正、参照切れ、または必須categoryが不足 | `/channel-strategy --constraints` |
 | 3. 公開前ゲート | 直近公開コレクションを一意に特定でき、検証済み `docs/plans/alignment-audit.json` の `subject` または matrix evidence にそのコレクション名がある | 公開コレクションを特定できない、レポートがない、不正、または対象名がない | `/audit --alignment` |
-| 4. 指標還流 | `data/insights.jsonl` に有効な analysis または postmortem 由来エントリが1件以上あり、うち1件以上が `status: adopted` かつ `status_note` に `creative-constraints.md` または既存 config の JSON Pointer がある | レポート/postmortemがない、insightsがない、該当エントリがない、または採用先の痕跡がない | `/analytics --flop` または `/analytics --analyze` |
+| 4. 指標還流 | `data/insights.jsonl` に有効な analysis または postmortem 由来エントリが1件以上あり、うち1件以上が `status: adopted` かつ `status_note` に `creative-constraints.json`（legacyは `.md`）または既存 config の JSON Pointer がある | レポート/postmortemがない、insightsがない、該当エントリがない、または採用先の痕跡がない | `/analytics --flop` または `/analytics --analyze` |
 
-`creative-constraints.md` の不在は工程2の `×` として記録し、工程3・4を続行する。読み取り専用監査から `/channel-strategy --constraints` を自動実行しない。
+creative-constraints成果物の不在・検証失敗は工程2の `×` として記録し、工程3・4を続行する。読み取り専用監査から `/channel-strategy --constraints` を自動実行しない。
 
 ## 手順
 
@@ -35,11 +35,17 @@
 
 ### 2. シーン定義を判定
 
-`uv run yt-doctor --json --check ttp_wf_new_readiness --target "$CHANNEL_DIR"` を読み取り専用で実行し、`message` に `persona-definition.md` の不足があれば、その診断と `next_action` をそのまま根拠へ引用する。TTP 側だけの `warn` を persona 不足とは扱わず、persona の見出しや出典を本 mode で再実装しない。その結果と判定表の工程1を適用し、存在するファイルはパスを根拠欄へ記載し、不在パスも省略しない。`viewing-scene 未検証` は従来どおり本工程で判定する。
+`uv run yt-doctor --json --check ttp_wf_new_readiness --target "$CHANNEL_DIR"` を読み取り専用で実行する。`message` の `persona-definition.json` に関するpair破損・型・フィールド不足と、`persona-definition.md` のlegacy不足診断を両方拾い、診断と `next_action` を根拠へ引用する。TTP側だけの `warn` をpersona不足とは扱わず、persona の見出しや出典を本 mode で再実装しない。
+
+persona/sceneは既存 `read_published_json_document(..., RepositorySchema.CHANNEL_STRATEGY)` でpairを読み、JSONのみを入力にする。両方の現行pairが有効なら、既存 `validate_persona_scene_references(..., require_nonempty=True)` で主対象IDとscene_idsを照合する。片方だけのpair、HTML不一致、schema不正は工程1の `×` とし、旧Markdownで隠さない。
+
+JSONもHTMLもない文書だけはlegacy互換を維持する。persona readinessはdoctorに委ね、sceneは `docs/plans/viewing-scene-matrix.md` の存在とpersonaの `viewing-scene 未検証` 注記を従来どおり確認する。現行とlegacyが混在してID照合できない場合は未検証として工程1を `×` にし、移行を案内する。確認した現行／legacyのパスと欠落・破損の別を根拠へ残す。現行pairが揃うチャンネルに旧Markdownを要求しない。
 
 ### 3. 制約翻訳を判定
 
-判定表の工程2をそのまま適用する。見出しは完全一致で数え、類似語を同一見出しと推定しない。
+`docs/channel/creative-constraints.json` + `.html` を同じstrategy readerで検証し、`document_type: constraints` と、既存writerの参照契約に従い、persona_idがpersona正本のID、scene_idsがscene正本内のID、各constraintのevidence_idsが同文書のevidence内のIDを指すことを確認する。工程2のcategoryを照合する。HTML本文やMarkdown見出しを現行JSONの代わりに解析しない。
+
+JSONもHTMLもない場合だけ `docs/channel/creative-constraints.md` のlegacy互換へ進み、レベル2見出し `音` `映像` `サムネ` `タイトル` `測定` が各1件あることを完全一致で確認する。現行pairの検証失敗時にはlegacyへ戻さず `×` とし、残りの監査は続行する。
 
 ### 4. 直近公開コレクションと公開前ゲートを判定
 
@@ -60,8 +66,8 @@
 1. `reports/analysis_*.json` または `collections/live/*/20-documentation/postmortem.md` が1件以上存在する。
 2. `data/insights.jsonl` の各行が JSON object で、`source` が `analysis|postmortem`、`source_path` が実在する上記成果物を指す。
 3. 対象エントリの `status` が `adopted`。
-4. 同じエントリの `status_note` に、`docs/channel/creative-constraints.md` または `/title/template` のような既存 `config/channel/*.json` 内キーへの JSON Pointer が明記されている。
-5. `creative-constraints.md` のパスならファイルが存在する。JSON Pointer なら参照先ファイルと既存キーが存在する。
+4. 同じエントリの `status_note` に、`docs/channel/creative-constraints.json`（旧記録は `.md`）または `/title/template` のような既存 `config/channel/*.json` 内キーへの JSON Pointer が明記されている。
+5. `creative-constraints.json` のパスならpairを検証できる。旧 `.md` 記録も移行済みなら現行pairを検証し、JSONもHTMLもない場合だけlegacyファイル存在を確認する。破損pairを旧記録で隠さない。JSON Pointer なら参照先ファイルと既存キーが存在する。
 
 1〜5を満たすエントリが1件以上なら `○` とする。`dismissed` は検討済みでも制作制約への還流ではないため `○` に数えない。壊れたJSON行は監査を停止せず、工程4の `×` 根拠へ行番号とエラーを記載する。
 
@@ -86,9 +92,9 @@
 
 ## 関連ファイル
 
-- `docs/channel/personas/persona-definition.md`
-- `docs/plans/viewing-scene-matrix.md`
-- `docs/channel/creative-constraints.md`
+- `docs/channel/personas/persona-definition.json` + `.html`（legacy: `.md`）
+- `docs/plans/viewing-scene-matrix.json` + `.html`（legacy: `.md`）
+- `docs/channel/creative-constraints.json` + `.html`（legacy: `.md`）
 - `docs/plans/alignment-audit.json`
 - `reports/analysis_*.json`
 - `collections/live/*/20-documentation/postmortem.md`
