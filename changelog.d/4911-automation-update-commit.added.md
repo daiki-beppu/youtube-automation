@@ -1,0 +1,2 @@
+- `yt-automation-update apply --commit` で、追従処理が新たに作った差分だけを commit できるようにした（#4911）
+- untracked ファイルだけがある作業ツリーを automation update の clean 判定で許容するようにした（#4911）

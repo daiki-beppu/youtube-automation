@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -847,6 +848,111 @@ def test_apply_dirty_worktree_fails_before_any_command(
     assert 'tag = "v5.5.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
 
 
+def test_git_status_porcelain_ignores_untracked_files(tmp_path: Path) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    (repo / "untracked.txt").write_text("local\n", encoding="utf-8")
+
+    assert automation_update._git_status_porcelain(repo) == ""
+
+    subprocess.run(["git", "add", "pyproject.toml"], cwd=repo, check=True)
+    subprocess.run(
+        ["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-qm", "base"],
+        cwd=repo,
+        check=True,
+    )
+    (repo / "pyproject.toml").write_text(INLINE_TABLE_PYPROJECT + "\n# changed\n", encoding="utf-8")
+
+    assert "pyproject.toml" in automation_update._git_status_porcelain(repo)
+
+
+def _init_apply_git_repo(repo: Path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+    subprocess.run(["git", "add", "pyproject.toml"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "base"], cwd=repo, check=True)
+
+
+@pytest.mark.parametrize("branch_pin", [False, True])
+@pytest.mark.parametrize("allow_dirty", [False, True])
+def test_apply_commit_commits_only_new_status_paths(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, branch_pin: bool, allow_dirty: bool
+) -> None:
+    repo = _write_repo(tmp_path, BRANCH_FOLLOW_PYPROJECT if branch_pin else INLINE_TABLE_PYPROJECT)
+    _init_apply_git_repo(repo)
+    (repo / "existing-untracked.txt").write_text("keep me local\n", encoding="utf-8")
+
+    if allow_dirty:
+        (repo / "preexisting-staged.txt").write_text("user work", encoding="utf-8")
+        subprocess.run(["git", "add", "preexisting-staged.txt"], cwd=repo, check=True)
+
+    monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: False)
+    monkeypatch.setattr(automation_update, "_check_channel_config", lambda root: "config/channel/ ロード成功")
+
+    def _run(cmd: list[str], cwd: Path) -> int:
+        if cmd[:4] == ["uv", "run", "yt-skills", "sync"]:
+            generated = cwd / ".claude" / "skills" / "generated.md"
+            generated.parent.mkdir(parents=True)
+            generated.write_text("generated\n", encoding="utf-8")
+        if cmd[:2] == ["uv", "lock"] and branch_pin:
+            _write_uv_lock(cwd, _SHA_NEW)
+        return 0
+
+    monkeypatch.setattr(automation_update, "_run_command", _run)
+
+    args = ["apply", "--target", str(repo), "--commit"]
+    args += [] if branch_pin else ["--tag", "v5.6.0"]
+    args += ["--allow-dirty"] if allow_dirty else []
+    assert main(args) == 0
+    expected_ref = _SHA_NEW[:12] if branch_pin else "v5.6.0"
+    assert (
+        subprocess.run(
+            ["git", "log", "-1", "--pretty=%s"], cwd=repo, check=True, capture_output=True, text=True
+        ).stdout.strip()
+        == f"chore: youtube-automation {expected_ref} への追従"
+    )
+    committed = subprocess.run(
+        ["git", "show", "--pretty=", "--name-only", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.splitlines()
+    assert committed == [".claude/skills/generated.md", "uv.lock" if branch_pin else "pyproject.toml"]
+    remaining = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout
+    assert "?? existing-untracked.txt\n" in remaining
+    assert ".claude/skills/generated.md" not in remaining
+
+    if allow_dirty:
+        assert "A  preexisting-staged.txt\n" in remaining
+
+
+def test_apply_commit_failure_keeps_updated_worktree(
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    _init_apply_git_repo(repo)
+    hook = repo / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\nexit 1\n", encoding="utf-8")
+    hook.chmod(0o755)
+    monkeypatch.setattr(automation_update, "_skills_diff_has_changes", lambda root: False)
+    monkeypatch.setattr(automation_update, "_check_channel_config", lambda root: "config/channel/ ロード成功")
+    monkeypatch.setattr(automation_update, "_run_command", lambda cmd, cwd: 0)
+
+    assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--commit"]) == 1
+    error = capsys.readouterr().err
+    assert "手動確認して個別 commit" in error
+    assert "既存差分は commit 対象になりません" in error
+    assert "続きから冪等" not in error
+    assert 'tag = "v5.6.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
+    assert subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=no"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+
+
 def test_apply_local_fix_diff_requires_explicit_sync_decision(
     tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
@@ -1439,3 +1545,23 @@ def test_apply_pyproject_write_failure_is_step_failure(
     err = capsys.readouterr().err
     assert "'pyproject.toml の pin 書き換え' で失敗しました" in err
     assert "disk full" in err
+
+
+@pytest.mark.parametrize("staged", [False, True])
+def test_commit_apply_changes_includes_both_rename_paths(tmp_path: Path, staged: bool) -> None:
+    repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
+    _init_apply_git_repo(repo)
+    old = repo / "old.md"
+    old.write_text("skill contents\n")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "skill"], cwd=repo, check=True)
+    before = automation_update._git_status_paths(repo)
+    old.rename(repo / "new.md")
+    if staged:
+        subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    assert automation_update._git_status_paths(repo) == {"old.md", "new.md"}
+    automation_update._commit_apply_changes(repo, before, "v5.8.0")
+    assert subprocess.check_output(["git", "status", "--porcelain"], cwd=repo) == b""
+    tree = subprocess.check_output(["git", "ls-tree", "--name-only", "HEAD"], cwd=repo).splitlines()
+    assert b"new.md" in tree
+    assert b"old.md" not in tree

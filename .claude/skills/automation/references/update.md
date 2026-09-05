@@ -378,7 +378,14 @@ pin 形式ごとの指定方法と通常のオプションは `uv run yt-automat
 6. smoke check: `yt-skills list`
 7. smoke check: `yt-doctor` の `channel_config` check（対象リポの config が不正なら非 0 終了）
 
-途中失敗時は表示された失敗ステップの原因を解消し、**同コマンド + `--allow-dirty`** で再実行する（apply 自身の pin 書き換えで作業ツリーが dirty になっているため。ステップは冪等）。`uv lock` 失敗が続く場合は `uv cache clean` してから再実行。pin 記法が想定外で書き換えできない旨のエラーが出た場合は `[HUMAN STEP]` で該当箇所を見せて手動編集を依頼する。
+途中失敗時は表示された失敗ステップの原因を解消し、実行時のフラグに応じて復旧する。
+
+- `--commit` 未指定の途中失敗: **同コマンド + `--allow-dirty`** で未完了の工程を再実行する。
+- `--commit` 指定（commit ステップ自体の失敗も含む）: 残った追従差分を手動確認して個別 commit する。更新工程が未完了なら **`--commit` を外し `--allow-dirty` を付けて** 再実行し、完了後の差分を確認して個別 commit する。無関係な既存の tracked / staged / untracked 差分は含めない。
+
+`--commit` は各起動の apply 前後で新たに status に現れた path だけを対象にする（#4911）。前回失敗時の差分は次回には開始前の既存差分となるため、`--allow-dirty --commit` で前回分まで自動 commit する復旧には使わない。
+
+`uv lock` 失敗が続く場合は `uv cache clean` してから再実行。pin 記法が想定外で書き換えできない旨のエラーが出た場合は `[HUMAN STEP]` で該当箇所を見せて手動編集を依頼する。
 
 `--prune` は upstream が管理していた既知の rename／削除跡だけを対象にする。未知の target entry はローカル自作 skill の可能性があるため保護される。利用者が明示同意した場合のみ `uv run yt-skills sync --prune --yes` を別途実行する（`--prune` 単独では既知候補の列挙のみで実削除されない）。
 
@@ -517,6 +524,10 @@ sync 直後に、次の 2 点を Phase 4 へ進む前に判定する。手順は
 
 ## Phase 4: コミット（push は人間）
 
+追従開始時に commit まで一括実行できる場合は、Phase 3（Step 3-2）の apply を
+`uv run yt-automation-update apply --commit` として、この Phase の手動 commit を省略する。
+既存の対話 wizard で追加確認や修復を挟んだ場合は、以下の明示的な staging 手順を引き続き使う。
+
 ### Step 4-1. ステージング
 
 ```bash
@@ -561,7 +572,7 @@ git commit -m "chore: youtube-automation <target_ref> への追従 (#N)"
 - 機械的手順（実行場所判定 / pin 形式判定 / 差分判定 / pin 書き換え / `uv lock` / `yt-skills sync` / smoke check）は `yt-automation-update` CLI に委譲し、AI が sed / uv lock 等を手で再実装しない
 - 人間が答えるべきステップ（上書き判断 / push 判断 / sha pin の bump 先 / `--prune` 付与）を AI が勝手に決めない
 - `--force-sync` / `--prune` 系の破壊的操作は必ず `[HUMAN STEP]` の同意を経る
-- commit / push は CLI の責務外。Phase 4 で AI が commit まで行い、push は人間に依頼する
+- commit は `apply --commit` を使わない場合に Phase 4 で AI が行う。push は CLI の責務外で、人間に依頼する
 - Step 2-3 の抽出セクション境界（`### Added` / `### Changed` / `### Fixed` / `### Removed` / `### Migration`）と Migration セクション必須要素（`所要時間の目安` / `local fix 衝突注意`）を配布先での **入力契約** とする。upstream 側のリリース本文契約が変わったら Step 2-3 も同期更新する
 
 ## Cross References
