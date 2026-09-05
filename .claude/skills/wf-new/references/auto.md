@@ -67,7 +67,6 @@ uv run python "$STATE_SCRIPT" release --channel-dir . --token <token>
 |---|---|
 | `wf-new` | 同一 SKILL.md の通常入口。不在時は新規開始、固定済み planning では未完了工程から再開 |
 | `lyria` | `/music --generate` |
-| `minimax` | `/music --generate` |
 | `suno-helper` | `/music --generate` の browser use 主導フロー。人間への handoff は login / CAPTCHA の該当操作だけ |
 | `masterup` | strict Suno 成果物を入力に `/music --master` |
 | `wf-next-local` | `/wf-next` のローカル動画・metadata 生成まで。YouTube write は行わない |

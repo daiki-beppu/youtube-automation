@@ -1,13 +1,13 @@
 ## Overview
 
-`/music --lyric` は Suno / MiniMax ボーカル曲の **Lyrics 専任**。`/music --prompt` は orchestration + Style / title / scene / JSON merge を担当し、本 skill は歌詞本文だけを作る。
+`/music --lyric` は Suno ボーカル曲の **Lyrics 専任**。`/music --prompt` は orchestration + Style / title / scene / JSON merge を担当し、本 skill は歌詞本文だけを作る。
 
 ```
 /music --lyric  ->  20-documentation/suno-lyrics.{md,json}
                        |
 /music --prompt        ->  20-documentation/suno-prompts.{md,json}
                        |
-/music --generate ->  Suno UI / MiniMax Music API
+/music --generate ->  Suno UI
 ```
 
 ## Subagent Contract
@@ -41,7 +41,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 以下を確認し、満たさなければ前工程を案内して停止する（機械的な停止条件は後述の Hard Gates が正）:
 
-- チャンネルの `music_engine` が `suno` または `minimax` で、`genre_line` または `suno-patterns.yaml::mode` がボーカルを示すこと。`lyria` とインストゥルメンタルのみのチャンネル / コレクションでは歌詞生成不要として停止する
+- チャンネルの `music_engine` が `suno` で、`genre_line` または `suno-patterns.yaml::mode` がボーカルを示すこと。`lyria` とインストゥルメンタルのみのチャンネル / コレクションでは歌詞生成不要として停止する
 - 対象コレクションの `20-documentation/suno-patterns.yaml` が存在すること。無ければ先に `/music --prompt` の pattern draft 作成を案内して停止する
 - persona reference として `docs/channel/personas/persona-definition.md` を読む。無い場合のみ旧 `docs/audience-persona.md` を legacy fallback として参照する
 
@@ -74,7 +74,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 
 ## Hard Gates
 
-1. `music_engine` が `suno` / `minimax` のどちらでもない場合は停止する
+1. `music_engine` が `suno` でない場合は停止する
 2. `genre_line` または `suno-patterns.yaml::mode` がボーカルを示さない場合は、歌詞生成不要として停止する
 3. `20-documentation/suno-patterns.yaml` が無い場合は停止し、先に `/music --prompt` の pattern draft を作るよう案内する
 4. `workflow-state.json::planning.music` が空でも完全停止はしないが、曲ごとの scene と persona reference を優先して進める
@@ -118,7 +118,7 @@ generator は `suno-patterns.yaml`、persona reference、設定、必要な Refe
 6. Lyrics は V5.5 向けに section tags を明示する。基本形は `[Intro]`, `[Verse 1]`, `[Pre-Chorus]`, `[Chorus]`, `[Verse 2]`, `[Instrumental]`, `[Bridge]`, `[Final Chorus]`, `[Extended Outro]`, `[Outro]`。`[Verse]` / `[Chorus]` だけでなく `[Intro]` `[Pre-Chorus]` `[Bridge]` `[Extended Outro]` `[Outro]` も曲ごとの scene / persona に合わせて書き分け、他の曲から本文を流用しない（Suno は歌詞テキストに強く追従するため、これらが同一だと全曲の入り・終わりが似通う）
 7. `suno-lyrics.md` と `suno-lyrics.json` を `20-documentation/` に出力する。`preserve_existing: true` の場合、既存 entry は上書きしない
 8. `uv run yt-suno-verify <collection-path>` 通過後、別コンテキスト reviewer が `suno-lyrics.json` のみを読み、entry ごとに `PASS` / `FAIL` + 理由を出す。`FAIL` entry のみ最大 2 周まで再生成し、上限到達時は残課題をユーザーに提示する
-9. 出力後、Suno は `/music --prompt` に戻って Style と Lyrics をマージし、MiniMax は `/music --generate` が検証済み `suno-lyrics.json` を直接消費する
+9. 出力後、Suno の `/music --prompt` に戻って Style と Lyrics をマージする
 
 ## Output Contract
 
@@ -176,4 +176,4 @@ JSON root は配列。各 entry は `/music --prompt` が `name` でマージで
 
 ## Next Step
 
-完了後、Suno は `/music --prompt` を実行し、`suno-lyrics.json` を優先して Style と Lyrics を `suno-prompts.json` にマージする。MiniMax は `/music --generate` を実行し、同じ `suno-lyrics.json` を `yt-generate-minimax-master --lyrics` へ渡す。
+完了後、`/music --prompt` を実行し、`suno-lyrics.json` を優先して Style と Lyrics を `suno-prompts.json` にマージする。

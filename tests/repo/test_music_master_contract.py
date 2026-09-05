@@ -122,7 +122,7 @@ def test_suno_master_blocks_before_generate_completion(tmp_path: Path) -> None:
     assert payload["next"] == "music --generate"
 
 
-@pytest.mark.parametrize("engine", ["lyria", "minimax"])
+@pytest.mark.parametrize("engine", ["lyria"])
 def test_api_engine_master_is_always_skipped_as_not_required(tmp_path: Path, engine: str) -> None:
     collection = _collection(tmp_path, engine)
 
@@ -145,4 +145,4 @@ def test_master_rejects_unknown_music_engine(tmp_path: Path) -> None:
     assert completed.returncode == 1
     payload = json.loads(completed.stdout)
     assert payload["decision"] == "error"
-    assert "music_engine must be suno, lyria, or minimax" in payload["reason"]
+    assert "music_engine must be suno or lyria" in payload["reason"]

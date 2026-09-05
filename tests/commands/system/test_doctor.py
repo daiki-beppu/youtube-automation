@@ -3746,7 +3746,7 @@ class TestCheckTtpWfNewReadinessChannelNew:
         assert r.status == "warn"
         assert "Suno genre_line または data/video_analysis の suno_preset 未設定" in r.message
 
-    @pytest.mark.parametrize("engine", ["lyria", "minimax"])
+    @pytest.mark.parametrize("engine", ["lyria"])
     def test_non_suno_engine_does_not_require_suno_readiness(self, tmp_path, engine):
         _write_ttp_analytics(tmp_path, [_ttp_channel()])
         _write_ttp_readiness_files(tmp_path)

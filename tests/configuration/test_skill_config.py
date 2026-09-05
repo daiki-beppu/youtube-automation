@@ -208,7 +208,7 @@ def test_legacy_skill_config_ignores_sibling_only_migrated_override(tmp_path: Pa
     overrides = tmp_path / "config" / "skills"
     overrides.mkdir(parents=True)
     (overrides / "music.yaml").write_text(
-        "generate:\n  minimax:\n    model: speech-2.6-hd\n",
+        "generate:\n  suno:\n    unattended:\n      max_entries: 99\n",
         encoding="utf-8",
     )
 

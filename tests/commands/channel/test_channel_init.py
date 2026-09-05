@@ -215,7 +215,7 @@ def test_youtube_json_has_expected_defaults(tmp_path):
     assert youtube["music_engine"] == "suno"
 
 
-@pytest.mark.parametrize("engine", ["lyria", "minimax"])
+@pytest.mark.parametrize("engine", ["lyria"])
 def test_music_engine_arg_is_written_to_youtube_json(tmp_path, engine):
     extra = ["--music-engine", engine]
 

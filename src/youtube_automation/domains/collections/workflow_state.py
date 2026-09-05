@@ -17,7 +17,7 @@ from youtube_automation.infrastructure.filesystem import JSONValue, file_lock
 
 Phase = Literal["planning", "prepared", "cloud_owned", "mastered", "publishing", "complete"]
 Stage = Literal["planning", "live"]
-MusicEngine = Literal["suno", "lyria", "minimax"]
+MusicEngine = Literal["suno", "lyria"]
 HandoffPoint = Literal["suno_download"]
 ExecutionOwner = Literal["local", "cloud"]
 WorkflowStateUpdater = Callable[["WorkflowState"], "WorkflowState | None"]
@@ -177,7 +177,7 @@ class WorkflowStateDocument(TypedDict, total=False):
 
 _PHASES = frozenset({"planning", "prepared", "cloud_owned", "mastered", "publishing", "complete"})
 _STAGES = frozenset({"planning", "live"})
-_MUSIC_ENGINES = frozenset({"suno", "lyria", "minimax"})
+_MUSIC_ENGINES = frozenset({"suno", "lyria"})
 _MUSIC_TEMPOS = frozenset({"very slow", "slow", "gentle", "moderate", "lively"})
 
 

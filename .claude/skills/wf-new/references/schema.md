@@ -42,7 +42,7 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
     "final_title": "Rainy Harbor Jazz",
     "generated": true,
     "music": {
-      "engine": "suno | lyria | minimax",
+      "engine": "suno | lyria",
       "mood": ["mellow", "introspective"],
       "atmosphere": "rainy harbor at night, mellow jazz by the docks",
       "tempo": "slow",
@@ -267,7 +267,7 @@ top-level `music_engine` は既存 state の読み取り専用互換 field で�
 
 | フィールド | 型 | 必須 | 説明 |
 |-----------|-----|---|------|
-| `planning.music.engine` | `"suno" \| "lyria" \| "minimax"` | Yes | 音楽エンジンの正準キー |
+| `planning.music.engine` | `"suno" \| "lyria"` | Yes | 音楽エンジンの正準キー |
 | `planning.music.mood` | string[] | Yes | 感情語 1-3 個（例: `["mellow", "introspective"]`）|
 | `planning.music.atmosphere` | string | Yes | コレクション全体の世界観 1 文（英語）|
 | `planning.music.tempo` | string | Yes | `"very slow"` / `"slow"` / `"gentle"` / `"moderate"` / `"lively"` のいずれか |

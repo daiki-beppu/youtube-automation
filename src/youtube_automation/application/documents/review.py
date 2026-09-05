@@ -359,7 +359,7 @@ class MusicPromptReviewSource:
     def source(self) -> Path:
         sources = tuple(
             path
-            for name in ("suno-prompts.json", "lyria-prompt.json", "minimax-prompt.json")
+            for name in ("suno-prompts.json", "lyria-prompt.json")
             if (path := self.collection / "20-documentation" / name).is_file()
         )
         if len(sources) != 1:

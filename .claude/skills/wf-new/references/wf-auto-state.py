@@ -33,11 +33,10 @@ LEASE_MUTEX_NAME = "lease.mutex"
 HISTORY_FILE_NAME = "history.json"
 AUDIO_SUFFIXES = {".mp3", ".m4a", ".wav", ".flac", ".aac"}
 PHASES = {"planning", "prepared", "cloud_owned", "mastered", "publishing", "complete"}
-ENGINES = {"suno", "lyria", "minimax"}
+ENGINES = {"suno", "lyria"}
 ACTIONS = {
     "wf-new",
     "lyria",
-    "minimax",
     "suno-helper",
     "masterup",
     "wf-next-local",
@@ -719,16 +718,6 @@ def evaluate_collection(
                 action="lyria",
                 reason="lyria_generation_required",
                 resume_action="lyria",
-                config=config,
-            )
-        if engine == "minimax":
-            return _decision(
-                collection=collection,
-                phase=phase,
-                engine=engine,
-                action="minimax",
-                reason="minimax_generation_required",
-                resume_action="minimax",
                 config=config,
             )
         if _suno_download_complete(collection, state):

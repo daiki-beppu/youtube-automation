@@ -146,6 +146,17 @@ def test_load_minimal_sections(tmp_path, monkeypatch):
     assert config.pinned_comment.default_language == "en"
 
 
+@pytest.mark.parametrize("engine", ["minimax", "unknown", None])
+def test_unsupported_music_engine_is_rejected(tmp_path, monkeypatch, engine):
+    sections = _minimal_sections()
+    sections["youtube.json"]["music_engine"] = engine
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    with pytest.raises(ConfigError, match="music_engine"):
+        load_config()
+
+
 def test_hashtag_line_prefixes_bare_tags_without_duplicate_hashes(tmp_path, monkeypatch):
     sections = _minimal_sections()
     sections["content.json"]["descriptions"]["hashtags"] = [
@@ -906,18 +917,6 @@ def test_load_all_sections(tmp_path, monkeypatch):
     assert config.shorts.release.languages == ("jp",)
     assert config.shorts.release.start_sec == 20
     assert config.shorts.release.duration_sec == 30
-
-
-def test_music_engine_minimax_is_loaded_without_unknown_value_warning(tmp_path, monkeypatch, caplog):
-    sections = _minimal_sections()
-    sections["youtube.json"]["music_engine"] = "minimax"
-    channel = _setup_channel(tmp_path, sections)
-    monkeypatch.setenv("CHANNEL_DIR", str(channel))
-
-    config = load_config()
-
-    assert config.youtube.music_engine == "minimax"
-    assert "未知の値" not in caplog.text
 
 
 def test_shorts_section_missing_defaults_to_disabled(tmp_path, monkeypatch):

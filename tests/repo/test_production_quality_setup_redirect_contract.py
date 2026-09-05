@@ -292,7 +292,7 @@ _RAW_EXPECTED_ACTIVE_ROUTES = (
         "music/references/generate.md",
         "### 選択タイミング（どこで lyria が選ばれるか）",
         "1. **チャンネルのデフォルト** — `/channel-strategy --direction`（方向性検討モード）で "
-        "`suno` / `lyria` / `minimax` を検討 → "
+        "`suno` / `lyria` を検討 → "
         "`/setup --regenerate` が `config/channel/youtube.json` の `music_engine` に書き込む",
     ),
     _route("thumbnail/SKILL.md", "## 前提", "- **新規チャンネル** → `/setup --channel` を案内"),

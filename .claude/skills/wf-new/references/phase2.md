@@ -10,7 +10,7 @@ Phase 1 で open insights を渡していた場合は、企画選択の直後に
 
 ```bash
 uv run yt-init-collection "<Collection Name>" "<theme-slug>" \
-  --track-count <N> --selected-plan <A-E> --music-engine <suno|lyria|minimax> \
+  --track-count <N> --selected-plan <A-E> --music-engine <suno|lyria> \
   --playlist <playlist-key>
 ```
 
@@ -18,7 +18,7 @@ uv run yt-init-collection "<Collection Name>" "<theme-slug>" \
 - `<theme-slug>`: ハイフン区切りのテーマスラッグ（例: `brigid-hearth`）
 - `--track-count`: 確認済みトラック数（デフォルト 12）
 - `--selected-plan`: 選択された企画（A〜E）
-- `--music-engine`: 音楽エンジン（`suno` / `lyria` / `minimax`）。**省略時は `config/channel/youtube.json` の `music_engine` が使われる**。コレクション単位で上書きしたいときのみ明示する
+- `--music-engine`: 音楽エンジン（`suno` / `lyria`）。**省略時は `config/channel/youtube.json` の `music_engine` が使われる**。コレクション単位で上書きしたいときのみ明示する
 - `--playlist <key>`: 所属させるプレイリスト key（`config/channel/playlists.json`）。複数回指定可。**分類プレイリスト（`auto_add` 以外）を定義しているチャンネルでは必須**。分類しないことが意図なら `--no-playlist` を明示する
 
 `--playlist` を必須にしているのは、theme slug のキーワード照合（`auto_add_themes`）が新テーマのたびに漏れ、黙って `auto_add` のプレイリストだけに入る事故を防ぐため (#4346)。候補が分からないときは `uv run yt-playlist-status` で一覧を確認する。
@@ -95,7 +95,7 @@ cloud planning runner から、企画・music prompt の pair を確定したら
 3. **両 branch が未完了なら exactly two calls を同時起動**:
    - 1 回の Agent tool dispatch に次の独立した 2 call だけを含め、同じ message で同時起動する。順次 2 回に分けず、3 call 目や `/thumbnail --loop` を混ぜない
    - Agent 1: thumbnail branch。`status: FINALIZED` なら AI 生成を行わない（候補生成も再選択もしない）。既存 preview の品質検証・確定経路のうち、承認を伴わない `thumbnail.jpg` の実在・可読性確認だけを行い evidence を返す。`status: MISSING` なら `single_step` / provider を問わず `/thumbnail <theme>` の Subagent Contract でテキスト付き候補と `20-documentation/thumbnail-prompts.md` を候補生成する。承認、確定コピー、state 更新は行わない
-   - Agent 2: music branch。`music_engine: suno` なら `/music --prompt <theme>` で `20-documentation/suno-patterns.yaml` と検証済み `suno-prompts.json` / `.html` pairを生成する。`music_engine: lyria` なら `/music --generate <theme>` のプロンプト設計だけを行い、検証済み `lyria-prompt.json` / `.html` pairを生成する。`music_engine: minimax` は generation approvalを伴う後続 `/music --generate` へstyle prompt設計を引き渡す。この Phase では Lyria 3 API / MiniMax Music API を実行しない
+   - Agent 2: music branch。`music_engine: suno` なら `/music --prompt <theme>` で `20-documentation/suno-patterns.yaml` と検証済み `suno-prompts.json` / `.html` pairを生成する。`music_engine: lyria` なら `/music --generate <theme>` のプロンプト設計だけを行い、検証済み `lyria-prompt.json` / `.html` pairを生成する。この Phase では Lyria 3 API を実行しない
    - 両 Agent へ、固定した対象 collection の絶対 path、確定企画、theme、engine / effective config という具体的な入力、期待成果物の絶対 path、禁止事項、完了報告形式を渡す。両 Agent は `workflow-state.json` を更新しない、AskUserQuestion を実行しない、共有 config を変更しない
    - 片側再開では上記の該当 Agent だけへ同じ具体的な契約を渡す。両方未完了のときだけ exactly-two 同時 dispatch とする
 
@@ -178,7 +178,7 @@ initial dispatch を行った場合は両 Agent の完了を待つ。片方の�
 コレクション: <collection_name>
 テーマ: <theme>
 トラック数: <track_count>
-音楽エンジン: <suno|lyria|minimax>
+音楽エンジン: <suno|lyria>
 ディレクトリ: collections/planning/YYYYMMDD-<short>-<theme>-collection/
 現在のフェーズ: prepared
 ループ動画: ✅ 生成済み / ⚠️ 失敗（`/wf-next` で再試行可能）

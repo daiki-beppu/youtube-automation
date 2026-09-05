@@ -104,7 +104,7 @@ uv run yt-workflow-state --collection "$COLLECTION_DIR" touch
 |---|---|---|
 | videos.insert（1,600 units / 本、mastered フェーズの yt-upload-collection / yt-upload-auto） | アップロード本数 | collection / release 型・進行フェーズ |
 | playlists.insert / playlistItems.insert（各 50 units、yt-playlist-manager --init） | 新規プレイリスト数 + 割当本数 | プレイリスト構成 |
-| Vertex AI Lyria / MiniMax Music（subagent `/music --generate` 委譲時） | `/music --generate` の「想定 API call 数」を参照 | API engine パス採否 |
+| Vertex AI Lyria（subagent `/music --generate` 委譲時） | `/music --generate` の「想定 API call 数」を参照 | API engine パス採否 |
 
 - 上限 / 承認: upload 前に `--plan` で事前確認し、playlist 系は `--dry-run` を使う。/video --generate /music --master /video --describe はローカル処理で API 0。委譲先 skill の見積もりは各 skill の「想定 API call 数」を参照。
 
@@ -136,7 +136,7 @@ resolver action と直接入口の既存責務は次の対応を正とする。
 | resolver action | 直接 `/wf-next` の処理 |
 |---|---|
 | `wf-new` | planning が未完了であることを報告し、`/wf-new` を再開 action として blocked で閉じる |
-| `lyria` / `minimax` / `suno-helper` / `masterup` | prepared の既存のフェーズ別処理をそのまま実行し、同じ action ID で記録する |
+| `lyria` / `suno-helper` / `masterup` | prepared の既存のフェーズ別処理をそのまま実行し、同じ action ID で記録する |
 | `wf-next-local` / `wf-next` | mastered / publishing の既存のフェーズ別処理を実行する。`wf-next-local` は resolver が許可したローカル成果物までに限定し、YouTube write を行わない |
 | `publish` | production 完了を検証して `/publish` を再開 action として blocked で閉じ、公開後処理を本 skill へ複製しない |
 | `blocked` | resolver の reason / resume action を変更せず blocked で閉じる |
@@ -194,13 +194,6 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
    - Agent ツールで subagent を起動し、対象 collection と theme を入力に `/music --generate <theme>` の Lyria 3 API セグメント生成だけを実行させる（最大 ~184 秒/リクエスト）。state 書き込みと承認取得は禁止する
    - 委譲前に期待する `02-Individual-music/` の音声ファイルと `01-master/` の raw master パスを列挙する。メインが実在を確認し、成功時だけ生成ファイル名を JSON string として `yt-workflow-state --collection "$COLLECTION_DIR" set-asset raw_master <json-value>` へ渡す
    - ガイダンス: 「生成されたセグメントをミキシング+マスタリングし、最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」
-   - **ここでフロー停止**
-
-**MiniMax パス:**
-1. `assets.music_prompts = true` + `assets.raw_master = null`:
-   - 対象 collection と theme を入力に `/music --generate <theme>` の MiniMax Music segment生成だけを実行する。state 書き込みは行わず、生成条件・call上限の承認は `/music --generate` の契約を維持する
-   - `02-Individual-music/` のsegmentと `01-master/master.mp3` の実在を確認し、成功時だけ `assets.raw_master` と `updated_at` を更新する
-   - ガイダンス: 「生成されたマスターを確認し、最終マスターとして採用または差し替え後、`/wf-next` を再実行してください」
    - **ここでフロー停止**
 
 **マスター音源検出（音源承認ゲート 2-B）:**

@@ -190,19 +190,6 @@ class TestScaffold:
 
             shutil.rmtree(collection)
 
-    def test_minimax_music_engine_is_persisted_in_workflow_state(self, monkeypatch):
-        _run(monkeypatch, ["MiniMax Scaffold", "minimax-scaffold", "--music-engine", "minimax"])
-        planning = Path(channel_dir()) / "collections" / "planning"
-        collection = next(planning.glob("*-minimax-scaffold-collection"))
-        try:
-            state = json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))
-            assert state["planning"]["music"]["engine"] == "minimax"
-            assert "music_engine" not in state
-        finally:
-            import shutil
-
-            shutil.rmtree(collection)
-
 
 class TestPlanDraftDirectory:
     """#4754: Phase 1 の企画 draft 公開が先に作ったディレクトリで 2a を止めない。
