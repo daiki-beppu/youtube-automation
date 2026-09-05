@@ -84,7 +84,7 @@ description: "Use when 完成した動画を公開工程へ進めるとき。--p
 
 `--clean` では `references/clean.md` を読み、Git state の pull 成功後に公開完了の 4 条件を read-only preflight で検証する。対象と容量を dry-run 表示し、不可逆な物理削除への明示承認を得た場合だけ削除する。clean は任意操作のため chain manifest へ追加しない。
 
-upload 完了後も同じ chain を続行し、community、pinned を順に状態判定する。metadata 監査はこの chain に含めず、必要な場合は `/audit --metadata` を独立して実行する。
+フラグなしの一括実行では upload 完了後も同じ chain を続行し、community、pinned を順に状態判定する。metadata 監査はこの chain に含めず、必要な場合は `/audit --metadata` を独立して実行する。
 
 ## 想定 API call 数
 
@@ -101,6 +101,14 @@ upload 完了後も同じ chain を続行し、community、pinned を順に状�
 - 上限 / 承認: plan は upload API を叩かず、実 upload は Chain Contract の承認ゲート通過後だけ行う。
 
 ## 完了条件
+
+### 単発mode
+
+指定modeと操作に対応するreferenceの完了条件だけを適用する。`--playlist` は `references/playlist.md`、`--upload` は `references/upload.md`、`--community` と `--community --batch` は `references/community.md` の該当分岐、`--pinned` は `references/pinned.md`、`--clean` は `references/clean.md` を正とする。dry-runなど読み取りだけの依頼も該当操作の完了までで止める。完了後に別modeを追加実行せず、無関係なupload・community・pinned成果物を要求しない。cleanは引き続き任意のchain外操作とする。
+
+### フラグなしの一括実行
+
+対象のplaylist → upload → community → pinned全stepが、各referenceの完了条件とChain Contractの実成果物検証を満たした場合だけ完了する。既存の状態判定で完了済みならskipし、同一対象の承認を再利用する契約を維持する。失敗・未完了stepが残る場合は全体完了にせず、同じ対象の状態判定から再開する。以下はこの一括実行に限る確認事項:
 
 - playlist step は指定操作が exit 0 で完了し、初期化時は全 `playlist_id` が記録済みである
 - upload CLI が正常終了している
