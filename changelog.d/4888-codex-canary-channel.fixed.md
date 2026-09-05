@@ -1,0 +1,1 @@
+- `yt-codex-canary-notify` の通知 channel 引数が共通 workspace option に消費される問題を修正した（#4888）。
