@@ -49,7 +49,7 @@ collection の YouTube サムネイルを、競合の勝ちパターンとチャ
 /thumbnail --loop
 ```
 
-`--loop` は確定済みの textless `main.png` / `main.jpg` を Veo、fal.ai、Gemini Omni Flash、または MiniMax H3 へ渡し、動画本編で繰り返せる `loop.mp4` を作ります。Shorts の 9:16 ループは `yt-generate-shorts-loop --engine fal` でも生成できます。静止画の確定前には実行せず、生成後は継ぎ目と意図しない文字・動きをプレビューしてください。
+`--loop` は確定済みの textless `main.png` / `main.jpg` を Veo、fal.ai、または Gemini Omni Flash へ渡し、動画本編で繰り返せる `loop.mp4` を作ります。Shorts の 9:16 ループは `yt-generate-shorts-loop --engine fal` でも生成できます。静止画の確定前には実行せず、生成後は継ぎ目と意図しない文字・動きをプレビューしてください。
 
 ## つまずいたら
 
