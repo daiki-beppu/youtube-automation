@@ -21,3 +21,9 @@ HTML生成直後、親 orchestrator は絶対pathのMarkdown linkと、区分、
 - Webを使えない場合も黙って自動承認せず、Codex / Claude の同じsessionで `--transport terminal` を付け、返されたIDを `--candidate-id` に明示する
 - HTMLやbrokerから任意path、command、state patchを受け取らない
 - `preview_required: false` の自動経路はpreview用CLIを呼ばず、HTML/broker/確認待ちを作らない。full確認も運用設定で自動承認する場合だけ `--automatic` を明示し、probeと同じstate ownerは省略しない
+
+## 再開時の承認照合
+
+full承認では既存workflow-state ownerが `assets.master_video` のファイル名と `master_video_approved_digest` を同時に保存する。再開判定はファイル名を `01-master/` 配下へ解決し、非空の実ファイル・probe・保存digestとの一致を確認する。正常な承認済み動画は再生成・再レビューせずskipする。
+
+欠落は生成へ戻し、空・破損・承認後改変・digest証跡のない旧動画は修復／再承認を案内して停止する。既存動画を保持できる場合は、上記の同じfull reviewを実行して承認証跡を更新する。別名の動画への置換を再承認で行わず、元の制作状態を確認する。動画の存在だけで承認済みと扱わない。description段のJSON/HTML pair検証は引き続き行う。

@@ -166,6 +166,7 @@ class WorkflowStateDocument(TypedDict, total=False):
     handoff: HandoffDocument
     human_tasks: HumanTasksDocument
     music_prompt_approved_digest: str
+    master_video_approved_digest: str
     music_pair_selection: MusicPairSelectionDocument
     upload: UploadDocument
     post_upload: PostUploadDocument
@@ -728,6 +729,16 @@ class WorkflowState(MutableMapping[str, JSONValue]):
     def record_master_video(self, path: str | None) -> None:
         """master video asset を検証して記録する。"""
         self.set_asset("master_video", path)
+
+    @property
+    def master_video_approved_digest(self) -> str | None:
+        return _optional_string(
+            self._data, "master_video_approved_digest", "workflow-state.json::master_video_approved_digest"
+        )
+
+    def record_master_video_approval(self, filename: str, digest: str) -> None:
+        self.record_master_video(filename)
+        self._data["master_video_approved_digest"] = digest
 
     def record_master_audio(self, path: str | None) -> None:
         """master audio asset と mastered phase を一度の遷移で記録する。"""

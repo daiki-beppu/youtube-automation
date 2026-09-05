@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import subprocess
 from pathlib import Path
 from types import ModuleType
 
+import pytest
+
 from tests.helpers.paths import REPO_ROOT
 from tests.helpers.video_description import write_video_description_pair
+from youtube_automation.application.master_video_review import VideoReviewPresentation, review_master_video
 
 SCRIPT = REPO_ROOT / ".claude" / "skills" / "video" / "references" / "video-chain-state.py"
 
@@ -42,16 +46,16 @@ def test_generate_runs_when_master_video_is_not_recorded(tmp_path: Path) -> None
     assert result["reason"] == "master_video_missing"
 
 
-def test_generate_skips_only_when_recorded_master_video_exists(tmp_path: Path) -> None:
+def test_generate_blocks_when_recorded_master_video_is_empty(tmp_path: Path) -> None:
     module = _module()
     collection = _collection(tmp_path, "01-master/sample-Master.mp4")
     (collection / "01-master" / "sample-Master.mp4").touch()
 
     code, result = module.evaluate(collection, "generate")
 
-    assert code == module.EXIT_SKIP
-    assert result["decision"] == "skip"
-    assert result["artifacts"] == ["01-master/sample-Master.mp4"]
+    assert code == module.EXIT_BLOCKED
+    assert result["decision"] == "blocked"
+    assert result["next"]
 
 
 def test_generate_blocks_on_unsafe_recorded_master_video_path(tmp_path: Path) -> None:
@@ -127,3 +131,52 @@ def test_describe_does_not_skip_when_published_pair_is_tampered(tmp_path: Path) 
 
     assert code == module.EXIT_RUN
     assert result["reason"] == "description_pair_invalid"
+
+
+@pytest.mark.parametrize("damage", ["changed", "missing", "empty", "broken"])
+def test_generate_resumes_only_current_approved_video(tmp_path: Path, damage: str) -> None:
+    module = _module()
+    collection = _collection(tmp_path, None)
+    video = collection / "01-master/sample-Master.mp4"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=black:s=32x32:d=0.2", "-c:v", "libx264", str(video)],
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
+    state_path = collection / "workflow-state.json"
+    state_path.write_text(json.dumps({"assets": {"master_audio": "sample.wav", "master_video": "sample-Master.mp4"}}))
+    code, result = module.evaluate(collection, "generate")
+    assert code == module.EXIT_BLOCKED
+    assert result["next"]
+
+    review_master_video(
+        collection,
+        kind="full",
+        presentation=VideoReviewPresentation("static image", "none", "none", "completed"),
+        automatic=True,
+        transport="terminal",
+        candidate_id=None,
+        now=None,
+        timeout=10,
+    )
+    before = state_path.read_bytes()
+    for _ in range(2):
+        code, result = module.evaluate(collection, "generate")
+        assert code == module.EXIT_SKIP, result
+        assert result["artifacts"] == ["01-master/sample-Master.mp4"]
+    assert state_path.read_bytes() == before
+
+    if damage == "changed":
+        with video.open("ab") as stream:
+            stream.write(b"changed after approval")
+    elif damage == "missing":
+        video.unlink()
+    elif damage == "empty":
+        video.write_bytes(b"")
+    else:
+        video.write_bytes(b"invalid video container")
+    code, result = module.evaluate(collection, "generate")
+    assert code == (module.EXIT_RUN if damage == "missing" else module.EXIT_BLOCKED)
+    assert result["next"]
+    assert state_path.read_bytes() == before
