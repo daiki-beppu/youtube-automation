@@ -153,6 +153,8 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 この節は、再配置後のファイル配置と依存方向を判断するための正本である。`CLAUDE.md` はこの文書への入口と開発規約を示し、`AGENTS.md` は Codex CLI 固有の補足を示す。構成・owner・配置判断を変更するときは、まずこの節と「主要モジュール」を確認する。
 
+- `.claude/skills/*/references/` に `infra/` の複製を置かない（正本の複製はドリフトを生む。#4718）。
+
 #### 層と許可される依存方向
 
 依存は外側から内側へ一方向に流す。`commands/` は `application/`、`domains/`、`infrastructure/`、`configuration/`、`core/` を利用できるが、domain や infrastructure は commands を import しない。`domains/` は `core/` と設定の契約に依存する。`domains/` から `infrastructure/` への direct import は、provider-neutral な authoritative module である `infrastructure.filesystem`、`infrastructure.process`、`infrastructure.quota`、`infrastructure.browser`、`infrastructure.google.youtube`、`infrastructure.google.upload` の完全一致だけを許可する。外部 SDK・認証・network・subprocess と、列挙外の infrastructure module は引き続き adapter 境界の外へ漏らさない。SDK・認証の禁止 inventory は project dependency と infrastructure の実使用に基づく `google.auth`、`google.genai`、`google.oauth2`、`google_auth_httplib2`、`google_auth_oauthlib`、`googleapiclient`、`httplib2`、`oauthlib`、`openai` の exact namespace とその子であり、無関係な `google` namespace 全体には拡張しない。移行前から残る `domains/metadata/service.py` の `subprocess` edge は新規許可ではなく、consumer migration を行わない段階の exact baseline exception として固定し、別 domain・別 module への拡張を拒否する。`application/` は workflow 単位の orchestration を持ち、commands から呼び出される。`configuration/` は設定の読み込み・検証と dataclass を所有する。設定境界で必要な正規化処理に限り `configuration/` から `infrastructure/` の provider-neutral な utility を利用するが、`infrastructure/` から設定機能層へは依存しない。

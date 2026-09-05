@@ -167,9 +167,3 @@ project ID が解決済み、または `apply_flags` へ `--project-id` / `--bil
 - `/setup --import` : 既存チャンネル設定の取り込み (`channel_config` fail・既存 config ありの場合)
 - `/analytics --status`: OAuth token 生成とチャンネル ID 確認
 - `/wf-new`: config 作成後の新規コレクション制作開始
-
-## 上級者向け: terraform ルート
-
-複数チャンネルを横断管理したい / 別 PC へ引っ越したい / GCP 側の drift を検出したい場合だけ、`references/gcp-bootstrap.md` の上級者向けルートを明示的に選べる。通常はこの doctor wizard を使う。tfstate で構成管理できる代わりに `terraform.tfvars` 編集の 1 ステップが増える。
-
-AI が tfvars を Write して `.claude/skills/setup/references/gcp-terraform-apply.sh --auto-approve` を Bash で叩けば自動化可能。Google Auth Platform の Branding / Audience Test users / Clients 設定と `client_secrets.json` 配置は両ルート共通。

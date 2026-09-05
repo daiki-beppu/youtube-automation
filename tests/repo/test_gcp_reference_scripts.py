@@ -1,12 +1,10 @@
-"""Executable contracts for distributed GCP bootstrap/apply scripts."""
+"""Executable contracts for distributed GCP bootstrap scripts."""
 
 from __future__ import annotations
 
 import os
 import subprocess
 from pathlib import Path
-
-import pytest
 
 from tests.helpers.paths import REPO_ROOT
 
@@ -15,16 +13,6 @@ REFERENCES = ROOT / ".claude" / "skills" / "setup" / "references"
 GCP_ASSET_NAMES = {
     "gcp-bootstrap.md",
     "gcp-bootstrap.sh",
-    "gcp-terraform-apply.sh",
-    "terraform-gcp/.gitignore",
-    "terraform-gcp/README.md",
-    "terraform-gcp/apis.tf",
-    "terraform-gcp/iam.tf",
-    "terraform-gcp/main.tf",
-    "terraform-gcp/outputs.tf",
-    "terraform-gcp/terraform.tfvars.example",
-    "terraform-gcp/variables.tf",
-    "terraform-gcp/versions.tf",
 }
 
 
@@ -32,12 +20,13 @@ def test_setup_owns_the_complete_distributed_gcp_asset_inventory() -> None:
     actual = {
         path.relative_to(REFERENCES).as_posix()
         for path in REFERENCES.rglob("*")
-        if path.is_file() and (path.name.startswith("gcp-") or "terraform-gcp" in path.parts)
+        if path.is_file()
+        and (path.name.startswith("gcp-") or path.suffix == ".tf" or path.name.startswith("terraform"))
     }
     owners = {
         path.relative_to(ROOT / ".claude" / "skills").parts[0]
         for path in (ROOT / ".claude" / "skills").rglob("*")
-        if path.is_file() and (path.name.startswith("gcp-") or "terraform-gcp" in path.parts)
+        if path.is_file() and path.name.startswith("gcp-")
     }
 
     assert actual == GCP_ASSET_NAMES
@@ -148,77 +137,3 @@ def test_gcp_bootstrap_rejects_missing_cli_auth_and_project(tmp_path: Path) -> N
     missing_project = _run("gcp-bootstrap.sh", "--dry-run", "project", cwd=project_dir, env=project_env)
     assert missing_project.returncode == 1
     assert "--create" in missing_project.stderr
-
-
-def _terraform_env(tmp_path: Path, *, fail_command: str = "") -> tuple[dict[str, str], Path, Path]:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    terraform_calls = tmp_path / "terraform-calls.txt"
-    gcloud_calls = tmp_path / "gcloud-calls.txt"
-    _write_executable(
-        bin_dir / "terraform",
-        """#!/bin/bash
-printf '%s\n' "$*" >> "$TERRAFORM_CALLS"
-[[ "$1" == "$FAIL_COMMAND" ]] && exit 17
-if [[ "$*" == "output -raw oauth_console_url" ]]; then
-  echo "https://console.example.test/oauth"
-elif [[ "$*" == "output -raw project_id" ]]; then
-  echo "project-one"
-fi
-""",
-    )
-    _write_executable(bin_dir / "gcloud", '#!/bin/bash\nprintf \'%s\\n\' "$*" >> "$GCLOUD_CALLS"\n')
-    env = os.environ.copy()
-    env.update(
-        {
-            "PATH": f"{bin_dir}:/usr/bin:/bin",
-            "TERRAFORM_CALLS": str(terraform_calls),
-            "GCLOUD_CALLS": str(gcloud_calls),
-            "FAIL_COMMAND": fail_command,
-        }
-    )
-    return env, terraform_calls, gcloud_calls
-
-
-def test_gcp_terraform_apply_observes_init_apply_outputs_and_adc(tmp_path: Path) -> None:
-    tf_dir = tmp_path / "terraform"
-    tf_dir.mkdir()
-    env, terraform_calls, gcloud_calls = _terraform_env(tmp_path)
-
-    result = _run(
-        "gcp-terraform-apply.sh",
-        "--tf-dir",
-        str(tf_dir),
-        "--auto-approve",
-        cwd=tmp_path,
-        env=env,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert terraform_calls.read_text(encoding="utf-8").splitlines() == [
-        "init -upgrade",
-        "apply -auto-approve",
-        "output -raw oauth_console_url",
-        "output -raw project_id",
-    ]
-    assert gcloud_calls.read_text(encoding="utf-8").strip() == (
-        "auth application-default set-quota-project project-one"
-    )
-    assert "https://console.example.test/oauth" in result.stdout
-
-
-@pytest.mark.parametrize("command", ["init", "apply"])
-def test_gcp_terraform_apply_propagates_each_terraform_failure(tmp_path: Path, command: str) -> None:
-    tf_dir = tmp_path / "terraform"
-    tf_dir.mkdir()
-    env, calls, _ = _terraform_env(tmp_path, fail_command=command)
-
-    result = _run("gcp-terraform-apply.sh", "--tf-dir", str(tf_dir), cwd=tmp_path, env=env)
-
-    assert result.returncode == 17
-    lines = calls.read_text(encoding="utf-8").splitlines()
-    assert lines[0] == "init -upgrade"
-    if command == "init":
-        assert lines == ["init -upgrade"]
-    else:
-        assert lines == ["init -upgrade", "apply"]
