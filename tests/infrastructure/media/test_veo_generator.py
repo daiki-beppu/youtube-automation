@@ -14,6 +14,7 @@ CHANNEL_DIR を monkeypatch.setenv で tmp_path に向け config.reset() で再�
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
@@ -142,6 +143,92 @@ def test_smooth_loop_defaults_to_legacy_crf_18(monkeypatch) -> None:
     cmd = captured["cmd"]
     assert cmd[cmd.index("-crf") + 1] == "18"
     assert cmd[cmd.index("-preset") + 1] == "slow"
+
+
+def test_smooth_loop_scale_none_keeps_legacy_ffmpeg_command(monkeypatch) -> None:
+    """scale_to=None では従来の filter と argv を一切変更しない。"""
+    import subprocess as _sp
+
+    monkeypatch.setattr(veo_generator.subprocess, "check_output", lambda cmd, **_: "10.0")
+    captured: dict = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        raise _sp.CalledProcessError(1, cmd, output=b"", stderr=b"forced")
+
+    monkeypatch.setattr(veo_generator.subprocess, "run", fake_run)
+
+    veo_generator.smooth_loop(Path("/fake.mp4"), scale_to=None)
+
+    assert captured["cmd"] == [
+        "ffmpeg",
+        "-y",
+        "-i",
+        "/fake.mp4",
+        "-filter_complex",
+        "[0]trim=0:9.0,setpts=PTS-STARTPTS[trimmed];"
+        "[trimmed]split[main][tail];"
+        "[main]trim=0:8.5,setpts=PTS-STARTPTS[a];"
+        "[tail]trim=8.5:9.0,setpts=PTS-STARTPTS[b];"
+        "[b][a]xfade=transition=fade:duration=0.5:offset=0[out]",
+        "-map",
+        "[out]",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "slow",
+        "-crf",
+        "18",
+        "-an",
+        "/fake_smooth.mp4",
+    ]
+
+
+def test_smooth_loop_scale_to_changes_output_resolution(tmp_path: Path) -> None:
+    """scale_to はクロスフェードと同じ再エンコードで指定解像度へ変換する。"""
+    video = tmp_path / "loop.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black:s=320x180:d=2:r=10",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            str(video),
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+    assert veo_generator.smooth_loop(
+        video,
+        crossfade_sec=0.25,
+        trim_tail_sec=0.25,
+        preset="ultrafast",
+        scale_to=(1920, 1080),
+    )
+    resolution = subprocess.check_output(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "csv=s=x:p=0",
+            "--",
+            str(video),
+        ],
+        text=True,
+    ).strip()
+    assert resolution == "1920x1080"
 
 
 # ---------- smooth_loop 失敗時の tmp クリーンアップ (Issue #480) ----------
