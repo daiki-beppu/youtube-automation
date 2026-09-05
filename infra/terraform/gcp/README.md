@@ -1,22 +1,12 @@
 # infra/terraform/gcp
 
-新チャンネル用の GCP プロジェクト + 必要 API + IAM を Terraform で IaC 管理するモジュール。
+共有 GCP プロジェクト + 必要 API + IAM を Terraform で IaC 管理する上流専属 stack。下流チャンネルリポジトリへは配布しない。
 
-## いつ terraform を選ぶか
+## 運用入口
 
-`.claude/skills/setup/references/gcp-bootstrap.sh` と機能ほぼ同等だが、tfstate を持つ分以下のシナリオで強い:
+共有プロジェクトの構成管理とドリフト検出は、このディレクトリで Terraform を直接実行する。[使い方](#使い方) の GCS backend 付き init 手順に従う。
 
-| シナリオ | 推奨 |
-| --- | --- |
-| **初回 1 チャンネルだけ立ち上げ** | bootstrap.sh (or `/setup` skill) — 手数最少 |
-| **2 つ目以降のチャンネル開設** | **terraform** — workspace で並列管理可能 |
-| **別 PC への引っ越し / 再構築** | **terraform** — tfstate + tfvars を持ち運べば replay 可能 |
-| **GCP 側のドリフト検出** | **terraform** — `terraform plan` で差分が出る |
-| **CI / IaC パイプライン統合** | **terraform** — Terraform Cloud / GCS backend が使える |
-
-初回 1 チャンネル限定なら bootstrap.sh の方が tfvars 編集の手間が無い分シンプル。複数管理・継続運用を見据えるなら terraform に切り替える価値がある。
-
-`/setup --tool` の doctor wizard が正規入口。上級者が IaC を明示的に選んだ場合は、AI が tfvars 編集 + `.claude/skills/setup/references/gcp-terraform-apply.sh` を Bash で叩けば terraform ルートも自動化可能。
+チャンネル環境のセットアップは引き続き `/setup --tool` の doctor wizard を使う。
 
 ## 管理するリソース
 

@@ -3,15 +3,15 @@
 Issue #140: skill 固有スクリプト (``generate_videos.sh`` / ``worktree_sync.sh``) を
 ルート ``scripts/`` から ``.claude/skills/<skill>/references/`` 配下に canonical 化する整理。
 
-Issue #388: ``scripts/gcp-bootstrap.sh`` / ``scripts/gcp-terraform-apply.sh`` が
+Issue #388: ``scripts/gcp-bootstrap.sh`` が
 ``.claude/skills/setup/references/`` 側と MD5 完全一致していたため、
 ルート ``scripts/`` 側を削除し canonical path に一本化する整理。
 
 このテストは以下の不変条件を維持する:
 
 1. ルート ``scripts/`` は空であること（skill 固有スクリプトも共通スクリプトも存在しない）。
-   Issue #388 で ``gcp-bootstrap.sh`` / ``gcp-terraform-apply.sh`` を削除済み (CLAUDE.md 規約)。
-2. ``gcp-bootstrap.sh`` / ``gcp-terraform-apply.sh`` の canonical path は
+   Issue #388 で ``gcp-bootstrap.sh`` を削除済み (CLAUDE.md 規約)。
+2. ``gcp-bootstrap.sh`` の canonical path は
    ``.claude/skills/setup/references/`` 配下に実ファイルとして存在すること。
 3. skill 配下の参照スクリプトは **実ファイル**（symlink ではない）かつ実行可能。
    逆向き symlink になっていた旧構成への regression を防ぐ。
@@ -50,11 +50,9 @@ _COMMON_SCRIPTS: set[str] = set()
 # Issue #3984 の canonical path: setup skill 配下
 _SETUP_REFERENCES = _SKILLS_DIR / "setup" / "references"
 _CANONICAL_GCP_BOOTSTRAP = _SETUP_REFERENCES / "gcp-bootstrap.sh"
-_CANONICAL_GCP_TERRAFORM_APPLY = _SETUP_REFERENCES / "gcp-terraform-apply.sh"
 
 # Issue #388 で scripts/ から削除されたパス
 _OLD_GCP_BOOTSTRAP = _SCRIPTS_DIR / "gcp-bootstrap.sh"
-_OLD_GCP_TERRAFORM_APPLY = _SCRIPTS_DIR / "gcp-terraform-apply.sh"
 
 _LEGACY_CHANNEL_SETUP_REFERENCES = (
     "channel-setup" + "/references",
@@ -110,26 +108,13 @@ def test_root_scripts_gcp_bootstrap_is_removed() -> None:
     )
 
 
-def test_root_scripts_gcp_terraform_apply_is_removed() -> None:
-    """Given Issue #388 の整理後の状態
-    When ルート ``scripts/gcp-terraform-apply.sh`` を確認する
-    Then ファイル（および broken symlink）として一切存在しない。
-
-    canonical path は ``.claude/skills/setup/references/gcp-terraform-apply.sh`` に一本化済み。
-    """
-    assert not os.path.lexists(_OLD_GCP_TERRAFORM_APPLY), (
-        f"{_OLD_GCP_TERRAFORM_APPLY.relative_to(_REPO_ROOT)} が残存している。"
-        " canonical path は .claude/skills/setup/references/ のみ (Issue #3984)"
-    )
-
-
 def test_root_scripts_dir_only_contains_common_scripts() -> None:
     """Given Issue #140 + #388 の整理後の ``scripts/`` ディレクトリ
     When 直下のエントリを列挙する
     Then ファイルが1件も存在しない（scripts/ は空、またはディレクトリ自体が存在しない）。
 
     Issue #140 で skill 固有スクリプトを削除し、Issue #388 で残っていた
-    ``gcp-bootstrap.sh`` / ``gcp-terraform-apply.sh`` も削除された。
+    ``gcp-bootstrap.sh`` も削除された。
     git は空ディレクトリを track しないため、ディレクトリ自体が消えても OK。
     新規スクリプトを誤ってルートに置いてしまう regression を検出する。
     """
@@ -149,10 +134,9 @@ def test_root_scripts_dir_only_contains_common_scripts() -> None:
 
 @pytest.mark.parametrize(
     "path",
-    [_CANONICAL_GCP_BOOTSTRAP, _CANONICAL_GCP_TERRAFORM_APPLY],
+    [_CANONICAL_GCP_BOOTSTRAP],
     ids=[
         ".claude/skills/setup/references/gcp-bootstrap.sh",
-        ".claude/skills/setup/references/gcp-terraform-apply.sh",
     ],
 )
 def test_setup_reference_gcp_script_exists(path: Path) -> None:
@@ -167,10 +151,9 @@ def test_setup_reference_gcp_script_exists(path: Path) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    [_CANONICAL_GCP_BOOTSTRAP, _CANONICAL_GCP_TERRAFORM_APPLY],
+    [_CANONICAL_GCP_BOOTSTRAP],
     ids=[
         ".claude/skills/setup/references/gcp-bootstrap.sh",
-        ".claude/skills/setup/references/gcp-terraform-apply.sh",
     ],
 )
 def test_setup_reference_gcp_script_is_real_file_not_symlink(path: Path) -> None:
@@ -185,10 +168,9 @@ def test_setup_reference_gcp_script_is_real_file_not_symlink(path: Path) -> None
 
 @pytest.mark.parametrize(
     "path",
-    [_CANONICAL_GCP_BOOTSTRAP, _CANONICAL_GCP_TERRAFORM_APPLY],
+    [_CANONICAL_GCP_BOOTSTRAP],
     ids=[
         ".claude/skills/setup/references/gcp-bootstrap.sh",
-        ".claude/skills/setup/references/gcp-terraform-apply.sh",
     ],
 )
 def test_setup_reference_gcp_script_is_executable(path: Path) -> None:
@@ -265,12 +247,11 @@ def test_skill_reference_script_is_executable(path: Path) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    [_NEW_GENERATE_VIDEOS, _NEW_WORKTREE_SYNC, _CANONICAL_GCP_BOOTSTRAP, _CANONICAL_GCP_TERRAFORM_APPLY],
+    [_NEW_GENERATE_VIDEOS, _NEW_WORKTREE_SYNC, _CANONICAL_GCP_BOOTSTRAP],
     ids=[
         ".claude/skills/video/references/generate_videos.sh",
         ".claude/skills/music/references/worktree_sync.sh",
         ".claude/skills/setup/references/gcp-bootstrap.sh",
-        ".claude/skills/setup/references/gcp-terraform-apply.sh",
     ],
 )
 def test_skill_reference_script_passes_bash_syntax_check(path: Path) -> None:

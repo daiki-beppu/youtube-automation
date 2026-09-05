@@ -73,23 +73,9 @@ Google Auth Platform の GUI は API で自動化できないため、setup が 
 
 完了時に Google Auth Platform 手動設定用の Console URL が表示されるので、Branding / Audience / Clients を設定し、`client_secrets.json` を配置する（[Google Auth Platform 手動設定](#google-auth-platform-手動設定) 参照）。
 
-### ルート B: `infra/terraform/gcp`（宣言的 IaC・本命）
+### ルート B: 上流の共有 GCP 構成管理
 
-Organization 配下で統制したい、複数プロジェクトを tfstate 管理したい、将来的に変更履歴を残したいケース。
-
-```bash
-cd infra/terraform/gcp
-cp terraform.tfvars.example terraform.tfvars
-# → project_id, adc_email, billing_account を編集
-
-# apply
-cd ../../..
-.claude/skills/setup/references/gcp-terraform-apply.sh
-```
-
-`terraform.tfvars` の必須キーは `project_id` / `adc_email`。新規作成時は `billing_account` も必要（既存流用なら `create_project = false` にして不要）。
-
-詳細は [`infra/terraform/gcp/README.md`](../infra/terraform/gcp/README.md) を参照。
+共有プロジェクトの IaC は上流専属の [`infra/terraform/gcp/README.md`](../infra/terraform/gcp/README.md) に従う。GCS backend を指定して init し、既存リソースの import を完了してから apply する。下流チャンネルリポジトリには Terraform 資産を配布しない。
 
 ルート A / B では `client_secrets.json` の手動配置を行う。次節はその手動経路向けであり、推奨のルート 0 は `/setup` の Download JSON → `done` → `yt-doctor --fix-client-secrets` → JSON 再診断を使う。
 
