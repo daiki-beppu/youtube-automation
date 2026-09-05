@@ -8,7 +8,7 @@ description: "Use when 新規コレクション制作を立ち上げるとき、
 
 - `前工程`: `/setup --channel`, `/setup`
 - `後工程`: `/wf-next`, `/music --generate`, `/publish`, `/analytics`
-- `委譲先`: `/analytics --flop`, `/analytics`, `/thumbnail`, `/music --prompt`, `/music --generate`, `/thumbnail --loop`, `/music --generate`, `/music --master`, `/wf-next`, `/publish`
+- `委譲先`: `/analytics --flop`, `/analytics`, `/thumbnail`, `/music --prompt`, `/music --generate`, `/thumbnail --loop`, `/music --master`, `/wf-next`, `/publish`
 
 ## 成果物
 
@@ -175,7 +175,7 @@ uv run yt-init-collection "Pilot Direction Check" "pilot-direction-check" \
 | 状況 | 使う？ |
 |---|---|
 | 制作中コレクションが無い + 新しく始めたい | ✅ 使う |
-| 「次なに作る？」とだけ聞かれた（企画候補が未確定） | ✅ 通常入口で内部の `/wf-new` に委譲して候補を出す |
+| 「次なに作る？」とだけ聞かれた（企画候補が未確定） | ✅ 通常入口の gate 通過後、[内部企画工程](references/ideate.md) に委譲して候補を出す |
 | 既存コレクションを次工程へ進めたい | ❌ `/wf-next` を使う |
 | 進捗だけ知りたい | ❌ `/wf-status` を使う |
 
