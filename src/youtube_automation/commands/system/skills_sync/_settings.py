@@ -8,6 +8,10 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+# 旧 hook から引き継ぐフィールド（timeout 等）の照合キーで matcher を無視するための番兵。
+# template 側が matcher を変更しても引き継ぎが黙って外れないよう、matcher 一致を前提にしない。
+_ANY_MATCHER = object()
+
 _KNOWN_REPLACED_HOOK_COMMANDS = {
     "uv run yt-progress-hook": 'uv run --project "$CLAUDE_PROJECT_DIR" yt-progress-hook',
     'for f in $CLAUDE_FILE_PATHS; do case "$f" in '
@@ -62,10 +66,10 @@ def _index_existing_hooks(
     target_hooks: dict[str, object],
 ) -> tuple[
     dict[str, set[tuple[object, object, object]]],
-    dict[tuple[object, object, object], dict[str, object]],
+    dict[tuple[str, object, object], dict[str, object]],
 ]:
     existing_by_event: dict[str, set[tuple[object, object, object]]] = {}
-    replacements: dict[tuple[object, object, object], dict[str, object]] = {}
+    replacements: dict[tuple[str, object, object], dict[str, object]] = {}
     for event, groups in target_hooks.items():
         if not isinstance(groups, list):
             raise ValueError("hooks の event は配列である必要があります")
@@ -78,9 +82,26 @@ def _index_existing_hooks(
                 if not isinstance(hook, dict) or hook.get("type") != "command":
                     continue
                 replacement = _KNOWN_REPLACED_HOOK_COMMANDS.get(hook.get("command"))
-                if replacement is not None:
-                    replacements[(event, group.get("matcher"), replacement)] = {**hook, "command": replacement}
+                if replacement is None:
+                    continue
+                upgraded = {**hook, "command": replacement}
+                replacements[(str(event), group.get("matcher"), replacement)] = upgraded
+                replacements.setdefault((str(event), _ANY_MATCHER, replacement), upgraded)
     return existing_by_event, replacements
+
+
+def _upgraded_hook(
+    replacements: dict[tuple[str, object, object], dict[str, object]],
+    event: str,
+    matcher: object,
+    hook: object,
+) -> object:
+    """旧 hook から引き継いだフィールドを template hook へ重ねる（matcher 変更にも追従する）。"""
+    if not isinstance(hook, dict):
+        return hook
+    command = hook.get("command")
+    preserved = replacements.get((event, matcher, command)) or replacements.get((event, _ANY_MATCHER, command))
+    return {**hook, **preserved} if preserved else hook
 
 
 def missing_hooks(target: dict[str, object], template: dict[str, object]) -> list[tuple[str, dict[str, object]]]:
@@ -99,9 +120,7 @@ def missing_hooks(target: dict[str, object], template: dict[str, object]) -> lis
                 raise ValueError("template hook group の形式が不正です")
             matcher = group.get("matcher")
             hooks = [
-                {**hook, **replacements.get((event, matcher, hook.get("command")), {})}
-                if isinstance(hook, dict)
-                else hook
+                _upgraded_hook(replacements, str(event), matcher, hook)
                 for hook in group["hooks"]
                 if _hook_signature(matcher, hook) not in signatures
             ]

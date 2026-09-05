@@ -415,25 +415,24 @@ def test_settings_diff_and_dry_run_report_same_removed_hooks(tmp_path, monkeypat
     assert target.read_bytes() == before
 
 
-_LEGACY_SECRET_GUARD = (
-    'for f in $CLAUDE_FILE_PATHS; do case "$f" in '
-    "*auth/client_secrets.json|*auth/token.json|*.env) "
-    'echo "BLOCKED: $f は AI から直接編集禁止。専用ツール経由で更新してください" >&2; '
-    "exit 2;; esac; done"
-)
+# 移行前の command は `_settings` の移行表を正本として引く（テスト側に再定義するとソースだけ
+# 変更されたときにドリフトが黙って通る）。移行後の command は配布 template の実文字列と一致するか
+# を検証したいので、上部の `_DISTRIBUTED_PROGRESS_HOOK_COMMAND` などを明示したまま使う。
+_LEGACY_HOOK_COMMANDS = {new: old for old, new in _settings._KNOWN_REPLACED_HOOK_COMMANDS.items()}
 
 
 def test_settings_upgrade_known_hooks_preserves_local_options(tmp_path, monkeypatch, capsys) -> None:
     target = tmp_path / "settings.json"
     current = json.loads((REPO_ROOT / ".claude/settings.template.json").read_text(encoding="utf-8"))
     expected_guard = dict(current["hooks"]["PreToolUse"][0]["hooks"][0])
+    legacy_guard = _LEGACY_HOOK_COMMANDS[expected_guard["command"]]
     for event in ("PreToolUse", "PostToolUse"):
         for group in current["hooks"][event]:
             for hook in group["hooks"]:
                 if "yt-progress-hook" in hook["command"]:
-                    hook["command"] = "uv run yt-progress-hook"
+                    hook["command"] = _LEGACY_HOOK_COMMANDS[_DISTRIBUTED_PROGRESS_HOOK_COMMAND]
                     hook["timeout"] = 37
-    current["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = _LEGACY_SECRET_GUARD
+    current["hooks"]["PreToolUse"][0]["hooks"][0]["command"] = legacy_guard
     local_hook = {"type": "command", "command": "uv run yt-progress-hook --local", "timeout": 71}
     current["hooks"]["PreToolUse"][0]["hooks"].append(local_hook)
     current["hooks"]["SessionStart"][0]["hooks"][0]["timeout"] = 83
@@ -466,8 +465,21 @@ def test_settings_upgrade_known_hooks_preserves_local_options(tmp_path, monkeypa
     pre_hooks = [hook for group in merged["hooks"]["PreToolUse"] for hook in group["hooks"]]
     assert local_hook in pre_hooks
     assert expected_guard in pre_hooks
-    assert not any(hook["command"] == _LEGACY_SECRET_GUARD for hook in pre_hooks)
+    assert not any(hook["command"] == legacy_guard for hook in pre_hooks)
     assert merged["hooks"]["SessionStart"][0]["hooks"][0]["timeout"] == 83
     after = target.read_bytes()
     assert _run(REPO_ROOT, target, monkeypatch, "--accept-hooks") == 0
     assert target.read_bytes() == after
+
+
+def test_missing_hooks_preserves_local_options_when_template_matcher_changes() -> None:
+    # template 側が matcher を変更したリリースでも、旧 hook の timeout 等が黙って失われないこと。
+    legacy_command = _LEGACY_HOOK_COMMANDS[_DISTRIBUTED_PROGRESS_HOOK_COMMAND]
+    legacy_hook = {"type": "command", "command": legacy_command, "timeout": 41}
+    new_hook = {"type": "command", "command": _DISTRIBUTED_PROGRESS_HOOK_COMMAND}
+    target = {"hooks": {"PreToolUse": [{"matcher": "Bash|Task", "hooks": [legacy_hook]}]}}
+    template = {"hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [new_hook]}]}}
+
+    assert _settings.missing_hooks(target, template) == [
+        ("PreToolUse", {"matcher": "Bash", "hooks": [{**new_hook, "timeout": 41}]}),
+    ]
