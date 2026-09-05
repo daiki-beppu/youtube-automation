@@ -8,6 +8,11 @@ from urllib.parse import urlsplit
 import requests
 
 from youtube_automation.core.errors import GeneratorError
+from youtube_automation.infrastructure.media._http_support import (
+    is_safe_https,
+    raise_transport_error,
+    response_json,
+)
 from youtube_automation.infrastructure.secrets import get_secret
 
 _BASE_URL = "https://api.minimax.io"
@@ -22,13 +27,6 @@ def _url_for_path(path: str) -> str:
     if not path.startswith("/") or path.startswith("//") or "://" in path:
         raise GeneratorError("MiniMax API path は / で始まる相対 path である必要があります")
     return f"{_BASE_URL}{path}"
-
-
-def _http_status(response: requests.Response | None) -> int | None:
-    if response is None:
-        return None
-    status_code = response.status_code
-    return status_code if isinstance(status_code, int) else None
 
 
 def request_json(
@@ -50,22 +48,9 @@ def request_json(
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=timeout)
         response.raise_for_status()
-    except requests.Timeout:
-        raise GeneratorError("MiniMax API request が timeout しました") from None
-    except requests.HTTPError as error:
-        status = _http_status(error.response)
-        detail = f" (status={status})" if status is not None else ""
-        raise GeneratorError(f"MiniMax API HTTP error{detail}") from None
-    except requests.RequestException:
-        raise GeneratorError("MiniMax API request に失敗しました") from None
-
-    try:
-        body = response.json()
-    except requests.exceptions.JSONDecodeError:
-        raise GeneratorError("MiniMax API response を JSON として解釈できません") from None
-    if not isinstance(body, dict):
-        raise GeneratorError("MiniMax API response は JSON object である必要があります")
-    return body
+    except requests.RequestException as error:
+        raise_transport_error("MiniMax API request", error)
+    return response_json(response, "MiniMax API")
 
 
 def get_json(
@@ -85,38 +70,18 @@ def get_json(
             timeout=timeout,
         )
         response.raise_for_status()
-    except requests.Timeout:
-        raise GeneratorError("MiniMax API request が timeout しました") from None
-    except requests.HTTPError as error:
-        status = _http_status(error.response)
-        detail = f" (status={status})" if status is not None else ""
-        raise GeneratorError(f"MiniMax API HTTP error{detail}") from None
-    except requests.RequestException:
-        raise GeneratorError("MiniMax API request に失敗しました") from None
-
-    try:
-        body = response.json()
-    except requests.exceptions.JSONDecodeError:
-        raise GeneratorError("MiniMax API response を JSON として解釈できません") from None
-    if not isinstance(body, dict):
-        raise GeneratorError("MiniMax API response は JSON object である必要があります")
-    return body
+    except requests.RequestException as error:
+        raise_transport_error("MiniMax API request", error)
+    return response_json(response, "MiniMax API")
 
 
 def download_bytes(url: str, *, timeout: float) -> bytes:
     """MiniMax が返した HTTPS download URL から認証情報なしで bytes を取得する。"""
-    parsed = urlsplit(url)
-    if parsed.scheme != "https" or not parsed.netloc or parsed.username or parsed.password:
+    if not is_safe_https(urlsplit(url)):
         raise GeneratorError("MiniMax download URL は認証情報を含まない HTTPS URL である必要があります")
     try:
         response = requests.get(url, timeout=timeout)
         response.raise_for_status()
-    except requests.Timeout:
-        raise GeneratorError("MiniMax file download が timeout しました") from None
-    except requests.HTTPError as error:
-        status = _http_status(error.response)
-        detail = f" (status={status})" if status is not None else ""
-        raise GeneratorError(f"MiniMax file download HTTP error{detail}") from None
-    except requests.RequestException:
-        raise GeneratorError("MiniMax file download に失敗しました") from None
+    except requests.RequestException as error:
+        raise_transport_error("MiniMax file download", error)
     return response.content

@@ -1,0 +1,3 @@
+- fal.ai queue・storage API の安全な HTTP client と `FAL_KEY` の secret 解決を追加した（#4946）。
+- fal の GET / download が未検証のリダイレクトを拒否し、HTTPS と host allowlist の境界を維持するようにした（#4946）。
+- media client 共通の HTTP エラー変換・URL 検証を `infrastructure/media/_http_support.py` に集約し、fal / MiniMax の両 client から共有するようにした（#4946）。
