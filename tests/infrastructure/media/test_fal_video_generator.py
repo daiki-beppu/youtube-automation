@@ -385,3 +385,58 @@ def test_poll_retries_are_bounded_without_resubmission(tmp_path, monkeypatch, fa
     )
     submit.assert_called_once()
     assert get.call_count == (failures + 2 if expected else retries + 1)
+
+
+def test_real_postprocessing_publishes_only_silent_scaled_video(tmp_path, monkeypatch):
+    import subprocess
+    from youtube_automation.infrastructure.media import veo_generator
+
+    raw = tmp_path / "raw.mp4"
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=blue:s=96x54:r=24",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:sample_rate=32000",
+            "-t",
+            "2",
+            "-c:v",
+            "libx264",
+            "-c:a",
+            "aac",
+            str(raw),
+        ],
+        check=True,
+    )
+    image = _image(tmp_path / "main.png")
+    output = tmp_path / "10-assets" / "loop.mp4"
+    _mock_successful_new_job(monkeypatch)
+    monkeypatch.setattr(
+        generator.fal_client,
+        "get_url",
+        Mock(
+            side_effect=[
+                {"status": "COMPLETED"},
+                {"video": {"url": "https://v3.fal.media/out.mp4"}},
+            ]
+        ),
+    )
+    monkeypatch.setattr(generator.fal_client, "download", Mock(return_value=raw.read_bytes()))
+    monkeypatch.setattr(generator, "smooth_loop", veo_generator.smooth_loop)
+    assert generator.generate_loop_video(
+        image, output, generator.DEFAULT_MODEL, "motion", upscale_to=(192, 108), channel_root=tmp_path
+    )
+    streams = json.loads(
+        subprocess.check_output(["ffprobe", "-v", "error", "-show_streams", "-of", "json", str(output)])
+    )["streams"]
+    assert len(streams) == 1
+    assert (streams[0]["codec_type"], streams[0]["width"], streams[0]["height"]) == ("video", 192, 108)
+    assert sorted(p.name for p in output.parent.iterdir()) == ["loop.mp4"]

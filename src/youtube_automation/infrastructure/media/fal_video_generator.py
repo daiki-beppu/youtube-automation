@@ -8,6 +8,7 @@ import time
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -215,8 +216,8 @@ def _finalize_video(
     compression: dict | None,
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    staged = output_path.with_name(f".{output_path.stem}.fal-processing.mp4")
-    try:
+    with TemporaryDirectory(prefix=f".{output_path.stem}.fal-", dir=output_path.parent) as staging_dir:
+        staged = Path(staging_dir) / output_path.name
         shutil.copyfile(raw_video, staged)
         crf, preset = resolve_smooth_codec(compression)
         if not smooth_loop(staged, crossfade_sec=0.5, trim_tail_sec=1.0, scale_to=upscale_to, crf=crf, preset=preset):
@@ -225,8 +226,6 @@ def _finalize_video(
         if isinstance(expanded, str) and expanded:
             output_path.with_suffix(".expanded-prompt.txt").write_text(expanded + "\n", encoding="utf-8")
         os.replace(staged, output_path)
-    finally:
-        staged.unlink(missing_ok=True)
 
 
 def generate_loop_video(
