@@ -49,6 +49,17 @@
         ]
       }
     ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run yt-session-start",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [

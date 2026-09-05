@@ -11,6 +11,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from youtube_automation.commands._shared.cli_harness import run_cli
+from youtube_automation.commands.system.automation_update_followup import migrate_action, render_action
 from youtube_automation.commands.system.automation_update_refs import _detect_pin
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.infrastructure.analytics.channel_registry import (
@@ -143,20 +144,9 @@ def _followup_actions(path: Path, apply_output: str) -> tuple[str, ...]:
     actions: list[str] = []
     if "Claude Code を再起動" in apply_output:
         actions.append("Claude Code 再起動")
-    try:
-        migrate = _run_command(
-            ["uv", "run", "yt-skills", "migrate-config", "--channel-dir", str(path), "--dry-run"], path
-        )
-        if "dry-run 完了:" in migrate.stdout:
-            actions.append("要 migrate")
-    except OSError:
-        actions.append("migrate 確認失敗")
-    try:
-        render = _run_command(["uv", "run", "yt-document-render", "--check", "--all"], path)
-        if render.returncode != 0:
-            actions.append("要 render")
-    except OSError:
-        actions.append("render 確認失敗")
+    for action in (migrate_action(path, _run_command), render_action(path, _run_command)):
+        if action is not None:
+            actions.append(action)
     return tuple(actions)
 
 
