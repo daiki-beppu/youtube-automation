@@ -6,9 +6,16 @@
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
 
 from tests.helpers.hcl import read_file
+from tests.helpers.paths import REPO_ROOT
 from tests.repo.streaming._helpers import (
     _STREAMING_README,
     _STREAMING_SKILL,
@@ -113,7 +120,7 @@ class TestStreamingSkillWorkspaces:
     """Quick Reference から README 正本の workspace 手順へ到達できる契約。"""
 
     def test_quick_reference_indexes_workspace_operations_and_variable_warning(self):
-        """workspace 操作、変数再注入警告、詳細正本への link を固定する。"""
+        """workspace 操作、変数再注入警告、詳細正本への参照を確認する。"""
         text = read_file(_STREAMING_SKILL)
         match = re.search(
             r"^## Quick Reference\s*$\n(.*?)(?=^##\s|\Z)",
@@ -134,9 +141,47 @@ class TestStreamingSkillWorkspaces:
             "TF_VAR_stream_key",
             "TF_VAR_discord_webhook_url",
             "再注入",
-            "../../../infra/terraform/streaming/README.md#チャンネル別-terraform-workspace-運用",
+            "$TF_DIR/README.md",
+            "チャンネル別 Terraform workspace 運用",
         ):
             assert required in section, f"Quick Reference に {required!r} が無い"
+
+    @pytest.mark.parametrize("upstream_available", [True, False])
+    def test_distributed_skill_resolves_upstream_readme_or_stops(self, tmp_path: Path, upstream_available: bool):
+        downstream = tmp_path / "channel"
+        skill_dir = downstream / ".claude/skills/streaming"
+        shutil.copytree(_STREAMING_SKILL.parent, skill_dir)
+        skill_text = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+        local_links = re.findall(r"\]\(([^)]+\.md)(?:#[^)]*)?\)", skill_text)
+        assert local_links
+        for link in local_links:
+            assert (skill_dir / link).is_file(), f"配布先から参照できない: {link}"
+        reference = skill_dir / "references/upstream-checkout.md"
+        assert reference.relative_to(skill_dir).as_posix() in local_links
+        bash_blocks = re.findall(r"```bash\n(.*?)```", reference.read_text(encoding="utf-8"), re.DOTALL)
+        assert len(bash_blocks) == 1
+        upstream = REPO_ROOT if upstream_available else tmp_path / "missing-upstream"
+        if not upstream_available:
+            upstream.mkdir()
+        result = subprocess.run(
+            ["bash", "-c", bash_blocks[0] + '\nprintf "%s\\n" "$TF_DIR/README.md"'],
+            cwd=downstream,
+            env={"PATH": os.defpath, "AUTOMATION_ROOT": str(upstream), "CHANNEL_DIR": str(downstream)},
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        )
+        assert not (downstream / "infra").exists()
+        if upstream_available:
+            assert result.returncode == 0, result.stderr
+            resolved_readme = Path(result.stdout.strip())
+            assert resolved_readme == _STREAMING_README
+            assert "## チャンネル別 Terraform workspace 運用" in resolved_readme.read_text(encoding="utf-8")
+        else:
+            assert result.returncode != 0
+            assert "STOP:" in result.stderr
+            assert result.stdout == ""
 
 
 # ============================================================================

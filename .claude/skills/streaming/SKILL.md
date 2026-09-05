@@ -23,6 +23,8 @@ description: "Use when ライブ配信用 Vultr VPS・動画配信本体を Terr
 
 ## 前提
 
+最初に [Terraform 資産と実行場所の確定](references/upstream-checkout.md) を実行し、上流 `AUTOMATION_ROOT`・対象 `CHANNEL_DIR`・`TF_DIR` を確定する。以下の相対パスとコマンドは上流 root 基準。動画など下流の入力は絶対パスで渡す。
+
 以下を確認し、満たさなければ整備手順（各項目に記載、詳細は README §前提）を案内してから先へ進む:
 
 - `terraform` 1.15.x / `python3` / `uv` / 1Password CLI (`op`)
@@ -58,7 +60,7 @@ description: "Use when ライブ配信用 Vultr VPS・動画配信本体を Terr
 | ログ追跡 | 同上 + `journalctl -u youtube-stream -f` |
 | 破棄 | §5 |
 
-workspace は state だけを切り替える。既存 workspace の操作は `select_channel.sh` で切替・一致検証・state 表示と `TF_VAR_video_path` / `TF_VAR_stream_key` / `TF_VAR_discord_webhook_url` / `TF_VAR_channel_slug` の再注入を一体化する。workspace の新規作成だけは明示操作とし、apply 前の照合まで含む詳細手順は [README の「チャンネル別 Terraform workspace 運用」](../../../infra/terraform/streaming/README.md#チャンネル別-terraform-workspace-運用) を正本とする。
+workspace は state だけを切り替える。既存 workspace の操作は `select_channel.sh` で切替・一致検証・state 表示と `TF_VAR_video_path` / `TF_VAR_stream_key` / `TF_VAR_discord_webhook_url` / `TF_VAR_channel_slug` の再注入を一体化する。workspace の新規作成だけは明示操作とし、apply 前の照合まで含む詳細手順は `$TF_DIR/README.md` の「チャンネル別 Terraform workspace 運用」 を正本とする。
 
 | CLI / スクリプト | 用途 |
 |---|---|
@@ -145,7 +147,7 @@ ffmpeg -i input.mp4 \
 - `/etc/logrotate.d/youtube-stream`（daily / rotate 7 / copytruncate）
 - `/etc/youtube-stream-healthcheck.env`（mode 0600、Discord webhook URL）
 
-`enable_broadcast_recovery=true` かつ `stream_hours=0` では、専用 user と 0600 OAuth files、`youtube-broadcast-recovery.service/.timer` も配備される。既定 120 秒ごとに ffmpeg service と ingest を確認し、active broadcast が消えたときだけ upcoming 再利用または create → bind → live を行う。`recovered` は既存 notify 経路へ送り、結果は常に `journalctl -t youtube-broadcast-recovery` に残る。導入、disable cleanup、資格情報更新、明示承認が必要な手動終了テストは [README の「24/7 broadcast 自動復旧 timer」](../../../infra/terraform/streaming/README.md#247-broadcast-自動復旧-timer) を正本とする。
+`enable_broadcast_recovery=true` かつ `stream_hours=0` では、専用 user と 0600 OAuth files、`youtube-broadcast-recovery.service/.timer` も配備される。既定 120 秒ごとに ffmpeg service と ingest を確認し、active broadcast が消えたときだけ upcoming 再利用または create → bind → live を行う。`recovered` は既存 notify 経路へ送り、結果は常に `journalctl -t youtube-broadcast-recovery` に残る。導入、disable cleanup、資格情報更新、明示承認が必要な手動終了テストは `$TF_DIR/README.md` の「24/7 broadcast 自動復旧 timer」 を正本とする。
 
 healthcheck は systemd 状態を 4 通りに分類し、**真の異常のみ通知**:
 
