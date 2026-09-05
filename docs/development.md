@@ -185,7 +185,24 @@ skill の静的契約を検証する入口は `yt-skills lint`。全 skill は�
 uv run yt-skills lint [<skill>...]
 ```
 
-各 skill の strict YAML / `description:` double-quote に加え、本文の成果物宣言、フラグ表と mode reference の整合、SKILL.md の行数上限、委譲先宣言・深さ・循環を検証する。引数なしの全件実行では、skill-config の登録・既定値ファイル・移行経路と未移行 override、配布対象 skill 数、運用成果物の契約も確認する。skill 名を指定した実行ではこれらの全体検査を省くため、最終確認は引数なしで行う。既存 allowlist の指摘は表示されるが失敗扱いにならない。
+skill 名を指定しても実行される、skill 単位の検証:
+
+- frontmatter が strict YAML で解釈でき、`name` / `description` が非空、`description` の値が double-quoted
+- `purpose` が 7 語の enum のいずれか
+- 値なしフラグが mode / modifier 表のどちらか一方に属し、mode は 5 個以下で同時指定の停止を明記している
+- mode ごとにフラグ名と対応する実在 reference が 1 ファイルある
+- 成果物ブロックと `書き込む` 宣言行がある
+- SKILL.md 本体が 400 行以下
+- 委譲先の宣言行があり、委譲の深さが 1 以下で循環がない
+
+引数なしの全件実行でのみ追加される、リポジトリ全体の検証:
+
+- skill-config の登録キーと `config.default.yaml` が双方向に一致する
+- config migration に互換 loader 経路があり、下流に未移行の旧 skill-config が残っていない
+- 配布対象 skill の総数が上限以下
+- 運用成果物 inventory の owner / schema / consumer / JSON+HTML pair が一致する
+
+skill 名を指定した実行は後者を省くため、最終確認は引数なしで行う。既存 allowlist の指摘は表示されるが失敗扱いにならない。
 
 lint は本文の意味や実際の API 操作、docs / features catalog の横断整合、wheel からの配布動作を保証しない。対応する契約は目的を分けて pytest で確認する:
 
