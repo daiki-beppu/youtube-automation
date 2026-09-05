@@ -378,7 +378,14 @@ pin 形式ごとの指定方法と通常のオプションは `uv run yt-automat
 6. smoke check: `yt-skills list`
 7. smoke check: `yt-doctor` の `channel_config` check（対象リポの config が不正なら非 0 終了）
 
-途中失敗時は表示された失敗ステップの原因を解消し、**同コマンド + `--allow-dirty`** で再実行する（apply 自身の pin 書き換えで作業ツリーが dirty になっているため。ステップは冪等）。`uv lock` 失敗が続く場合は `uv cache clean` してから再実行。pin 記法が想定外で書き換えできない旨のエラーが出た場合は `[HUMAN STEP]` で該当箇所を見せて手動編集を依頼する。
+途中失敗時は表示された失敗ステップの原因を解消し、実行時のフラグに応じて復旧する。
+
+- `--commit` 未指定: **同コマンド + `--allow-dirty`** で未完了の工程を再実行する。
+- `--commit` 指定（commit ステップ自体の失敗も含む）: 残った追従差分を手動確認して個別 commit する。更新工程が未完了なら **`--commit` を外し `--allow-dirty` を付けて** 再実行し、完了後の差分を確認して個別 commit する。無関係な既存の tracked / staged / untracked 差分は含めない。
+
+`--commit` は各起動の apply 前後で新たに status に現れた path だけを対象にする（#4911）。前回失敗時の差分は次回には開始前の既存差分となるため、`--allow-dirty --commit` で前回分まで自動 commit する復旧には使わない。
+
+`uv lock` 失敗が続く場合は `uv cache clean` してから再実行。pin 記法が想定外で書き換えできない旨のエラーが出た場合は `[HUMAN STEP]` で該当箇所を見せて手動編集を依頼する。
 
 `--prune` は upstream が管理していた既知の rename／削除跡だけを対象にする。未知の target entry はローカル自作 skill の可能性があるため保護される。利用者が明示同意した場合のみ `uv run yt-skills sync --prune --yes` を別途実行する（`--prune` 単独では既知候補の列挙のみで実削除されない）。
 
@@ -574,7 +581,3 @@ git commit -m "chore: youtube-automation <target_ref> への追従 (#N)"
 - `/automation-release`（upstream リポ）— リリース PR を作成し CHANGELOG.md を昇格させる upstream 側スキル（本スキルが読み取るリリース本文を生成する）
 - `/setup` — 追従後に `yt-doctor` で WARNING / FAILED が出た場合の再診断入口、および `[HUMAN STEP]` の書き方の参考実装
 
-
-### `--allow-dirty --commit` の再実行と既存差分
-
-`--commit` は今回の apply 前後で新たに status に現れた path だけを commit する。`--allow-dirty` を付けても開始前の tracked / staged / untracked 差分は含めない（#4911）。前回失敗時の pin 書き換え等が既に dirty な場合、その差分は手動確認して個別 commit してから再実行する。既存の変更をすべて自動 stage する復旧には使わない。

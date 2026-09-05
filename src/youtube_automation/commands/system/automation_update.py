@@ -546,11 +546,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
             action()
         except (_StepFailed, ConfigError) as e:
             print(f"[error] ステップ {index}/{total} '{name}' で失敗しました: {e}", file=sys.stderr)
-            print(
-                "[error] 原因を解消して同じコマンドを再実行すると、続きから冪等にやり直せます"
-                "（apply 自身の pin 書き換えで作業ツリーが dirty になっている場合は --allow-dirty を付ける）",
-                file=sys.stderr,
-            )
+            print(_apply_retry_hint(committed=args.commit), file=sys.stderr)
             return 1
     _print_apply_success(committed=args.commit)
     hooks_after = _hooks_snapshot(root)
@@ -560,6 +556,19 @@ def cmd_apply(args: argparse.Namespace) -> int:
             "現在のセッションには反映されないため、Claude Code を再起動してください。"
         )
     return 0
+
+
+def _apply_retry_hint(*, committed: bool) -> str:
+    if committed:
+        return (
+            "[error] 原因を解消し、今回残った追従差分を手動確認して個別 commit してください。"
+            "--allow-dirty --commit の再実行では既存差分は commit 対象になりません。"
+            "未完了の更新工程は --commit なしで再実行し、差分を確認して commit してください。"
+        )
+    return (
+        "[error] 原因を解消して同じコマンドを再実行すると、続きから冪等にやり直せます"
+        "（apply 自身の pin 書き換えで作業ツリーが dirty になっている場合は --allow-dirty を付ける）"
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:

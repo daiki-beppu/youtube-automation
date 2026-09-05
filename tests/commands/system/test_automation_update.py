@@ -927,7 +927,7 @@ def test_apply_commit_commits_only_new_status_paths(
 
 
 def test_apply_commit_failure_keeps_updated_worktree(
-    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, no_network, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
 ) -> None:
     repo = _write_repo(tmp_path, INLINE_TABLE_PYPROJECT)
     _init_apply_git_repo(repo)
@@ -939,6 +939,10 @@ def test_apply_commit_failure_keeps_updated_worktree(
     monkeypatch.setattr(automation_update, "_run_command", lambda cmd, cwd: 0)
 
     assert main(["apply", "--target", str(repo), "--tag", "v5.6.0", "--commit"]) == 1
+    error = capsys.readouterr().err
+    assert "手動確認して個別 commit" in error
+    assert "既存差分は commit 対象になりません" in error
+    assert "続きから冪等" not in error
     assert 'tag = "v5.6.0"' in (repo / "pyproject.toml").read_text(encoding="utf-8")
     assert subprocess.run(
         ["git", "status", "--porcelain", "--untracked-files=no"],
