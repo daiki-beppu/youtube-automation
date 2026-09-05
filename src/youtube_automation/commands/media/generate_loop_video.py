@@ -416,7 +416,8 @@ def _run_generate(
             prompt_expansion_mode=str(fal_config.get("prompt_expansion_mode", DEFAULT_FAL_PROMPT_EXPANSION_MODE)),
             timeout_sec=float(fal_config.get("timeout_seconds", DEFAULT_FAL_TIMEOUT_SEC)),
             poll_interval_sec=float(fal_config.get("poll_interval_seconds", DEFAULT_FAL_POLL_INTERVAL_SEC)),
-            max_poll_retries=int(fal_config.get("max_poll_retries", DEFAULT_FAL_MAX_POLL_RETRIES)),
+            # 不正な型を丸めず、生成境界の整数検証へ渡す。
+            max_poll_retries=fal_config.get("max_poll_retries", DEFAULT_FAL_MAX_POLL_RETRIES),
             allowed_models=frozenset(fal_config.get("allowed_models", DEFAULT_FAL_ALLOWED_MODELS)),
             canvas=canvas or DEFAULT_FAL_CANVAS,
             upscale_to=tuple(upscale) if upscale is not None else None,

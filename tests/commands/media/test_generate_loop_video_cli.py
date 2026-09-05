@@ -1444,7 +1444,8 @@ class TestMainVideoType:
         assert mocks["generate_loop_video"].call_count == 0
 
 
-def test_fal_retry_override_reaches_generator(tmp_path):
+@pytest.mark.parametrize("retries", [7, True, 1.5, None, "3"])
+def test_fal_retry_override_reaches_generator(tmp_path, retries):
     from youtube_automation.commands.media import generate_loop_video as mod
 
     image = tmp_path / "main.png"
@@ -1457,8 +1458,8 @@ def test_fal_retry_override_reaches_generator(tmp_path):
                 "minimax/h3-max-turbo/image-to-video",
                 "motion",
                 engine="fal",
-                engine_config={"max_poll_retries": 7},
+                engine_config={"max_poll_retries": retries},
                 assume_yes=True,
             )
     assert exc.value.code == 0
-    assert generate.call_args.kwargs["max_poll_retries"] == 7
+    assert generate.call_args.kwargs["max_poll_retries"] is retries
