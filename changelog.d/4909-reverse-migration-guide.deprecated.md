@@ -1,1 +1,0 @@
-- workspace 経路が次の major release で削除される前に、`yt-channel-export` を使って単一リポジトリへ戻す公開ガイドを追加した（#4909）。

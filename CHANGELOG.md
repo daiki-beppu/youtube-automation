@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.8.0] - 2026-09-05
+
+### Added
+
+- workspace の channel を検証付きで独立リポジトリ用 directory へコピーする `yt-channel-export` を追加した（#4906）。
+- export 先の初回 commit から認証バックアップと workspace で除外する全メディア形式を除外する。
+- `yt-channel-export` が channel registry の workspace entry を同位置で export 先へ置換するようにした（#4907）。
+- `yt-automation-update apply --commit` で、追従処理が新たに作った差分だけを commit できるようにした（#4911）
+- untracked ファイルだけがある作業ツリーを automation update の clean 判定で許容するようにした（#4911）
+- `yt-channels list` で channel registry の各 path を適格・workspace・不在に分類し、pin 種別とともに表示できるようにした
+- `yt-channels update` を追加し、channel registry 内の適格な tag / main pin チャンネルを安全に直列追従できるようにしました。
+- `yt-session-start` を既定の SessionStart hook として配布し、安全な main checkout だけを upstream へ遅延追従するようにしました。
+- 自動追従は `YOUTUBE_AUTOMATION_DISABLE_SESSION_UPDATE=1` で無効化できます。
+
+### Changed
+
+- `release/*` ブランチの機械的なリリース PR では有償の自動コードレビューを起動しないように変更
+
+### Deprecated
+
+- workspace 経路は次の major release で削除予定です。単一リポジトリへの移行には `yt-channel-export` を使用してください（#4908）。
+- workspace 経路が次の major release で削除される前に、`yt-channel-export` を使って単一リポジトリへ戻す公開ガイドを追加した（#4909）。
+
+### Fixed
+
+- `yt-codex-canary-notify` の通知 channel 引数が共通 workspace option に消費される問題を修正した（#4888）。
+- hybrid sandwich runner が単一チャンネルリポジトリで channel slug の指定や workspace 検出なしに完走できるよう修正した（#4899）。
+
+### Migration
+
+所要時間の目安: 通常のツール追従は 5〜15 分。workspace の実データ移行・制作検証は別途必要です。
+
+local fix 衝突注意:
+
+- automation / wf-new のローカル変更と `.claude/settings.json` の SessionStart hook を確認してください。
+
+Python module 移動: なし
+
+サマリ:
+
+- workspace は次の major release で削除予定です。本リリースでは経路を維持し、`yt-channel-export` と逆移行ガイドを提供します。
+- export は認証情報とメディアをローカルへコピーします。生成される `.gitignore` で認証バックアップとメディアを初回commitから除外し、push前にガイドのtrackedファイル集合の比較を実施してください。
+- `yt-channels update --tag <tag>` はtag pinだけに適用します。main pinは `yt-channels update` で追従し、sha pinは自動更新しません。
+- `apply --commit` は今回新たに生じた差分だけをcommitします。`--allow-dirty` でも既存差分を自動commitしません。前回失敗時の差分は手動確認・個別commitが必要です。
+- 配布されるSessionStart hookは安全条件を満たすmain追従の通常checkoutだけを更新します。無効化は `YOUTUBE_AUTOMATION_DISABLE_SESSION_UPDATE=1`。hook変更は次回セッションから有効です。
+
+逆移行の順序・検証・凍結・後始末は [逆移行ガイド](docs/migration/workspace-to-single-repo.md) を参照してください。運用ゲート #4910 が完了するまで、workspace削除リリースには進みません。
+
 ## [5.7.2] - 2026-09-04
 
 ### Added
@@ -3030,6 +3078,7 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 未マップキー（例: `suno` 等のチャンネル独自拡張）は `yt-config-migrate` が warning を出力し、
 `--strict` 指定時は `ConfigError` で中止する。
 
+[5.8.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.8.0
 [5.7.2]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.7.2
 [5.7.1]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.7.1
 [5.7.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.7.0
