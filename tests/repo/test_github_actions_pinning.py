@@ -24,6 +24,7 @@ _EXPECTED_ACTIONS = {
     "astral-sh/setup-uv": ("c771a70e6277c0a99b617c7a806ffedaca235ff9", "v9.0.0"),
     "cachix/install-nix-action": ("630ae543ea3a38a9a4166f03376c02c50f408342", "v31.11.0"),
     "DeterminateSystems/nix-installer-action": ("ef8a148080ab6020fd15196c2084a2eea5ff2d25", "v22"),
+    "hashicorp/setup-terraform": ("dfe3c3f87815947d99a8997f908cb6525fc44e9e", "v4.0.1"),
     "softprops/action-gh-release": ("3d0d9888cb7fd7b750713d6e236d1fcb99157228", "v3.0.2"),
 }
 
