@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "for f in $CLAUDE_FILE_PATHS; do case \"$f\" in *auth/client_secrets.json|*auth/token.json|*.env) echo \"BLOCKED: $f は AI から直接編集禁止。専用ツール経由で更新してください\" >&2; exit 2;; esac; done"
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/.claude/skills/automation/references/guard_secret_edit.py\""
           }
         ]
       },
