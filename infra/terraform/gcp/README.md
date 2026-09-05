@@ -70,6 +70,37 @@ plan / apply の出力と直後の **No changes** を #4929 のコメントに e
 
 取り込み後の変更経路と drift 解消原則は [ADR-0030](../../../docs/adr/0030-terraform-sole-change-path-for-gcp.md) に従う。
 
+## WIF と読み取り専用 SA
+
+`wif.tf` は GitHub Actions の drift plan 専用 SA 1 本を管理する。GitHub OIDC issuer の `repository_owner_id` を `var.github_repository_owner_id` に固定し、SA の `roles/iam.workloadIdentityUser` は `repo:daiki-beppu/youtube-automation:ref:refs/heads/main` の subject 完全一致に限定する。feature branch / fork / pull request の subject は SA を impersonate できない。CI から apply は実行しない。
+
+`terraform.tfvars` に `github_repository_owner_id`（`gh api users/daiki-beppu --jq .id`）と `tfstate_bucket`（bootstrap の `bucket_name`）を追加する。WIF 用の IAM / IAM Credentials / STS API は独立した `google_project_service.wif` で管理し、チャンネル運用の `var.apis` 6 件は維持する。
+
+| 付与先 | ロール / permission | 読み取りの目的 |
+|------|------|------|
+| project | `roles/browser` | project と billing 紐付けの取得 |
+| project | `roles/serviceusage.serviceUsageViewer` | 有効 API の取得 |
+| project | `roles/iam.securityReviewer` | project / SA / bucket IAM policy と custom role の取得 |
+| project | `roles/iam.workloadIdentityPoolViewer` | WIF pool / provider の取得 |
+| tfstate bucket（条件付き） | custom role `terraformStateGet`: `storage.objects.get` のみ | `resource.name.startsWith("projects/_/buckets/<bucket>/objects/gcp/")` に一致する state の本文取得 |
+| tfstate bucket | custom role `terraformStateList`: `storage.objects.list` のみ | backend の workspace 列挙。object の名前・メタデータのみで、他 stack の本文は許可しない |
+
+Billing の `projects.getBillingInfo` は [`resourcemanager.projects.get` で参照できる](https://docs.cloud.google.com/billing/docs/reference/rest/v1/projects/getBillingInfo)。billing account 全体の viewer は付与しない。`roles/viewer` / `roles/editor` / `roles/owner` や objectViewer で読み取り範囲を広げない。list は bucket 単位であり [resource.name では prefix 制限できない](https://docs.cloud.google.com/storage/docs/access-control/iam) ため、本文の get と分離する。
+
+ADC を保持する運用者は次の plan で **import 済み 8 件が no-op、追加が WIF 系のみ、change / destroy が 0** と確認してから適用する。保存 plan は sensitive の実値を含むため共有しない。
+
+```bash
+terraform plan -out=.terraform/wif.tfplan
+terraform apply .terraform/wif.tfplan
+terraform plan
+terraform output -raw wif_provider_name
+terraform output -raw drift_service_account_email
+```
+
+2026-09-05 の実環境では **15 added / 0 changed / 0 destroyed**（WIF API 3、pool / provider / SA / subject binding 4、project read binding 4、custom role 2、bucket binding 2）を適用した。import 済み 8 件は全て no-op。ローカル ADC からの SA impersonation は `iam.serviceAccounts.getAccessToken` 不足で拒否されたため、SA 自体の `gcp/` get 成功と `r2/` / `streaming/` get 拒否、GCS backend init の list 要否は **未実測**。この検証だけのために token creator を追加しない。
+
+SA の `terraform plan -lock=false` が exit 0 / 2 で完走する最小権限の実証は #4932 の WIF 認証で行う。上記 storage の許可 / 拒否と init の実測も記録するまで #4931 の完了契約は未充足。認証成功後、state 本文をログへ出さず HTTP status のみを確認する。plan / apply のマスク済み出力、非 secret の output 2 件、および未検証事項を #4931 の evidence に残す。
+
 ## Outputs
 
 | 名前 | 内容 |
@@ -77,6 +108,8 @@ plan / apply の出力と直後の **No changes** を #4929 のコメントに e
 | `project_id` | 確定した project ID |
 | `oauth_console_url` | Google Auth Platform 手動設定用 Console URL |
 | `enabled_apis` | 有効化した API 一覧 |
+| `wif_provider_name` | GitHub Actions auth の provider 完全名（非 secret） |
+| `drift_service_account_email` | 読み取り専用 drift SA メール（非 secret） |
 
 ## トラブルシューティング
 
