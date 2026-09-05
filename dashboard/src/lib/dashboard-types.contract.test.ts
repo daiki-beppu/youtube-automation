@@ -7,7 +7,6 @@ import trendsGolden from "@/lib/__fixtures__/trends.golden.json"
 import {
   DASHBOARD_SCHEMA_VERSION,
   type OverviewResponse,
-  type PipelineResponse,
   type TrendsResponse,
 } from "@/lib/dashboard-types"
 
@@ -52,7 +51,6 @@ const overviewTypesMatch: BidirectionallyExact<
   GoldenOverviewShape,
   OverviewResponse
 > = true
-const pipelineFixture = pipelineGolden as PipelineResponse
 const trendsFixture: TrendsResponse = trendsGolden
 const trendsTypesMatch: BidirectionallyExact<
   GoldenTrendsShape,
@@ -165,9 +163,36 @@ describe("Python dashboard overview schema contract", () => {
   })
 
   it("accepts the generated Python pipeline response shape", () => {
-    expect(pipelineFixture.channels[0]?.collections[0]?.phase).toBe(
-      "cloud_owned"
-    )
+    expect(pipelineShapeDiagnostics(pipelineGolden)).toEqual([])
+  })
+
+  it.each([
+    [
+      "missing nested field",
+      (collection) =>
+        Object.fromEntries(
+          Object.entries(collection).filter(([key]) => key !== "collection_id")
+        ),
+    ],
+    [
+      "wrong nested type",
+      (collection) => ({ ...collection, collection_id: 42 }),
+    ],
+    ["unknown phase", (collection) => ({ ...collection, phase: "unknown" })],
+    ["extra nested field", (collection) => ({ ...collection, extra: true })],
+  ] satisfies Array<
+    [
+      string,
+      (
+        collection: (typeof pipelineGolden.channels)[number]["collections"][number]
+      ) => unknown,
+    ]
+  >)("rejects a pipeline golden with %s", (_name, mutate) => {
+    const channel = pipelineGolden.channels[0]
+    const malformed = {
+      channels: [{ ...channel, collections: [mutate(channel.collections[0])] }],
+    }
+    expect(pipelineShapeDiagnostics(malformed).length).toBeGreaterThan(0)
   })
 
   it("accepts the generated Python trends response as the exact TypeScript shape", () => {
@@ -175,3 +200,48 @@ describe("Python dashboard overview schema contract", () => {
     expect(trendsTypesMatch).toBe(true)
   })
 })
+
+// Check the JSON as a fresh literal against the actual response type. A JSON
+// import widens enum strings; an `as` cast would hide missing/incorrect fields.
+function pipelineShapeDiagnostics(payload: unknown): string[] {
+  const filename = ts.sys.resolvePath("pipeline-golden-check.ts")
+  const declarations = parseSource(
+    dashboardTypesPath,
+    sourceAt(dashboardTypesPath)
+  )
+    .statements.filter(
+      (statement) =>
+        ts.isTypeAliasDeclaration(statement) &&
+        ["PipelineCollection", "PipelineResponse"].includes(statement.name.text)
+    )
+    .map((statement) => statement.getText())
+    .join("\n")
+  const source = `${declarations}
+    const response = ${JSON.stringify(payload)} satisfies PipelineResponse;`
+  const options: ts.CompilerOptions = {
+    strict: true,
+    noEmit: true,
+    skipLibCheck: true,
+    target: ts.ScriptTarget.ESNext,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    types: [],
+  }
+  const host = ts.createCompilerHost(options)
+  const getSourceFile = host.getSourceFile.bind(host)
+  host.getSourceFile = (
+    path,
+    languageVersion,
+    onError,
+    shouldCreateNewSourceFile
+  ) =>
+    path === filename
+      ? ts.createSourceFile(path, source, languageVersion, true)
+      : getSourceFile(path, languageVersion, onError, shouldCreateNewSourceFile)
+  const program = ts.createProgram([filename], options, host)
+  return ts
+    .getPreEmitDiagnostics(program)
+    .map((diagnostic) =>
+      ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")
+    )
+}
