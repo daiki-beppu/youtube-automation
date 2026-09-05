@@ -755,8 +755,8 @@ def test_thumbnail_archive_is_opt_in_and_wired_after_every_approval_path() -> No
     assert config["archive"] == {"enabled": False}
     assert "archive.enabled: false" in skill
     assert "assets/thumbnail-gallery/<collection-dir-name>.<ext>" in skill
-    # Web reviewは同じarchive ownerをtransaction内で呼ぶ。文書上の旧互換/auto入口だけを保持する。
-    assert skill.count(archive_command) == 2
+    # CodexもWeb reviewのarchive transactionを通るため、直接archiveはauto入口だけに残る。
+    assert skill.count(archive_command) == 1
 
     approval_block = _slice_between(skill, "### 承認済みサムネイルのアーカイブ", "### Single-Step / TTP モード")
     for approval_path in ("旧互換", "yt-thumbnail-review", "transaction", "自動選択"):
@@ -787,8 +787,7 @@ def test_thumbnail_archive_is_opt_in_and_wired_after_every_approval_path() -> No
     )
     auto_selection_block = _slice_between(skill, "## 自動選択", "## 品質チェック")
 
-    assert codex_block.find("thumbnail.jpg") < codex_block.find(archive_command)
-    for wired_block in (standard_block, single_step_block, two_phase_block):
+    for wired_block in (codex_block, standard_block, single_step_block, two_phase_block):
         assert wired_block.find("thumbnail.jpg") < wired_block.find("yt-thumbnail-review --artifact thumbnail")
     assert "uv run yt-thumbnail-auto-select <collection-path> --apply" in auto_selection_block
     assert "--apply &&" not in auto_selection_block
@@ -1932,7 +1931,7 @@ def test_thumbnail_skill_routes_generation_details_without_moving_runtime_contra
     # #2950 adds one canonical non-interactive background-session invocation.
     assert skill.count("uv run yt-generate-image") == 12
     assert skill.count("uv run yt-thumbnail-text") == 1
-    assert skill.count("archive-approved-thumbnail.py") == 2
+    assert skill.count("archive-approved-thumbnail.py") == 1
     assert '### Single-Step / TTP モード（`generation_mode: "single_step"`、デフォルト・推奨）' in skill
     assert "### Two-Phase モード（従来方式・フォールバック）" in skill
     assert "/thumbnail --compare" in skill
@@ -1964,7 +1963,7 @@ def test_thumbnail_skill_routes_quality_details_without_moving_hard_gates() -> N
     assert skill.index("## ワークフロー") < skill.index(route) < skill.index("## フォント安定化")
     assert skill.count("uv run yt-thumbnail-check") == 4
     assert skill.count("uv run yt-thumbnail-auto-select") == 3
-    assert skill.count("archive-approved-thumbnail.py") == 2
+    assert skill.count("archive-approved-thumbnail.py") == 1
     assert skill.count("uv run yt-stock-archive") == 1
     assert "## 完了条件" in skill
     assert "**Hard Gate**" in "\n".join(skill.splitlines()[:60])
