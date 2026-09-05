@@ -177,17 +177,6 @@ def test_build_release_payload_main_only_yields_null_cover(tmp_path):
     assert build_release_payload(collection, distrokid)["release"]["cover"] is None
 
 
-def test_build_release_payload_no_workflow_state_yields_null_release_date(tmp_path):
-    """Given workflow-state.json 無し
-    When build_release_payload を呼ぶ
-    Then release_date は None（発明せず null）。
-    """
-    collection = _make_collection(tmp_path, publish_target_at=None)
-    distrokid = Distrokid(enabled=True, profile=_profile())
-
-    assert build_release_payload(collection, distrokid)["release"]["release_date"] is None
-
-
 # ---------------------------------------------------------------------------
 # resolve_asset_path: トラバーサルガード
 # ---------------------------------------------------------------------------

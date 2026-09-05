@@ -120,7 +120,7 @@ class TestCadenceScheduling:
         assert dt.isoweekday() == 6  # 土曜
 
 
-class TestSchedulingEnabledHeuristic:
+class TestResolvedSchedulingEnabled:
     """解決済み ScheduleConfig から予約公開有効性を判定する観測契約。"""
 
     @staticmethod
@@ -131,29 +131,20 @@ class TestSchedulingEnabledHeuristic:
         scheduler.get_published_dates = MagicMock(return_value=set())
         return scheduler.calculate_publish_at()
 
-    def test_explicit_true_enables(self):
+    def test_enabled_without_cadence_returns_publish_at(self):
         assert self._calculate(enabled=True) is not None
 
-    def test_explicit_false_disables_even_when_cadence_present(self):
-        """auto_schedule_enabled=false が明示されていればスケジュール無効（後方互換）."""
+    def test_disabled_with_cadence_returns_none(self):
         assert self._calculate(enabled=False, cadence=("tue", "thu", "sat")) is None
 
-    def test_cadence_alone_implies_enabled(self):
-        """cadence が明示されていれば auto_schedule_enabled 未設定でも有効扱い（#647）."""
+    def test_enabled_with_cadence_returns_publish_at(self):
         assert self._calculate(enabled=True, cadence=("tue", "thu", "sat")) is not None
 
-    def test_publish_time_alone_implies_enabled(self):
-        """publish_time が明示されていれば auto_schedule_enabled 未設定でも有効扱い（#647）."""
+    def test_enabled_with_custom_publish_time_returns_publish_at(self):
         assert self._calculate(enabled=True, publish_time="20:00") is not None
 
-    def test_empty_cadence_does_not_imply_enabled(self):
-        """空 cadence はオプトインシグナルにならない."""
+    def test_disabled_without_cadence_returns_none(self):
         assert self._calculate(enabled=False) is None
 
-    def test_day1_time_alone_does_not_imply_enabled(self):
-        """day1_time のみは過去テンプレで既定値が入っていることがあるためシグナルにしない."""
-        # 旧テンプレ互換（auto_schedule_enabled なしで day1_time のみ）はスケジュール無効
+    def test_disabled_with_custom_publish_time_returns_none(self):
         assert self._calculate(enabled=False, publish_time="20:00") is None
-
-    def test_empty_dict_disables(self):
-        assert self._calculate(enabled=False) is None

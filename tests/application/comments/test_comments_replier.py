@@ -1436,7 +1436,6 @@ def test_disabled_short_circuits(tmp_path):
     yt = _mock_youtube(video_ids=[], comments_by_video={})
     replier = CommentReplier(yt, config=_make_config(enabled=False), channel_dir=tmp_path, default_language="ja")
     plan = replier.run(dry_run=True)
-    assert plan == plan  # no exception
     assert plan.planned == []
     # API も呼ばれない（disabled なので video 解決にも行かない）
     yt.channels.return_value.list.assert_not_called()
