@@ -20,14 +20,20 @@ description: "Use when ツール導入と GCP / OAuth の設定、新規 YouTube
 `$ARGUMENTS` から mode flag（`--tool` / `--channel` / `--import` / `--regenerate` / `--push`）の出現数を、reference の Read や成果物確認・変更より先に次の read-only guard で数える。
 
 ```bash
-uv run python .claude/skills/setup/references/setup-mode-guard.py $ARGUMENTS
+if ! command -v python3 >/dev/null 2>&1; then
+  printf '%s\n' 'STOP: setup mode guardにはPython 3が必要です。runtimeを用意してから再実行してください。' >&2
+  exit 2
+fi
+python3 .claude/skills/setup/references/setup-mode-guard.py $ARGUMENTS
 ```
 
-guard が exit 2 を返したら、その出力だけを提示して即時停止する。
+guardは標準ライブラリだけを使い、uv・pyproject.toml・automation packageを必要としない。Python未導入・起動失敗を含め非0なら、その出力だけを提示して即時停止する。runtime不足時にguardを省略したり、ファイル作成・repo初期化・インストールを始めたりしない。
 
 - 2 個以上なら、同じ flag の重複を含めて排他違反として停止し、1 つだけ指定するよう促す。この拒否経路では reference を Read せず、ファイル作成・更新、repo 初期化、API call、stage / commit を一切行わない
 - 1 個なら対応する reference を読み、その一段だけを実行する。残りの引数はその mode の引数として扱う
 - 0 個なら chain manifest に従い `tool` → `channel` を状態判定付きで進める
+
+guardが成功した後、uv未導入なら選択modeの成果物操作より先に `references/tool.md` のbootstrap手順へ進む。導入後は元の引数でmode guardから再開し、指定modeを変えない。フラグなしの場合も後述の一括実行のtool bootstrapへ進む。
 
 | mode | 読む reference |
 |---|---|

@@ -1,0 +1,1 @@
+- setupのmode guardをuv不要の標準Pythonで起動するよう修正しました。排他違反とruntime不足は副作用なしで停止し、有効modeはuv未導入でもtool bootstrapへ進めます。
