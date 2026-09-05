@@ -147,7 +147,7 @@ ffmpeg -i input.mp4 \
 - `/etc/logrotate.d/youtube-stream`（daily / rotate 7 / copytruncate）
 - `/etc/youtube-stream-healthcheck.env`（mode 0600、Discord webhook URL）
 
-`enable_broadcast_recovery=true` かつ `stream_hours=0` では、専用 user と 0600 OAuth files、`youtube-broadcast-recovery.service/.timer` も配備される。既定 120 秒ごとに ffmpeg service と ingest を確認し、active broadcast が消えたときだけ upcoming 再利用または create → bind → live を行う。`recovered` は既存 notify 経路へ送り、結果は常に `journalctl -t youtube-broadcast-recovery` に残る。導入、disable cleanup、資格情報更新、明示承認が必要な手動終了テストは [README の「24/7 broadcast 自動復旧 timer」](../../../infra/terraform/streaming/README.md#247-broadcast-自動復旧-timer) を正本とする。
+`enable_broadcast_recovery=true` かつ `stream_hours=0` では、専用 user と 0600 OAuth files、`youtube-broadcast-recovery.service/.timer` も配備される。既定 120 秒ごとに ffmpeg service と ingest を確認し、active broadcast が消えたときだけ upcoming 再利用または create → bind → live を行う。`recovered` は既存 notify 経路へ送り、結果は常に `journalctl -t youtube-broadcast-recovery` に残る。導入、disable cleanup、資格情報更新、明示承認が必要な手動終了テストは `$TF_DIR/README.md` の「24/7 broadcast 自動復旧 timer」 を正本とする。
 
 healthcheck は systemd 状態を 4 通りに分類し、**真の異常のみ通知**:
 
