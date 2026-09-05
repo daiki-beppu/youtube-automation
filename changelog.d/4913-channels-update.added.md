@@ -1,1 +1,0 @@
-- `yt-channels update` を追加し、channel registry 内の適格な tag / main pin チャンネルを安全に直列追従できるようにしました。

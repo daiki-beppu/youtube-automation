@@ -1,2 +1,0 @@
-- `yt-session-start` を既定の SessionStart hook として配布し、安全な main checkout だけを upstream へ遅延追従するようにしました。
-- 自動追従は `YOUTUBE_AUTOMATION_DISABLE_SESSION_UPDATE=1` で無効化できます。

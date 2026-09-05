@@ -1,1 +1,0 @@
-- hybrid sandwich runner が単一チャンネルリポジトリで channel slug の指定や workspace 検出なしに完走できるよう修正した（#4899）。
