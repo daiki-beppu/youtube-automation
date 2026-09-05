@@ -15,7 +15,7 @@ loop:
   # false で yt-generate-loop-video を fail-loud 停止し、Veo 課金を防ぐ。
   enabled: true
 
-  # Veo / Omni / H3 実行前の [y/N] 課金確認を -y 相当で省略する opt-in。
+  # Veo / fal / Omni 実行前の [y/N] 課金確認を -y 相当で省略する opt-in。
   skip_billing_approval: false
 
   # 生成成功後の動画プレビュー承認を省略する opt-in。
@@ -91,21 +91,6 @@ loop:
       The composition stays free of full-frame flashes, strobing, sudden brightness changes,
       and close-up human faces; local candle-flame movement stays confined to each flame.
       Keep the scene calm and grounded, like a living painting.
-
-  # MiniMax Video API の Hailuo 3 image-to-video エンジン。
-  h3:
-    model: "MiniMax-Hailuo-3"
-    duration_seconds: 6
-    aspect_ratio: "16:9"
-    resolution: "1080P"
-    timeout_seconds: 600
-    poll_interval_seconds: 5
-    max_poll_retries: 3
-    default_prompt: |
-      Locked camera, static composition, no camera movement.
-      Preserve the original subject count, shapes, lighting, color palette, depth, and framing.
-      Animate only gentle natural motion already implied by the scene.
-      Keep the result calm and stable with no new objects, flashes, strobing, or close-up faces.
 
   # Veo 出力直後に libx264 で再エンコードして容量を削減する。
   compression:

@@ -1,0 +1,1 @@
+- `yt-generate-loop-video` から MiniMax 直 API の `h3` engine と関連実装・設定を削除しました。

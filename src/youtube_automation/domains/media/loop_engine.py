@@ -15,7 +15,6 @@ class LoopEngine(str, Enum):
     VEO = "veo"
     FAL = "fal"
     OMNI = "omni"
-    H3 = "h3"
 
     @classmethod
     def parse(cls, value: object, *, config_path: str = "loop.engine") -> "LoopEngine":

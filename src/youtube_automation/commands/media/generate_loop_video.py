@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""コレクション用ループ動画背景を Veo / fal / Omni / MiniMax H3 で生成する。
+"""コレクション用ループ動画背景を Veo / fal / Omni で生成する。
 
 main.png を開始・終了フレーム両方に指定し、微細なアニメーション付きの
 シームレスなループ動画を生成する。
@@ -64,30 +64,6 @@ from youtube_automation.infrastructure.media.fal_video_generator import (
     generate_loop_video as generate_fal_loop_video,
 )
 from youtube_automation.infrastructure.media.genai_client import create_veo_genai_client
-from youtube_automation.infrastructure.media.minimax_video_generator import (
-    DEFAULT_ASPECT_RATIO as DEFAULT_H3_ASPECT_RATIO,
-)
-from youtube_automation.infrastructure.media.minimax_video_generator import (
-    DEFAULT_DURATION_SECONDS as DEFAULT_H3_DURATION_SECONDS,
-)
-from youtube_automation.infrastructure.media.minimax_video_generator import (
-    DEFAULT_MAX_POLL_RETRIES as DEFAULT_H3_MAX_POLL_RETRIES,
-)
-from youtube_automation.infrastructure.media.minimax_video_generator import (
-    DEFAULT_MODEL as DEFAULT_H3_MODEL,
-)
-from youtube_automation.infrastructure.media.minimax_video_generator import (
-    DEFAULT_POLL_INTERVAL_SEC as DEFAULT_H3_POLL_INTERVAL_SEC,
-)
-from youtube_automation.infrastructure.media.minimax_video_generator import (
-    DEFAULT_RESOLUTION as DEFAULT_H3_RESOLUTION,
-)
-from youtube_automation.infrastructure.media.minimax_video_generator import (
-    DEFAULT_TIMEOUT_SEC as DEFAULT_H3_TIMEOUT_SEC,
-)
-from youtube_automation.infrastructure.media.minimax_video_generator import (
-    generate_loop_video as generate_h3_loop_video,
-)
 from youtube_automation.infrastructure.media.omni_generator import (
     DEFAULT_MODEL as DEFAULT_OMNI_MODEL,
 )
@@ -248,13 +224,13 @@ def _build_parser() -> argparse.ArgumentParser:
     # RawTextHelpFormatter: help 文字列にハイフン入りモデル名が連なるため、
     # 80 桁折り返しで `veo-3.1-lite-` / `generate-preview` のように分断されないようにする。
     parser = argparse.ArgumentParser(
-        description="Veo 3.1 / fal.ai / Gemini Omni Flash / MiniMax H3 コレクションループ動画生成",
+        description="Veo 3.1 / fal.ai / Gemini Omni Flash コレクションループ動画生成",
         formatter_class=argparse.RawTextHelpFormatter,
     )
     parser.add_argument("collection", nargs="?", help="コレクションパス")
     parser.add_argument(
         "--engine",
-        choices=("veo", "fal", "omni", "h3"),
+        choices=("veo", "fal", "omni"),
         default=None,
         help="動画生成エンジン (default: loop.engine、未設定時 veo)",
     )
@@ -283,7 +259,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "モデル名 (default: 選択 engine の skill-config model)。"
             " 例: veo-3.1-fast-generate-001 / veo-3.1-generate-001 / "
-            "veo-3.1-lite-generate-preview / MiniMax-Hailuo-3"
+            "veo-3.1-lite-generate-preview"
         ),
     )
     parser.add_argument(
@@ -423,21 +399,6 @@ def _run_generate(
             upscale_to=tuple(upscale) if upscale is not None else None,
             compression=compression,
         )
-    elif engine == "h3":
-        h3_config = engine_config or {}
-        success = generate_h3_loop_video(
-            image_path,
-            output_path,
-            model,
-            prompt,
-            duration_seconds=int(h3_config.get("duration_seconds", DEFAULT_H3_DURATION_SECONDS)),
-            aspect_ratio=str(h3_config.get("aspect_ratio", DEFAULT_H3_ASPECT_RATIO)),
-            resolution=str(h3_config.get("resolution", DEFAULT_H3_RESOLUTION)),
-            timeout_sec=float(h3_config.get("timeout_seconds", DEFAULT_H3_TIMEOUT_SEC)),
-            poll_interval_sec=float(h3_config.get("poll_interval_seconds", DEFAULT_H3_POLL_INTERVAL_SEC)),
-            max_poll_retries=int(h3_config.get("max_poll_retries", DEFAULT_H3_MAX_POLL_RETRIES)),
-            compression=compression,
-        )
     elif engine == "omni":
         try:
             client = create_omni_client()
@@ -518,7 +479,6 @@ def main():
         "veo": DEFAULT_MODEL,
         "fal": DEFAULT_FAL_MODEL,
         "omni": DEFAULT_OMNI_MODEL,
-        "h3": DEFAULT_H3_MODEL,
     }[engine]
     model = args.model or engine_config.get("model", default_model)
     if engine == "fal" and model not in engine_config.get("allowed_models", DEFAULT_FAL_ALLOWED_MODELS):
