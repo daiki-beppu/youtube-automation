@@ -45,3 +45,18 @@ variable "apis" {
     "storage.googleapis.com",
   ]
 }
+
+variable "github_repository_owner_id" {
+  type        = string
+  description = "GitHub repository owner の不変な numeric ID (gh api users/daiki-beppu --jq .id)"
+
+  validation {
+    condition     = can(regex("^[0-9]+$", var.github_repository_owner_id))
+    error_message = "github_repository_owner_id は GitHub の numeric ID を指定する。"
+  }
+}
+
+variable "tfstate_bucket" {
+  type        = string
+  description = "bootstrap stack の bucket_name output。gcp/ object のみを drift SA に公開する"
+}

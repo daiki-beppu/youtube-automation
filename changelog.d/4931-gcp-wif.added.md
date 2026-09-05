@@ -1,0 +1,1 @@
+- GCP drift 検知用の GitHub main 限定 WIF と読み取り専用 SA を追加し、tfstate 本文の読み取りを gcp/ prefix に限定しました。

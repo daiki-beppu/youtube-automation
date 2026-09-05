@@ -51,7 +51,13 @@ def test_terraform_public_schema_has_no_dotenv_output_or_location_input() -> Non
     outputs = set(re.findall(r'(?m)^output\s+"([^"]+)"', (canonical / "outputs.tf").read_text(encoding="utf-8")))
     variables = set(re.findall(r'(?m)^variable\s+"([^"]+)"', (canonical / "variables.tf").read_text(encoding="utf-8")))
 
-    assert outputs == {"project_id", "oauth_console_url", "enabled_apis"}
+    assert outputs == {
+        "project_id",
+        "oauth_console_url",
+        "enabled_apis",
+        "wif_provider_name",
+        "drift_service_account_email",
+    }
     assert variables == {
         "project_id",
         "project_name",
@@ -60,4 +66,6 @@ def test_terraform_public_schema_has_no_dotenv_output_or_location_input() -> Non
         "folder_id",
         "adc_email",
         "apis",
+        "github_repository_owner_id",
+        "tfstate_bucket",
     }
