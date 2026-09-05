@@ -27,6 +27,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+// Canonical shared-ui variant/size matrix; other consumers retain render smoke.
 const variantMarkers = {
   default: ["bg-primary", "text-primary-foreground"],
   destructive: ["bg-destructive/10", "text-destructive"],

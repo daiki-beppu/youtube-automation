@@ -7,61 +7,16 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  cn,
   FieldLabel,
 } from "@youtube-automation/ui";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-const variantMarkers = {
-  default: ["bg-primary", "text-primary-foreground"],
-  destructive: ["bg-destructive/10", "text-destructive"],
-  outline: ["border", "bg-background"],
-  secondary: ["bg-secondary", "text-secondary-foreground"],
-  ghost: ["hover:bg-muted"],
-  link: ["underline-offset-4", "hover:underline"],
-} as const;
-
-const sizeMarkers = {
-  default: ["h-9", "px-2.5"],
-  xs: ["h-6", "text-xs"],
-  sm: ["h-8", "px-2.5"],
-  lg: ["h-10", "px-2.5"],
-  icon: ["size-9"],
-  "icon-xs": ["size-6"],
-  "icon-sm": ["size-8"],
-  "icon-lg": ["size-10"],
-} as const;
-
-describe("shadcn/ui foundation", () => {
-  it("cn は条件付き class を連結し、競合する Tailwind class は後勝ちで統合する", () => {
-    expect(
-      cn("px-2", { hidden: false }, ["font-medium", { block: true }], "px-4")
-    ).toBe("font-medium block px-4");
-  });
-
-  it.each(Object.entries(variantMarkers))(
-    "Button variant %s は対応する class を生成する",
-    (variant, markers) => {
-      const classes = buttonVariants({
-        variant: variant as keyof typeof variantMarkers,
-      }).split(" ");
-      expect(classes).toEqual(expect.arrayContaining([...markers]));
-    }
-  );
-
-  it.each(Object.entries(sizeMarkers))(
-    "Button size %s は対応する class を生成する",
-    (size, markers) => {
-      const classes = buttonVariants({
-        size: size as keyof typeof sizeMarkers,
-      }).split(" ");
-      expect(classes).toEqual(expect.arrayContaining([...markers]));
-    }
-  );
-
-  it("Button は default variant/size と追加 class・button props を反映する", () => {
+// Shared cn / variant / size matrices live in suno-helper/tests/ui-foundation.test.tsx.
+// Keep this consumer's React rendering and DistroKid-specific props/slots here.
+describe("DistroKid shared UI integration", () => {
+  it("Button はこの consumer の React で追加 class・button props を反映する", () => {
     const html = renderToStaticMarkup(
       createElement(Button, { className: "w-full", disabled: true }, "保存")
     );
@@ -69,8 +24,6 @@ describe("shadcn/ui foundation", () => {
     expect(html).toContain('data-slot="button"');
     expect(html).toContain('data-variant="default"');
     expect(html).toContain('data-size="default"');
-    for (const marker of variantMarkers.default) expect(html).toContain(marker);
-    expect(html).toContain("h-9 gap-1.5 px-2.5");
     expect(html).toContain("w-full");
     expect(html).toContain("disabled");
     expect(html).toContain(">保存</button>");
@@ -88,7 +41,6 @@ describe("shadcn/ui foundation", () => {
     expect(html.startsWith("<a ")).toBe(true);
     expect(html).toContain('href="#review"');
     expect(html).not.toContain('role="button"');
-    for (const marker of variantMarkers.link) expect(html).toContain(marker);
     expect(html).toContain(">確認</a>");
   });
 
