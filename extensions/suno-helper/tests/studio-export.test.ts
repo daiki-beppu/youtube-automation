@@ -98,8 +98,10 @@ describe("Studio multitrack export", () => {
     try {
       const { scroller, setScrollHeight } = createLibrary();
       appendLibraryClip(scroller, "visible-clip");
+      let lazyLoadScheduled = false;
       scroller.addEventListener("scroll", () => {
-        if (scroller.scrollTop < 200 || scroller.childElementCount > 1) return;
+        if (lazyLoadScheduled || scroller.scrollTop < 200) return;
+        lazyLoadScheduled = true;
         setTimeout(() => {
           setScrollHeight(800);
           appendLibraryClip(scroller, "lazy-clip");

@@ -4,6 +4,7 @@ const STUDIO_CLIP_DRAG_TYPE = "application/x-suno-studio-clip";
 const DOM_TIMEOUT_MS = 30_000;
 const DOM_POLL_MS = 200;
 const LIBRARY_LAZY_LOAD_WAIT_MS = 2_000;
+const LIBRARY_CLIP_SELECTOR = '[draggable="true"][data-clip-id]';
 
 export interface StudioExportRequest {
   collectionId: string;
@@ -214,11 +215,14 @@ function findLibraryScroller(element: Element): HTMLElement | null {
   return null;
 }
 
+function countLibraryClips(): number {
+  return document.querySelectorAll(LIBRARY_CLIP_SELECTOR).length;
+}
+
 export async function findLibraryClip(clipId: string): Promise<HTMLElement> {
   const selector = `[draggable="true"][data-clip-id="${CSS.escape(clipId)}"]`;
   const firstVisibleClip = await waitForElement(
-    () =>
-      document.querySelector<HTMLElement>('[draggable="true"][data-clip-id]'),
+    () => document.querySelector<HTMLElement>(LIBRARY_CLIP_SELECTOR),
     "Library の clip 一覧"
   );
   const scroller = findLibraryScroller(firstVisibleClip);
@@ -231,9 +235,7 @@ export async function findLibraryClip(clipId: string): Promise<HTMLElement> {
     if (clip && isVisible(clip)) return clip;
     const before = scroller.scrollTop;
     const beforeHeight = scroller.scrollHeight;
-    const beforeClipCount = document.querySelectorAll(
-      '[draggable="true"][data-clip-id]'
-    ).length;
+    const beforeClipCount = countLibraryClips();
     scroller.scrollTop = Math.min(
       scroller.scrollHeight,
       before + Math.max(200, scroller.clientHeight * 0.8)
@@ -250,8 +252,7 @@ export async function findLibraryClip(clipId: string): Promise<HTMLElement> {
     while (Date.now() < lazyLoadDeadline) {
       if (
         scroller.scrollHeight > beforeHeight ||
-        document.querySelectorAll('[draggable="true"][data-clip-id]').length >
-          beforeClipCount
+        countLibraryClips() > beforeClipCount
       ) {
         libraryGrew = true;
         break;
