@@ -1,0 +1,1 @@
+- GCP Terraform stack の state 保存先を GCS backend（prefix `gcp`、bucket は init 時注入）に揃え、初回 init 手順と tfvars 設定例を更新した。

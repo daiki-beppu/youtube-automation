@@ -1,4 +1,8 @@
 terraform {
+  backend "gcs" {
+    prefix = "gcp"
+  }
+
   required_version = "~> 1.15.0"
 
   required_providers {
