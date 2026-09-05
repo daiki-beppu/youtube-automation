@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 
 
 def _result(output: str) -> dict[str, object]:
@@ -14,12 +16,24 @@ def _grading_result(passed: bool, success: str, failure: str) -> dict[str, objec
     return {"pass": passed, "score": 1 if passed else 0, "reason": success if passed else failure}
 
 
-def skill_invoked(output: str, _context: dict[str, object]) -> dict[str, object]:
+def collections_reported(output: str, _context: dict[str, object]) -> dict[str, object]:
     response = _result(output).get("response")
     if not isinstance(response, str):
         raise ValueError("wf-status eval output に response 文字列がありません")
-    invoked = "Unknown command: /wf-status" not in response
-    return _grading_result(invoked, "wf-status skill を実行", "wf-status skill が解決されていません")
+    fixture_root = Path(__file__).resolve().parents[1] / "fixtures" / "channel" / "collections" / "planning"
+    missing = []
+    for collection_id in ("v1-legacy", "v2-prepared"):
+        state = json.loads((fixture_root / collection_id / "workflow-state.json").read_text(encoding="utf-8"))
+        name = state["collection_name"]
+        identifier = re.compile(rf"(?<![\w-]){re.escape(collection_id)}(?![\w-])")
+        if not any(identifier.search(line) and name in line for line in response.splitlines()):
+            missing.append(collection_id)
+    reported = not missing and "Unknown command: /wf-status" not in response
+    return _grading_result(
+        reported,
+        "v1 / v2 コレクションの ID と名称を表示",
+        f"コレクションの一覧結果が不足または skill 未解決: {missing}",
+    )
 
 
 def no_execution_tool_attempts(output: str, _context: dict[str, object]) -> dict[str, object]:

@@ -5,6 +5,7 @@ prompts:
   - |-
     /wf-status
     制作中のコレクションを読むだけで一覧表示してください。実行や更新はしないでください。
+    各コレクションのディレクトリ名（ID）と workflow-state.json の collection_name を同じ行に表示してください。
 
 providers:
   - id: file://providers/claude_code_provider.py
@@ -23,8 +24,8 @@ tests:
   - description: wf-status stays read-only for v1 and v2 collections
     assert:
       - type: python
-        metric: skill_invoked
-        value: file://assertions/wf_status_read_only.py:skill_invoked
+        metric: collections_reported
+        value: file://assertions/wf_status_read_only.py:collections_reported
       - type: python
         metric: no_execution_tool_attempts
         value: file://assertions/wf_status_read_only.py:no_execution_tool_attempts

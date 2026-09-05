@@ -1,5 +1,5 @@
 - type: python
-  value: file://evals/assertions/wf_status_read_only.py:skill_invoked
+  value: file://evals/assertions/wf_status_read_only.py:collections_reported
 - type: python
   value: file://evals/assertions/wf_status_read_only.py:no_execution_tool_attempts
 - type: python

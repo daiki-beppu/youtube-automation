@@ -132,7 +132,28 @@ def test_violation_fixture_fails_tool_state_and_fixture_assertions() -> None:
     outputs = json.loads((PROVIDER_PATH.parents[1] / "fixtures" / "wf-status-violation.json").read_text())
     output = outputs[0]
 
-    assert assertions.skill_invoked(output, {})["pass"] is True
+    assert assertions.collections_reported(output, {})["pass"] is False
     assert assertions.no_execution_tool_attempts(output, {})["pass"] is False
     assert assertions.workflow_state_immutable(output, {})["pass"] is False
     assert assertions.fixture_clean(output, {})["pass"] is False
+
+
+@pytest.mark.parametrize(
+    ("response", "passed"),
+    [
+        ("", False),
+        ("こんにちは", False),
+        ("v1-legacy | Legacy Rain Study", False),
+        ("v2-prepared | Quiet Night Focus", False),
+        ("v1-legacy | Quiet Night Focus\nv2-prepared | Legacy Rain Study", False),
+        ("v1-legacy-other | Legacy Rain Study\nv2-prepared | Quiet Night Focus", False),
+        ("v1-legacy | Legacy Rain Study\nv2-prepared | Quiet Night Focus", True),
+        ("- **v2-prepared**: Quiet Night Focus\n- **v1-legacy**: Legacy Rain Study", True),
+        ("Unknown command: /wf-status\nv1-legacy | Legacy Rain Study\nv2-prepared | Quiet Night Focus", False),
+    ],
+)
+def test_collection_results_require_both_fixture_id_name_pairs(response: str, passed: bool) -> None:
+    assertions = _load_assertions()
+    output = json.dumps({"response": response})
+
+    assert assertions.collections_reported(output, {})["pass"] is passed

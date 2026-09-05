@@ -12,6 +12,7 @@ nix develop --command pnpm dlx promptfoo@0.122.0 eval -c evals/promptfooconfig.y
 
 次の契約を決定的な Python assertion で判定します。
 
+- v1 / v2 両コレクションの ID と fixture の `collection_name` が同じ行に表示される（空・無関係・片方欠落の応答を拒否）
 - 許可外 tool の呼び出し試行が `claude -p --output-format json` の `permission_denials` に無い
 - `workflow-state.json` が実行前後で不変
 - fixture 全体が実行前後で不変
@@ -23,6 +24,8 @@ provider は cwd と `CHANNEL_DIR` を `evals/fixtures/channel/` に固定しま
 ```bash
 git diff --exit-code -- evals/fixtures/channel
 ```
+
+ID・名称の一致は一覧結果の最低限の検査であり、skill の実行証跡や全進捗項目の正しさを証明するものではありません。
 
 ### assertion の検出力
 
