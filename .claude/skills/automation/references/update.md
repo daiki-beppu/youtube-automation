@@ -15,6 +15,8 @@
 
 このスキルは **AI 主導の追従 wizard** である。下流チャンネルリポジトリ（bobble / deepfocus365 / rjn 等）で発動し、自リポの `pyproject.toml` を official upstream（`automation_update_refs.UPSTREAM_REPO` が単一ソース。既定: `daiki-beppu/youtube-automation`）の最新 tag まで bump して、`.claude/skills/` の同期、動作確認、コミットまでを 1 コマンドで回す。
 
+複数チャンネルを一度に追従する場合は、channel registry を使う `yt-channels update` を実行する。 `--tag <tag>` は tag pin のみに適用し、main / sha pin は理由付きで skip する。main pin は `--tag` なしで追従する。
+
 機械的に決まる手順（実行場所判定 / pin 形式判定 / 差分判定 / pin 書き換え / `uv lock` / `yt-skills sync` / smoke check）は upstream 同梱の **`yt-automation-update` CLI** に委譲する。本スキル（AI）は判断が必要なポイント — リリース内容の要約、local fix 上書き判断、同意取得、コミット — に専任する。
 
 利用者は upstream のリリース内容を都度追わなくてよい。AI が各リリースの **GitHub Release 本文** と **`CHANGELOG.md` の該当バージョンセクション** から累積影響を要約してから、破壊的操作の前で `[HUMAN STEP]` として人間判断を求める。
