@@ -1,0 +1,3 @@
+- fal queue request の再開状態を原子的に保存する task store を追加した（#4947）。
+- ダウンロード済みの生動画と結果を再開 state に対応付け、後処理を API 再送信なしで再開できるようにした（#4947）。
+- video task store 共通の state 永続化・fail-closed な読み出しを `infrastructure/media/_task_store_support.py` に集約し、fal / MiniMax の両 store から共有するようにした（#4947）。
