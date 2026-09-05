@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 import time
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -68,7 +69,7 @@ def _validate(
     resolution: str,
     prompt_expansion_mode: str,
     aspect_ratio: str,
-    allowed_models: set[str] | frozenset[str],
+    allowed_models: Collection[str],
     canvas: Mapping[str, tuple[int, int]],
     timeout_sec: float,
     poll_interval_sec: float,
@@ -241,7 +242,7 @@ def generate_loop_video(
     timeout_sec: float = DEFAULT_TIMEOUT_SEC,
     poll_interval_sec: float = DEFAULT_POLL_INTERVAL_SEC,
     max_poll_retries: int = DEFAULT_MAX_POLL_RETRIES,
-    allowed_models: set[str] | frozenset[str] = DEFAULT_ALLOWED_MODELS,
+    allowed_models: Collection[str] = DEFAULT_ALLOWED_MODELS,
     canvas: Mapping[str, tuple[int, int]] = DEFAULT_CANVAS,
     upscale_to: tuple[int, int] | None = (1920, 1080),
     compression: dict | None = None,
@@ -263,8 +264,7 @@ def generate_loop_video(
             timeout_sec=timeout_sec,
             poll_interval_sec=poll_interval_sec,
         )
-        collection_root = output_path.parent.parent
-        prepared = collection_root / "tmp" / "fal-video-inputs" / f"{output_path.stem}.png"
+        prepared = task_store.input_image_path(output_path, channel_root=channel_root)
         _validate_and_resize(image_path, prepared, size)
 
         def submit_and_poll() -> tuple[dict[str, object], dict[str, object]]:
@@ -355,5 +355,7 @@ def generate_loop_video(
         },
     )
     cost_tracker.print_last_report(entry)
+    with contextlib.suppress(OSError):
+        prepared.unlink(missing_ok=True)
     task_store.clear(output_path, channel_root=channel_root)
     return True

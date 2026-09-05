@@ -70,7 +70,14 @@ def test_submit_uses_one_resized_url_and_records_metadata_only(
         ]
     )
     cost_log = tmp_path / "data" / "generation-costs-video.json"
-    monkeypatch.setattr(generator.fal_client, "upload_file", Mock(return_value="https://v3.fal.media/input.png"))
+    uploaded: list[tuple[Path, tuple[int, int]]] = []
+
+    def _upload(path: Path, **_: object) -> str:
+        with Image.open(path) as prepared:
+            uploaded.append((path, prepared.size))
+        return "https://v3.fal.media/input.png"
+
+    monkeypatch.setattr(generator.fal_client, "upload_file", _upload)
     monkeypatch.setattr(generator.fal_client, "submit", submit)
     monkeypatch.setattr(generator.fal_client, "get_url", get_url)
     monkeypatch.setattr(generator.fal_client, "download", Mock(return_value=b"\0\0\0\x18ftypmp42video"))
@@ -88,8 +95,10 @@ def test_submit_uses_one_resized_url_and_records_metadata_only(
     )
     payload = submit.call_args.args[1]
     assert payload["image_url"] == payload["end_image_url"]
-    with Image.open(tmp_path / "tmp" / "fal-video-inputs" / "loop.png") as prepared:
-        assert prepared.size == (1344, 768)
+    [(prepared_path, prepared_size)] = uploaded
+    assert prepared_path.parent == tmp_path / "channel" / "tmp" / "fal-video-inputs"
+    assert prepared_size == (1344, 768)
+    assert not prepared_path.exists()
     [entry] = json.loads(cost_log.read_text())
     assert entry["category"] == "video"
     assert entry["unit"] == "second"
