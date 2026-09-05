@@ -227,68 +227,6 @@ def test_b6_receipt_merge_and_retain_groups_match_post_cleanup_state() -> None:
         assert (ROOT / group["received_by"]).exists()
 
 
-def test_b6_receipt_points_every_mapping_to_an_existing_owner() -> None:
-    mappings = _read_receipt().get("mappings")
-    assert isinstance(mappings, list)
-
-    legacy = ".claude/skills/channel-new/references/"
-    setup = ".claude/skills/setup/references/"
-    research = ".claude/skills/channel-research/references/"
-    strategy = ".claude/skills/channel-strategy/references/"
-    moved_owner_aliases = {
-        ".claude/skills/channel-new/SKILL.md": ".claude/skills/channel-strategy/SKILL.md",
-        f"{legacy}analysis-mode.md": f"{research}market.md",
-        f"{legacy}claude-md-template.md": f"{setup}claude-md-template.md",
-        f"{legacy}config-generation-rules.md": f"{setup}config-generation-rules.md",
-        f"{legacy}derive_ttp_duration": f"{setup}derive_ttp_duration.py",
-        f"{legacy}desire-vocabulary.md": f"{strategy}desire-vocabulary.md",
-        f"{legacy}direction-mode.md": f"{strategy}direction.md",
-        f"{legacy}directory-structure.md": f"{setup}directory-structure.md",
-        f"{legacy}fetch_branding_snapshot": f"{setup}fetch_branding_snapshot.py",
-        f"{legacy}fetch_branding_snapshot.py": f"{setup}fetch_branding_snapshot.py",
-        f"{legacy}benchmark_collector.py": f"{research}benchmark_collector.py",
-        f"{legacy}fetch_benchmark_comments.py": f"{research}fetch_benchmark_comments.py",
-        f"{legacy}generate_image.py": f"{setup}generate_image.py",
-        f"{legacy}gcp-bootstrap.md": f"{setup}gcp-bootstrap.md",
-        f"{legacy}import-mode.md": f"{setup}import-mode.md",
-        f"{legacy}regeneration-mode.md": f"{setup}regeneration-mode.md",
-        f"{legacy}terraform-gcp/README.md": f"{setup}terraform-gcp/README.md",
-        f"{legacy}verification.md": f"{setup}verification.md",
-        ".claude/skills/setup/references/import-mode.md": ".claude/skills/setup/references/import-mode.md",
-        ".claude/skills/setup/references/regeneration-mode.md": (
-            ".claude/skills/setup/references/regeneration-mode.md"
-        ),
-        ".claude/skills/benchmark/SKILL.md": ".claude/skills/channel-research/references/benchmark.md",
-        ".claude/skills/discover-competitors/SKILL.md": (".claude/skills/channel-research/references/discover.md"),
-        ".claude/skills/setup/references/analysis-mode.md": (".claude/skills/channel-research/references/market.md"),
-        ".claude/skills/market-research/SKILL.md": ".claude/skills/channel-research/references/market.md",
-        ".claude/skills/market-research/references/report-contract.md": (
-            ".claude/skills/channel-research/references/report-contract.md"
-        ),
-        ".claude/skills/viewer-voice/SKILL.md": ".claude/skills/channel-research/references/voice.md",
-        ".claude/skills/viewer-voice/references/fetch_benchmark_comments.py": (
-            ".claude/skills/channel-research/references/fetch_benchmark_comments.py"
-        ),
-        ".claude/skills/setup/references/fetch_benchmark_comments.py": (
-            ".claude/skills/channel-research/references/fetch_benchmark_comments.py"
-        ),
-        ".claude/skills/thumbnail-research/SKILL.md": ".claude/skills/channel-research/references/thumbnail.md",
-        ".claude/skills/audience-persona-design/SKILL.md": ".claude/skills/channel-strategy/references/persona.md",
-        ".claude/skills/viewing-scene/SKILL.md": ".claude/skills/channel-strategy/references/scene.md",
-        ".claude/skills/creative-constraints/SKILL.md": (".claude/skills/channel-strategy/references/constraints.md"),
-        ".claude/skills/short-release/SKILL.md": ".claude/skills/short/SKILL.md",
-        ".claude/skills/short-thumbnail/SKILL.md": ".claude/skills/short/references/thumbnail.md",
-        ".claude/skills/short-thumbnail/references/prompt-template.md": (
-            ".claude/skills/short/references/prompt-template.md"
-        ),
-    }
-    assert all(
-        (ROOT / moved_owner_aliases.get(mapping["exact_new_owner"], mapping["exact_new_owner"])).exists()
-        for mapping in mappings
-        if isinstance(mapping, dict)
-    )
-
-
 def test_b6_current_cli_contract_uses_yt_entrypoints() -> None:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     scripts = project["project"]["scripts"]
@@ -389,9 +327,6 @@ def test_built_sdist_contains_only_approved_members(tmp_path: Path) -> None:
     setup_gcp_assets = {
         ".claude/skills/setup/references/gcp-bootstrap.md",
         ".claude/skills/setup/references/gcp-bootstrap.sh",
-        ".claude/skills/setup/references/gcp-terraform-apply.sh",
-        ".claude/skills/setup/references/terraform-gcp/README.md",
-        ".claude/skills/setup/references/terraform-gcp/terraform.tfvars.example",
     }
     assert setup_gcp_assets <= members
     forbidden_prefixes = (

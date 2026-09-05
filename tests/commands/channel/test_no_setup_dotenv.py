@@ -1,4 +1,4 @@
-"""公開 setup 操作と配布 Terraform が channel dotenv を管理しない契約。"""
+"""公開 setup 操作と上流 Terraform が channel dotenv を管理しない契約。"""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def test_channel_init_public_operation_does_not_generate_env(tmp_path) -> None:
     assert not (tmp_path / ".env").exists()
 
 
-@pytest.mark.parametrize("script_name", ("gcp-bootstrap.sh", "gcp-terraform-apply.sh"))
+@pytest.mark.parametrize("script_name", ("gcp-bootstrap.sh",))
 def test_gcp_setup_scripts_reject_env_file_without_generating_it(tmp_path, script_name: str) -> None:
     env_file = tmp_path / ".env"
     result = subprocess.run(
@@ -44,14 +44,6 @@ def test_gcp_setup_scripts_reject_env_file_without_generating_it(tmp_path, scrip
     assert result.returncode == 2
     assert "未知のオプション: --env-file" in result.stderr
     assert not env_file.exists()
-
-
-def test_bundled_terraform_inputs_and_outputs_match_the_canonical_copy() -> None:
-    canonical = ROOT / "infra" / "terraform" / "gcp"
-    bundled = SETUP_REFERENCES / "terraform-gcp"
-
-    for name in ("outputs.tf", "variables.tf"):
-        assert (bundled / name).read_bytes() == (canonical / name).read_bytes()
 
 
 def test_terraform_public_schema_has_no_dotenv_output_or_location_input() -> None:
