@@ -13,7 +13,11 @@ from pathlib import Path
 
 from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.commands.channel.channel_import import SLUG_PATTERN, _validate_config, _workspace_root
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.core.errors import ChannelRegistryError, ConfigError
+from youtube_automation.infrastructure.analytics.channel_registry import (
+    DEFAULT_CHANNEL_REGISTRY,
+    plan_channel_registry_update,
+)
 from youtube_automation.infrastructure.auth.client_secrets import template_bytes
 
 EXIT_OK = 0
@@ -132,6 +136,7 @@ def export_channel(
     workspace: Path,
     allow_dirty: bool = False,
     dry_run: bool = False,
+    registry: Path | None = None,
 ) -> int:
     workspace = workspace.expanduser().resolve()
     if not SLUG_PATTERN.fullmatch(slug):
@@ -167,6 +172,13 @@ def export_channel(
     print(f"export plan: {source} -> {destination} ({count} files, {size} bytes)")
     if (source / ".env").exists():
         print("[warning] .env は不要のはずなので copy しません")
+    registry_path = (registry or DEFAULT_CHANNEL_REGISTRY).expanduser().absolute()
+    try:
+        registry_update = plan_channel_registry_update(registry_path, source=source, destination=destination)
+    except ChannelRegistryError as error:
+        print(f"[error] channel registry を更新できません: {error}", file=sys.stderr)
+        return EXIT_VALIDATION
+    print(f"registry plan: {registry_update.action} index={registry_update.index} ({registry_path})")
     if dry_run:
         return EXIT_OK
 
@@ -200,6 +212,13 @@ def export_channel(
         "参考: uv init; uv add git+https://github.com/daiki-beppu/youtube-automation; uv run yt-skills sync; git init"
     )
     print("案内: bootstrap 後に `uv run yt-doctor` と workflow-state の path を確認してください。")
+    try:
+        registry_update.write()
+    except OSError as error:
+        print(f"[error] channel registry の書込に失敗しました（dest は残します）: {error}", file=sys.stderr)
+        print("channel registry を次の内容へ手動更新してください:")
+        print(registry_update.as_json())
+        return EXIT_VALIDATION
     return EXIT_OK
 
 
@@ -209,6 +228,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("dest", type=Path, help="workspace 外の、存在しないか空の出力 directory")
     parser.add_argument("--allow-dirty", action="store_true", help="未 commit（untracked を含む）の source を許可する")
     parser.add_argument("--dry-run", action="store_true", help="copy せず対象ファイル数と総サイズだけ表示する")
+    parser.add_argument(
+        "--registry",
+        type=Path,
+        default=DEFAULT_CHANNEL_REGISTRY,
+        help=f"channel registry path（default: {DEFAULT_CHANNEL_REGISTRY}）",
+    )
     return parser
 
 
@@ -219,6 +244,7 @@ def run(args: argparse.Namespace) -> int:
         workspace=_workspace_root(Path.cwd()),
         allow_dirty=args.allow_dirty,
         dry_run=args.dry_run,
+        registry=args.registry,
     )
 
 

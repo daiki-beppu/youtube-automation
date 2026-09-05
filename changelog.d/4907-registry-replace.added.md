@@ -1,0 +1,1 @@
+- `yt-channel-export` が channel registry の workspace entry を同位置で export 先へ置換するようにした（#4907）。
