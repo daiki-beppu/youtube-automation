@@ -322,7 +322,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 - `docs/workflow-cheatsheet.md`
 - `docs/chrome-extension-install-guide.md`
 - `docs/dashboard.md`
-- `docs/channel-workspace-migration.md`
+- `docs/migration/workspace-to-single-repo.md`
 - `docs/cloud-execution.md`
 - `docs/live-streaming.md`
 - `docs/streaming-healthcheck.md`

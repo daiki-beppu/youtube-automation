@@ -127,7 +127,7 @@ export default defineConfig({
           {
             label: "移行ガイド",
             items: [
-              "/releases/workspace-migration",
+              "/releases/workspace-to-single-repo",
               "/releases/high-cpm-locales",
             ],
           },

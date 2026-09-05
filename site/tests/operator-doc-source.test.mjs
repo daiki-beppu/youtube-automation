@@ -21,7 +21,7 @@ const expectedSources = [
   "docs/workflow-cheatsheet.md",
   "docs/chrome-extension-install-guide.md",
   "docs/dashboard.md",
-  "docs/channel-workspace-migration.md",
+  "docs/migration/workspace-to-single-repo.md",
   "docs/cloud-execution.md",
   "docs/live-streaming.md",
   "docs/streaming-healthcheck.md",
@@ -65,8 +65,8 @@ test("追従ドキュメントをすべてアップデート tab 配下へ割り
   const routes = new Map(operatorDocMap.map(({ route, source }) => [source, route]));
 
   assert.equal(
-    routes.get("docs/channel-workspace-migration.md"),
-    "/releases/workspace-migration"
+    routes.get("docs/migration/workspace-to-single-repo.md"),
+    "/releases/workspace-to-single-repo"
   );
   assert.equal(
     routes.get("docs/migration/high-cpm-locales.md"),
