@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -12,7 +13,7 @@ import tempfile
 from pathlib import Path
 
 from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.commands.channel.channel_import import SLUG_PATTERN, _validate_config, _workspace_root
+from youtube_automation.configuration import find_workspace_root, load_config, reset
 from youtube_automation.core.errors import ChannelRegistryError, ConfigError
 from youtube_automation.infrastructure.analytics.channel_registry import (
     DEFAULT_CHANNEL_REGISTRY,
@@ -24,6 +25,9 @@ EXIT_OK = 0
 EXIT_USAGE = 2
 EXIT_VALIDATION = 3
 EXIT_CONFLICT = 4
+
+REQUIRED_CONFIG_FILES = ("meta.json", "content.json", "youtube.json")
+SLUG_PATTERN = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
 
 _EXCLUDED_DIRECTORIES = {".automation-run", ".tmp", "__pycache__"}
 _EXCLUDED_FILES = ("*.lock", ".collection-serve-*.pid", ".DS_Store")
@@ -56,6 +60,45 @@ assets/stock/**/*.flac
 assets/stock/**/*.aac
 assets/stock/**/*.ogg
 """
+
+
+def _workspace_root(start: Path) -> Path:
+    detected = find_workspace_root(start)
+    if detected is not None:
+        return detected
+    current = start.expanduser().resolve()
+    for parent in (current, *current.parents):
+        if (parent / "channels").is_dir():
+            return parent
+    return current
+
+
+def _validate_config(channel_root: Path) -> None:
+    config_dir = channel_root / "config" / "channel"
+    missing = [name for name in REQUIRED_CONFIG_FILES if not (config_dir / name).is_file()]
+    if missing:
+        raise ValueError(f"必須 config が不足しています: {', '.join(missing)}")
+
+    previous_cwd = Path.cwd()
+    previous_channel_dir = os.environ.get("CHANNEL_DIR")
+    previous_channel = os.environ.get("CHANNEL")
+    try:
+        os.chdir(channel_root)
+        os.environ["CHANNEL_DIR"] = str(channel_root)
+        os.environ.pop("CHANNEL", None)
+        reset()
+        load_config()
+    finally:
+        reset()
+        os.chdir(previous_cwd)
+        if previous_channel_dir is None:
+            os.environ.pop("CHANNEL_DIR", None)
+        else:
+            os.environ["CHANNEL_DIR"] = previous_channel_dir
+        if previous_channel is None:
+            os.environ.pop("CHANNEL", None)
+        else:
+            os.environ["CHANNEL"] = previous_channel
 
 
 def _excluded(relative: Path, *, directory: bool) -> bool:
