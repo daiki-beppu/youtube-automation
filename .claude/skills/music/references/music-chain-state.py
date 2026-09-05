@@ -10,8 +10,15 @@ from pathlib import Path
 
 import yaml
 
+from youtube_automation.application.documents.music_prompt import require_approved_music_prompt
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.core.errors import (
+    ConfigError,
+    DocumentMigrationError,
+    DocumentRenderError,
+    DocumentValidationError,
+    WorkflowStateError,
+)
 from youtube_automation.domains.suno.config import infer_suno_mode
 from youtube_automation.domains.suno.downloaded.archive import count_audio_files
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
@@ -85,11 +92,28 @@ def _evaluate_prompt(collection_path: Path) -> tuple[int, dict[str, object]]:
             "reason": "prompt_missing",
             "missing": [output.as_posix()],
         }
+    try:
+        require_approved_music_prompt(collection_path / output, collection_path / "workflow-state.json")
+    except (
+        DocumentMigrationError,
+        DocumentRenderError,
+        DocumentValidationError,
+        WorkflowStateError,
+        OSError,
+        ValueError,
+    ) as exc:
+        return EXIT_BLOCKED, {
+            "step": "prompt",
+            "decision": "blocked",
+            "reason": "prompt_invalid",
+            "detail": str(exc),
+            "next": "music --prompt: JSON/HTML pair を修復し、検証後に承認してください",
+        }
     return EXIT_SKIP, {
         "step": "prompt",
         "decision": "skip",
         "reason": "prompt_complete",
-        "outputs": [output.as_posix()],
+        "outputs": [output.as_posix(), output.with_suffix(".html").as_posix()],
     }
 
 

@@ -39,3 +39,9 @@ uv run yt-document-migrate <candidate.json> \
 既存 `suno-prompts.md` + legacy `suno-prompts.json` または `lyria-prompt.md` がある場合、先に利用者へ移行の Yes / No を確認する。Yes の場合だけ `--migration-decision yes` を追加する。No の場合は `--migration-decision no` を指定して既存成果物とstateを保持する。pair公開・schema検証・JSON/HTML再読込の後もstateは未承認のまま保持し、`yt-music-prompt-select` が返却IDとJSON digestを再検証した後だけ owner API で `assets.music_prompts = true` にする。browser/renderer失敗、stale pair、digest mismatch、replay、`reject` はstateを変更しない。browserなしの明示fallbackは `--transport terminal` で候補を得て、会話確認後に `--candidate-id approve|reject` を指定する。
 
 downstream（Suno helper配信、playlist照合、選曲、master、alignment/planning入力）は `read_suno_prompt_entries` または共通 `read_published_json_document` を通し、対応HTMLを持つ検証済みJSONだけを読む。MarkdownやHTMLの直接parseをfallbackにしない。
+
+## 再開時の承認照合
+
+承認 finalizer は `assets.music_prompts = true` と `music_prompt_approved_digest` を同時に記録する。chain の prompt 判定は既存 reader で JSON/HTML pair・schema を検証し、現在の JSON digest と承認 digest が一致するときだけ skip する。同じ成果物の再開で機械検証や AI semantic review を再実行しない。
+
+JSON 未作成は run、不正 JSON・空 entries・HTML 欠落・pair 不一致・未承認・承認後の変更は blocked として `/music --prompt` の修復経路を示す。digest 未記録の旧承認も再承認が必要。pair が正常で既存 review が pass なら再生成せず `yt-music-prompt-select` で現在の成果物を再承認する。JSON を変えた場合は変更内容を検証・review してから公開・承認する。

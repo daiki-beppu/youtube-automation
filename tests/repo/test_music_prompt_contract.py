@@ -8,6 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 from tests.helpers.paths import REPO_ROOT
@@ -56,7 +57,7 @@ def test_music_prompt_config_uses_namespaced_default_and_keeps_legacy_loader() -
     assert _migrate_config.SKILL_CONFIG_MIGRATIONS["suno"] == _migrate_config.SkillConfigMigration("music", "prompt")
 
 
-def test_music_prompt_state_runs_then_skips_after_output_exists(tmp_path: Path) -> None:
+def test_music_prompt_state_runs_then_blocks_invalid_output(tmp_path: Path) -> None:
     collection = tmp_path / "collections" / "planning" / "demo"
     collection.mkdir(parents=True)
 
@@ -78,5 +79,120 @@ def test_music_prompt_state_runs_then_skips_after_output_exists(tmp_path: Path) 
         capture_output=True,
         text=True,
     )
-    assert after.returncode == 0
-    assert json.loads(after.stdout)["decision"] == "skip"
+    assert after.returncode == 20
+    assert json.loads(after.stdout)["decision"] == "blocked"
+
+
+def _prompt_state(collection: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(STATE), "--collection-path", str(collection), "--step", "prompt"],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+
+
+def test_prompt_resume_requires_approval_of_current_pair(tmp_path: Path) -> None:
+    from tests.application.documents.test_music_prompt import _document
+    from youtube_automation.application.documents.migration import MarkdownMigrationDecision
+    from youtube_automation.application.documents.music_prompt import (
+        finalize_music_prompt_review,
+        music_prompt_artifact_digest,
+        require_recorded_machine_verification,
+        write_music_prompt_document,
+    )
+
+    target = tmp_path / "20-documentation/suno-prompts.json"
+    target.parent.mkdir()
+    state = tmp_path / "workflow-state.json"
+    write_music_prompt_document(
+        target,
+        state,
+        _document,
+        MarkdownMigrationDecision.NOT_REQUIRED,
+        machine_verify=require_recorded_machine_verification,
+    )
+    unapproved = _prompt_state(tmp_path)
+    assert unapproved.returncode == 20
+    assert json.loads(unapproved.stdout)["next"]
+    finalize_music_prompt_review(
+        target,
+        state,
+        decision="approve",
+        source="automatic",
+        expected_artifact_digest=music_prompt_artifact_digest(target),
+    )
+    before = {path: path.read_bytes() for path in (target, target.with_suffix(".html"), state)}
+    for _ in range(2):
+        approved = _prompt_state(tmp_path)
+        assert approved.returncode == 0, approved.stdout
+        assert json.loads(approved.stdout)["decision"] == "skip"
+    assert all(path.read_bytes() == data for path, data in before.items())
+
+    changed = _document()
+    changed["entries"][0]["style"] = "changed approved-looking prompt"
+    write_music_prompt_document(
+        target,
+        state,
+        lambda: changed,
+        MarkdownMigrationDecision.NOT_REQUIRED,
+        machine_verify=require_recorded_machine_verification,
+    )
+    stale = _prompt_state(tmp_path)
+    assert stale.returncode == 20
+    assert json.loads(stale.stdout)["next"]
+
+
+@pytest.mark.parametrize("damage", ["broken_json", "empty_entries", "missing_html", "changed_json", "legacy_approval"])
+def test_prompt_resume_blocks_damaged_or_unbound_approval(tmp_path: Path, damage: str) -> None:
+    from tests.application.documents.test_music_prompt import _document
+    from youtube_automation.application.documents.migration import MarkdownMigrationDecision
+    from youtube_automation.application.documents.music_prompt import (
+        finalize_music_prompt_review,
+        music_prompt_artifact_digest,
+        require_recorded_machine_verification,
+        write_music_prompt_document,
+    )
+
+    target = tmp_path / "20-documentation/suno-prompts.json"
+    target.parent.mkdir()
+    state = tmp_path / "workflow-state.json"
+    write_music_prompt_document(
+        target,
+        state,
+        _document,
+        MarkdownMigrationDecision.NOT_REQUIRED,
+        machine_verify=require_recorded_machine_verification,
+    )
+    finalize_music_prompt_review(
+        target,
+        state,
+        decision="approve",
+        source="automatic",
+        expected_artifact_digest=music_prompt_artifact_digest(target),
+    )
+    if damage == "broken_json":
+        target.write_text("not-json", encoding="utf-8")
+    elif damage == "empty_entries":
+        document = _document()
+        document["entries"] = []
+        target.write_text(json.dumps(document), encoding="utf-8")
+    elif damage == "missing_html":
+        target.with_suffix(".html").unlink()
+    elif damage == "changed_json":
+        document = _document()
+        document["entries"][0]["style"] = "changed"
+        target.write_text(json.dumps(document), encoding="utf-8")
+    else:
+        legacy = json.loads(state.read_text(encoding="utf-8"))
+        del legacy["music_prompt_approved_digest"]
+        state.write_text(json.dumps(legacy), encoding="utf-8")
+    before = state.read_bytes()
+
+    result = _prompt_state(tmp_path)
+
+    assert result.returncode == 20, result.stdout + result.stderr
+    assert json.loads(result.stdout)["decision"] == "blocked"
+    assert json.loads(result.stdout)["next"]
+    assert state.read_bytes() == before

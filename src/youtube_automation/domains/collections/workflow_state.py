@@ -165,6 +165,7 @@ class WorkflowStateDocument(TypedDict, total=False):
     assets: AssetsDocument
     handoff: HandoffDocument
     human_tasks: HumanTasksDocument
+    music_prompt_approved_digest: str
     music_pair_selection: MusicPairSelectionDocument
     upload: UploadDocument
     post_upload: PostUploadDocument
@@ -745,6 +746,17 @@ class WorkflowState(MutableMapping[str, JSONValue]):
         typed_planning.set_known("final_title", final_title)
         typed_planning.set_known("target_persona", target_persona)
         self.touch()
+
+    @property
+    def music_prompt_approved_digest(self) -> str | None:
+        return _optional_string(
+            self._data, "music_prompt_approved_digest", "workflow-state.json::music_prompt_approved_digest"
+        )
+
+    def record_music_prompt_approval(self, artifact_digest: str) -> None:
+        """承認した prompt の正本 digest と完了 flag を一緒に記録する。"""
+        self.set_asset("music_prompts", True)
+        self._data["music_prompt_approved_digest"] = artifact_digest
 
     def record_thumbnail_review_selection(self, selection: Mapping[str, JSONValue]) -> None:
         """承認済み thumbnail review selection を記録する。"""
