@@ -1,0 +1,1 @@
+- Terraform の 4 stack に認証不要の静的 CI（fmt / validate と r2 mock test）を追加し、CI と stack の Terraform バージョン整合性を検証する。
