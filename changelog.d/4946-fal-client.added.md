@@ -1,1 +1,2 @@
 - fal.ai queue・storage API の安全な HTTP client と `FAL_KEY` の secret 解決を追加
+- fal の GET / download はリダイレクトを拒否し、HTTPS と host allowlist の境界を維持します。

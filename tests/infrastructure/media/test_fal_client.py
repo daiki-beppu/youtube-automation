@@ -14,6 +14,7 @@ from youtube_automation.infrastructure.media import fal_client
 
 def _json_response(body: object) -> Mock:
     response = Mock(spec=requests.Response)
+    response.status_code = 200
     response.json.return_value = body
     return response
 
@@ -73,21 +74,23 @@ def test_get_url_accepts_allowlisted_hosts(url: str, monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(fal_client, "get_api_key", Mock(return_value="key"))
     monkeypatch.setattr(fal_client.requests, "get", get)
     assert fal_client.get_url(url, timeout=4) == {"status": "COMPLETED"}
-    get.assert_called_once_with(url, headers={"Authorization": "Key key"}, timeout=4)
+    get.assert_called_once_with(url, headers={"Authorization": "Key key"}, timeout=4, allow_redirects=False)
 
 
 def test_download_returns_bytes_without_auth(monkeypatch: pytest.MonkeyPatch) -> None:
     response = Mock(spec=requests.Response)
+    response.status_code = 200
     response.content = b"video"
     get = Mock(return_value=response)
     monkeypatch.setattr(fal_client.requests, "get", get)
     assert fal_client.download("https://cdn.fal.media/video.mp4", timeout=8) == b"video"
-    get.assert_called_once_with("https://cdn.fal.media/video.mp4", timeout=8)
+    get.assert_called_once_with("https://cdn.fal.media/video.mp4", timeout=8, allow_redirects=False)
 
 
 def test_errors_do_not_expose_api_key_or_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     secret = "secret-must-not-leak"
     response = Mock(spec=requests.Response)
+    response.status_code = 200
     response.status_code = 422
     response.raise_for_status.side_effect = requests.HTTPError(secret, response=response)
     monkeypatch.setattr(fal_client, "get_api_key", Mock(return_value=secret))
@@ -105,6 +108,7 @@ def test_upload_file_initiates_then_puts_bytes(tmp_path: Path, monkeypatch: pyte
         {"upload_url": "https://signed-storage.example/put", "file_url": "https://cdn.fal.media/input.png"}
     )
     put_response = Mock(spec=requests.Response)
+    put_response.status_code = 200
     post = Mock(return_value=initiate)
     put = Mock(return_value=put_response)
     monkeypatch.setattr(fal_client, "get_api_key", Mock(return_value="fal-secret"))
@@ -129,3 +133,35 @@ def test_upload_file_initiates_then_puts_bytes(tmp_path: Path, monkeypatch: pyte
         headers={"Content-Type": "image/png"},
         timeout=20,
     )
+
+
+@pytest.mark.parametrize("operation", ["get_url", "download"])
+@pytest.mark.parametrize("target", ["http://outside.invalid/private", "https://outside.invalid/private"])
+def test_redirect_is_rejected_without_following(monkeypatch: pytest.MonkeyPatch, operation: str, target: str) -> None:
+    class RedirectAdapter(requests.adapters.BaseAdapter):
+        def __init__(self) -> None:
+            self.urls: list[str] = []
+
+        def send(self, request, **kwargs):
+            self.urls.append(request.url)
+            response = requests.Response()
+            response.request = request
+            response.url = request.url
+            response.status_code = 302 if len(self.urls) == 1 else 200
+            response.headers["Location"] = target
+            response._content = b"{}"
+            return response
+
+        def close(self) -> None:
+            pass
+
+    adapter = RedirectAdapter()
+    with requests.Session() as session:
+        session.trust_env = False
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+        monkeypatch.setattr(fal_client.requests, "get", session.get)
+        monkeypatch.setattr(fal_client, "get_api_key", lambda: "test-key")
+        with pytest.raises(GeneratorError, match="redirect"):
+            getattr(fal_client, operation)("https://v3.fal.media/output", timeout=1)
+    assert adapter.urls == ["https://v3.fal.media/output"]

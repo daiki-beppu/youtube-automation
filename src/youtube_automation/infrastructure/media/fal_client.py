@@ -88,11 +88,18 @@ def submit(path: str, payload: Mapping[str, object], *, timeout: float) -> dict[
     return _response_json(response, "submit")
 
 
+def _reject_redirect(response: requests.Response) -> None:
+    status = _status(response)
+    if status is not None and 300 <= status < 400:
+        raise GeneratorError("fal redirect は許可されていません")
+
+
 def get_url(url: str, *, timeout: float) -> dict[str, object]:
     """allowlist 済みの fal URL へ認証付き GET を送る。"""
     safe_url = _validated_url(url)
     try:
-        response = requests.get(safe_url, headers=_authorization_headers(), timeout=timeout)
+        response = requests.get(safe_url, headers=_authorization_headers(), timeout=timeout, allow_redirects=False)
+        _reject_redirect(response)
         response.raise_for_status()
     except requests.RequestException as error:
         _raise_transport_error("GET", error)
@@ -103,7 +110,8 @@ def download(url: str, *, timeout: float) -> bytes:
     """allowlist 済みの fal media URL から認証情報なしで bytes を取得する。"""
     safe_url = _validated_url(url)
     try:
-        response = requests.get(safe_url, timeout=timeout)
+        response = requests.get(safe_url, timeout=timeout, allow_redirects=False)
+        _reject_redirect(response)
         response.raise_for_status()
     except requests.RequestException as error:
         _raise_transport_error("download", error)
