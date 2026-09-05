@@ -20,10 +20,6 @@
           {
             "type": "command",
             "command": "for f in $CLAUDE_FILE_PATHS; do case \"$f\" in *auth/client_secrets.json|*auth/token.json|*.env) echo \"BLOCKED: $f は AI から直接編集禁止。専用ツール経由で更新してください\" >&2; exit 2;; esac; done"
-          },
-          {
-            "type": "command",
-            "command": "for f in $CLAUDE_FILE_PATHS; do case \"$f\" in channels|channels/*|*/channels|*/channels/*|collections|collections/*|*/collections|*/collections/*|config/channel|config/channel/*|*/config/channel|*/config/channel/*|assets|assets/*|*/assets|*/assets/*|data|data/*|*/data|*/data/*|auth|auth/*|*/auth|*/auth/*) uv run yt-workspace-guard check $CLAUDE_FILE_PATHS; exit $?;; esac; done; exit 0"
           }
         ]
       },
@@ -44,16 +40,6 @@
           {
             "type": "command",
             "command": "uv run --project \"$CLAUDE_PROJECT_DIR\" yt-progress-hook"
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "uv run yt-workspace-guard context"
           }
         ]
       }
