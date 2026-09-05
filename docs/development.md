@@ -179,13 +179,15 @@ GitHub Actions では独立した `evals.yml` を nightly / `workflow_dispatch` 
 
 ### 2. 検証（編集後に実行するもの）
 
-SKILL.md frontmatter だけを検証する最短入口は `yt-skills lint`。全 skill は引数なし、変更対象だけなら skill 名を列挙する。
+skill の静的契約を検証する入口は `yt-skills lint`。全 skill は引数なし、変更対象だけなら skill 名を列挙する。
 
 ```bash
 uv run yt-skills lint [<skill>...]
 ```
 
-これは strict YAML / `description:` double-quote の軽量検証であり、skill 本文・docs・features catalog・配布経路の契約は対象外。広い契約は目的を分けて pytest で確認する:
+各 skill の strict YAML / `description:` double-quote に加え、本文の成果物宣言、フラグ表と mode reference の整合、SKILL.md の行数上限、委譲先宣言・深さ・循環を検証する。引数なしの全件実行では、skill-config の登録・既定値ファイル・移行経路と未移行 override、配布対象 skill 数、運用成果物の契約も確認する。skill 名を指定した実行ではこれらの全体検査を省くため、最終確認は引数なしで行う。既存 allowlist の指摘は表示されるが失敗扱いにならない。
+
+lint は本文の意味や実際の API 操作、docs / features catalog の横断整合、wheel からの配布動作を保証しない。対応する契約は目的を分けて pytest で確認する:
 
 ```bash
 # 全 skill 横断の実行契約（frontmatter strict YAML / docs・配布参照整合）
@@ -215,7 +217,7 @@ uv run pytest tests/repo/test_skills_sync_installed_wheel.py -q
 
 下流に届けるには以下の 2 リポジトリ横断の一巡が必要（skill 1 行の修正でも同じ）:
 
-1. `CHANGELOG.md` の `[Unreleased]` に追記（`.claude/skills/` は**実コード扱い**。CI の changelog ジョブでゲート）
+1. `changelog.d/<issue>-<slug>.<type>.md` に変更履歴の fragment を追加（`.claude/skills/` は**実コード扱い**。書式は [changelog.d/README.md](../changelog.d/README.md)、CI の changelog ジョブでゲート）
 2. PR 作成 → CI green → merge
 3. upstream で `/automation-release`（prepare → リリース PR → tag push → Release publish）
 4. 下流リポジトリで `/automation --update`（pin bump → `uv lock` → `yt-skills sync` → コミット）
@@ -230,7 +232,7 @@ uv run pytest tests/repo/test_skills_sync_installed_wheel.py -q
 - [ ] 付属スクリプト・参照資料は `.claude/skills/<name>/references/` に配置
 - [ ] 契約テスト `tests/repo/test_<name>_skill_contract.py` を追加（雛形は既存の `tests/repo/test_video_description_skill_contract.py` / `tests/repo/test_flop_analysis_skill_contract.py` を参照。SKILL.md の必須節・参照ファイルの存在・frontmatter 記述を機械担保する）
 - [ ] `docs/features.md` のカタログに 1 行追加し、冒頭の「全 **N** 個」を更新
-- [ ] `CHANGELOG.md` の `[Unreleased]` に追記（`.claude/skills/` は実コード扱いでゲート対象）
+- [ ] `changelog.d/<issue>-<slug>.<type>.md` を追加し、`python .github/scripts/validate-changelog-fragments.py` で検証（`.claude/skills/` は実コード扱いでゲート対象）
 
 ### fork 運用者向け: upstream owner 参照の一覧
 
@@ -303,11 +305,13 @@ devShell の運用:
 
 通常の PR は `changelog.d/<issue>-<slug>.<type>.md` という PR 固有ファイルへ変更履歴を
 書き、リリース prepare で `uv run yt-changelog-compile` を実行して `[Unreleased]` へ
-集約する。移行中の PR との後方互換のため、CI は `CHANGELOG.md` の直接編集も許容する。
+集約する。通常 PR では `CHANGELOG.md` を直接編集しない。直接編集は `release/*` の release prepare だけが例外（`CLAUDE.md` の規約）。CI が後方互換のため直接編集を受理することは、通常 PR での推奨手順を変えない。
+
+`<type>` は added / changed / deprecated / removed / fixed / security / migration のいずれかで、本文は全非空行を `- ` 始まりの bullet にする。書式の正本は [changelog.d/README.md](../changelog.d/README.md)。`python .github/scripts/validate-changelog-fragments.py` で全 fragment を検証する。
 
 ### CHANGELOG.md の union merge（移行期の conflict 緩和）
 
-CHANGELOG ゲートにより並行 PR が `[Unreleased]` 先頭へ同時に追記するため、`.gitattributes` で `CHANGELOG.md merge=union` を指定している（issue #2155）。両側の追記行を conflict にせず機械的に取り込むが、union merge には以下の副作用があるため merge 後は `[Unreleased]` を目視確認すること:
+fragment 導入前の並行 PR による `[Unreleased]` への同時追記に対応するため、`.gitattributes` で `CHANGELOG.md merge=union` を指定している（issue #2155）。通常 PR は上記の fragment 手順を使う。両側の追記行を conflict にせず機械的に取り込むが、union merge には以下の副作用があるため merge 後は `[Unreleased]` を目視確認すること:
 
 - **重複行**: 両ブランチが同一内容の行を追記した場合、その行が 2 回残ることがある
 - **順序非保証**: 追記行の並び順は merge 順に依存し、時系列と一致しない場合がある
