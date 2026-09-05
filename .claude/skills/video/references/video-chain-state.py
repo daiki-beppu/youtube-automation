@@ -7,9 +7,10 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
-from youtube_automation.core.errors import ValidationError
+from youtube_automation.application.master_video_review import require_approved_master_video
+from youtube_automation.core.errors import ReviewError, ValidationError, WorkflowStateError
 from youtube_automation.domains.documents.video_description import read_video_description_metadata
 
 EXIT_SKIP = 0
@@ -24,10 +25,14 @@ class StateResult(TypedDict):
     decision: str
     reason: str
     artifacts: list[str]
+    next: NotRequired[str]
 
 
 def _result(step: str, decision: str, reason: str, artifacts: list[str]) -> StateResult:
-    return {"step": step, "decision": decision, "reason": reason, "artifacts": artifacts}
+    result: StateResult = {"step": step, "decision": decision, "reason": reason, "artifacts": artifacts}
+    if step == "generate" and decision in {"run", "blocked"}:
+        result["next"] = "video --generate: 動画を生成・修復し、既存動画はfull reviewで再承認してください"
+    return result
 
 
 def _workflow_state(collection: Path) -> dict[str, object]:
@@ -58,6 +63,8 @@ def _master_video_path(collection: Path, value: object) -> tuple[Path | None, St
     relative = Path(value)
     if relative.is_absolute() or ".." in relative.parts:
         return None, _result("generate", "blocked", "master_video_path_invalid", [])
+    if len(relative.parts) == 1:
+        relative = Path("01-master") / relative
     return collection / relative, None
 
 
@@ -74,12 +81,16 @@ def evaluate(collection: Path, step: str) -> tuple[int, StateResult]:
         code = EXIT_RUN if decision == "run" else EXIT_BLOCKED
         return code, _result(step, decision, invalid["reason"], [])
     assert path is not None and isinstance(value, str)
-    relative = Path(value)
+    relative = path.relative_to(collection)
     if not path.is_file():
         decision = "run" if step == "generate" else "blocked"
         code = EXIT_RUN if step == "generate" else EXIT_BLOCKED
         return code, _result(step, decision, "master_video_file_missing", [relative.as_posix()])
     if step == "generate":
+        try:
+            require_approved_master_video(path, collection / "workflow-state.json")
+        except (ReviewError, WorkflowStateError, OSError, ValueError) as exc:
+            return EXIT_BLOCKED, _result(step, "blocked", str(exc), [relative.as_posix()])
         return EXIT_SKIP, _result(step, "skip", "master_video_exists", [relative.as_posix()])
 
     assets = state.get("assets")

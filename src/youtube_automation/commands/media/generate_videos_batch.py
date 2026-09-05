@@ -11,10 +11,12 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from youtube_automation.application.master_video_review import approve_generated_master_video
 from youtube_automation.configuration import channel_dir
 from youtube_automation.configuration.skills import load_channel_override
 from youtube_automation.core.errors import (
     ConfigError,
+    ReviewError,
     ValidationError,
     WorkflowStateError,
     WorkflowStateSectionTypeError,
@@ -176,10 +178,12 @@ def _update_workflow_state(collection: Path) -> str:
         raise ValidationError(f"生成成功後も 01-master/*.mp4 が見つかりません: {collection}")
 
     def record_master_video(state: WorkflowState) -> None:
-        state.record_master_video(video.name)
+        approve_generated_master_video(state, video)
 
     try:
         update_workflow_state(paths.workflow_state_path, record_master_video)
+    except ReviewError as error:
+        raise ValidationError(f"生成された master video を読み込めません: {video}: {error}") from error
     except WorkflowStateError as error:
         if isinstance(error.__cause__, OSError) and "could not be written" in str(error):
             raise error.__cause__ from error

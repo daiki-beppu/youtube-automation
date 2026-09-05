@@ -1,0 +1,2 @@
+- 動画制作の再開時に既存review ownerの承認digestとprobeを照合し、空・破損・改変した動画を完了扱いしないよう修正しました。ownerが記録するファイル名を01-master配下へ解決し、正常な承認済み動画は再生成せず再開します。
+- `yt-generate-videos-batch` と `yt-wf-batch` の一括生成でも `assets.master_video` と同じ遷移で承認digestを記録し、バッチ生成した動画の再開が blocked にならないよう修正しました。

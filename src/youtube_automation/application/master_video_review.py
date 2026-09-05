@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import secrets
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -15,7 +16,7 @@ from youtube_automation.domains.collections.workflow_state import update as upda
 from youtube_automation.domains.documents.review import ReviewCandidate
 from youtube_automation.infrastructure.browser import open_local_file
 from youtube_automation.infrastructure.browser.selection_broker import SelectionBroker
-from youtube_automation.infrastructure.media.probe import probe_video
+from youtube_automation.infrastructure.media.probe import VideoProbe, probe_video
 
 VideoReviewKind = Literal["preview", "full"]
 ReviewTransport = Literal["web", "terminal"]
@@ -44,6 +45,7 @@ class _VideoSource(ReviewSource):
         self.kind = kind
         self.presentation = presentation
         self.path: Path | None = None
+        self.file_digest: str | None = None
 
     @property
     def artifact(self):
@@ -65,15 +67,11 @@ class _VideoSource(ReviewSource):
         _require_pending_state(root)
         _validate_presentation(self.presentation)
         suffix = "Preview" if self.kind == "preview" else "Master"
-        paths = tuple(
-            p.resolve() for p in (root / "01-master").glob(f"*-{suffix}.mp4") if p.is_file() and not p.is_symlink()
-        )
+        paths = tuple(p.resolve() for p in (root / "01-master").glob(f"*-{suffix}.mp4") if _is_regular_file(p))
         if len(paths) != 1:
             raise ReviewError(f"{self.kind} master videoを一意に解決できません")
         self.path = paths[0]
-        probe = probe_video(self.path)
-        if probe is None:
-            raise ReviewError(f"ffprobeでmaster videoを検証できません: {self.path}")
+        probe = _require_video_probe(self.path)
         cid = f"{self.kind}:{self.path.name}"
         label = (
             f"preview（{probe.duration_seconds:.0f}秒短尺確認）"
@@ -92,7 +90,8 @@ class _VideoSource(ReviewSource):
             self.presentation.overlays,
             self.presentation.full_output_outlook,
         )
-        digest = hashlib.sha256((sha256_file(self.path) + "\0" + "\0".join(values)).encode()).hexdigest()
+        self.file_digest = sha256_file(self.path)
+        digest = hashlib.sha256((self.file_digest + "\0" + "\0".join(values)).encode()).hexdigest()
         return (
             ReviewCandidate(
                 cid,
@@ -122,7 +121,10 @@ class _VideoSource(ReviewSource):
 
     def commit(self, candidate):
         if self.kind == "full":
-            _record_master_video(self.collection.resolve() / "workflow-state.json", candidate.id.split(":", 1)[1])
+            assert self.file_digest is not None
+            _record_master_video(
+                self.collection.resolve() / "workflow-state.json", candidate.id.split(":", 1)[1], self.file_digest
+            )
 
 
 def review_master_video(
@@ -172,14 +174,53 @@ def _validate_presentation(presentation: VideoReviewPresentation) -> None:
             raise ValidationError(f"{label}は1〜1024文字で指定してください")
 
 
-def _record_master_video(state_path: Path, filename: str) -> None:
+def require_approved_master_video(path: Path, state_path: Path) -> None:
+    """動画の実体と保存済み承認を、再レビューせず読み取りだけで検証する。"""
+    _require_video_probe(path)
+    state = read_workflow_state(state_path)
+    digest = state.master_video_approved_digest
+    if digest is None:
+        raise ReviewError("master video 承認 digest がありません。full reviewで再承認してください")
+    if not secrets.compare_digest(sha256_file(path), digest):
+        raise ReviewError("master video は承認後に変更されました。修復後にfull reviewで再承認してください")
+
+
+def approve_generated_master_video(state: WorkflowState, video: Path) -> None:
+    """自動生成ownerが `assets.master_video` と承認digestを同じ遷移で記録する。"""
+    state.record_master_video_approval(video.name, sha256_file(video))
+
+
+def _is_regular_file(path: Path) -> bool:
+    return path.is_file() and not path.is_symlink()
+
+
+def _require_video_probe(path: Path) -> VideoProbe:
+    if not _is_regular_file(path) or path.stat().st_size == 0:
+        raise ReviewError(f"master videoの実体がありません: {path}")
+    probe = probe_video(path)
+    if probe is None:
+        raise ReviewError(f"ffprobeでmaster videoを検証できません: {path}")
+    return probe
+
+
+def _record_master_video(state_path: Path, filename: str, digest: str) -> None:
     def transition(state: WorkflowState) -> None:
         assets = state.assets
-        if assets is None or assets.master_audio is None or assets.master_video is not None:
+        if (
+            assets is None
+            or assets.master_audio is None
+            or assets.master_video not in {None, filename, f"01-master/{filename}"}
+        ):
             raise WorkflowStateError("master video transition is no longer pending")
-        state.record_master_video(filename)
+        state.record_master_video_approval(filename, digest)
 
     update_workflow_state(state_path, transition)
 
 
-__all__ = ["MasterVideoReviewResult", "VideoReviewPresentation", "review_master_video"]
+__all__ = [
+    "MasterVideoReviewResult",
+    "VideoReviewPresentation",
+    "approve_generated_master_video",
+    "require_approved_master_video",
+    "review_master_video",
+]
