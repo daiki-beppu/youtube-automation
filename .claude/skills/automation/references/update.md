@@ -380,7 +380,7 @@ pin 形式ごとの指定方法と通常のオプションは `uv run yt-automat
 
 途中失敗時は表示された失敗ステップの原因を解消し、実行時のフラグに応じて復旧する。
 
-- `--commit` 未指定: **同コマンド + `--allow-dirty`** で未完了の工程を再実行する。
+- `--commit` 未指定の途中失敗: **同コマンド + `--allow-dirty`** で未完了の工程を再実行する。
 - `--commit` 指定（commit ステップ自体の失敗も含む）: 残った追従差分を手動確認して個別 commit する。更新工程が未完了なら **`--commit` を外し `--allow-dirty` を付けて** 再実行し、完了後の差分を確認して個別 commit する。無関係な既存の tracked / staged / untracked 差分は含めない。
 
 `--commit` は各起動の apply 前後で新たに status に現れた path だけを対象にする（#4911）。前回失敗時の差分は次回には開始前の既存差分となるため、`--allow-dirty --commit` で前回分まで自動 commit する復旧には使わない。
@@ -580,4 +580,3 @@ git commit -m "chore: youtube-automation <target_ref> への追従 (#N)"
 - `src/youtube_automation/commands/system/automation_update.py`（upstream リポ）— 本スキルが委譲する機械的手順の実体（`yt-automation-update check` / `apply`）
 - `/automation-release`（upstream リポ）— リリース PR を作成し CHANGELOG.md を昇格させる upstream 側スキル（本スキルが読み取るリリース本文を生成する）
 - `/setup` — 追従後に `yt-doctor` で WARNING / FAILED が出た場合の再診断入口、および `[HUMAN STEP]` の書き方の参考実装
-
