@@ -29,7 +29,7 @@ def raise_transport_error(operation: str, error: requests.RequestException) -> N
     if isinstance(error, requests.HTTPError):
         status = http_status(error.response)
         detail = f" (status={status})" if status is not None else ""
-        raise GeneratorError(f"{operation} HTTP error{detail}") from None
+        raise GeneratorError(f"{operation} HTTP error{detail}", status_code=status) from None
     raise GeneratorError(f"{operation} に失敗しました") from None
 
 

@@ -288,6 +288,13 @@ def _persist_generated_video(operation, output_path: Path) -> bool:
     return True
 
 
+def resolve_smooth_codec(compression: dict | None) -> tuple[int, str]:
+    """ループ補正用の CRF / preset を共通設定から解決する。"""
+    if compression and compression.get("enabled", True):
+        return int(compression.get("crf", 22)), str(compression.get("preset", "slow"))
+    return 18, "slow"
+
+
 def _finalize_generated_video(
     output_path: Path,
     effective_model: str,
@@ -303,8 +310,7 @@ def _finalize_generated_video(
     smooth_loop が失敗した場合は従来の compress/strip_audio にフォールバック。
     """
     print(f"  {progress_fmt.format_step(3, 3, '後処理（スムースループ / 圧縮 / 音声除去）')}")
-    crf = int(compression.get("crf", 22)) if compression and compression.get("enabled", True) else 18
-    preset = str(compression.get("preset", "slow")) if compression and compression.get("enabled", True) else "slow"
+    crf, preset = resolve_smooth_codec(compression)
     smoothed = smooth_loop(output_path, crossfade_sec=0.5, trim_tail_sec=1.0, crf=crf, preset=preset)
     if not smoothed:
         print("  [Warn]   smooth_loop 失敗 → compress/strip_audio にフォールバック")

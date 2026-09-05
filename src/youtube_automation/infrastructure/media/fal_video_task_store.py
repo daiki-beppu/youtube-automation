@@ -42,6 +42,13 @@ def state_path(output_path: Path, *, channel_root: Path | None = None) -> Path:
     return state_file(output_path, root=_resolve_channel_root(channel_root), directory=_DIRECTORY)
 
 
+def input_image_path(output_path: Path, *, channel_root: Path | None = None) -> Path:
+    """submit に渡す事前リサイズ済み画像を channel tmp 配下に state と同じキーで置く。"""
+    return state_file(output_path, root=_resolve_channel_root(channel_root), directory="fal-video-inputs").with_suffix(
+        ".png"
+    )
+
+
 def save(
     output_path: Path,
     image_path: Path,

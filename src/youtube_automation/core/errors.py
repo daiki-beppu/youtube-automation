@@ -132,6 +132,14 @@ class UploadJournalSaveError(UploadJournalError):
 class GeneratorError(AutomationError):
     """返信生成バックエンドの失敗（API エラー・レスポンス不正等）"""
 
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+
+
+class GenerationFailedError(GeneratorError):
+    """生成 job の終端失敗。同じ request の再開では回復しない。"""
+
 
 class DiscoveryRegistryError(AutomationError):
     """ローカル server discovery registry の所有・容量契約エラー。"""
