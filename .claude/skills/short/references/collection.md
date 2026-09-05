@@ -39,13 +39,29 @@ bash .claude/skills/short/references/generate-shorts.sh <collection-path>
 
 ## プレビュー・投稿・state を確認する
 
+生成に成功した `01-master/shorts/short-NN-<label>.mp4` の絶対パスと番号を全件列挙し、各動画をプレビューする。`NN` を整数（`01` → `1`）として以下の `<short-num>` に渡す。同じ番号が複数ある場合や生成予定の番号が欠けた場合は投稿前に解消する。番号なしコマンドは legacy `01-master/short.mp4` の単件用で、番号付き生成物の全件投稿には使わない。
+
+番号ごとに plan の動画対象・公開予定を確認する。
+
 ```bash
-open <collection>/01-master/shorts/short-01-*.mp4
-uv run yt-upload-shorts <collection-path> --plan
-uv run yt-upload-shorts <collection-path>
+uv run yt-upload-shorts <collection-path> --short-num <short-num> --plan
 ```
 
-投稿後、`workflow-state.json::post_upload.shorts` に `short_num`, `video_id`, `publish_at`, `uploaded_at`, `title` が upsert されたことを確認する。同じ `short_num` は置換、別番号は append、番号なし投稿は `short_num: null` とする。
+対象番号・動画・投稿内容を提示し、外部投稿の承認を得る。同じ対象・内容についてセッション内で得た承認は再利用する。承認済みの各番号について次を 1 回ずつ実行し、直後に結果を判定する。
+
+```bash
+uv run yt-upload-shorts <collection-path> --short-num <short-num>
+```
+
+| 結果の `action` | 判定・次の行動 |
+|---|---|
+| `short_uploaded` | 結果の `details.short_num`・`details.video_id` と `workflow-state.json::post_upload.shorts` の同じ番号の記録を照合する。一致し、`publish_at`・`uploaded_at` が記録されていればその番号は成功 |
+| `short_upload_blocked` | 未投稿。`details.reason` と未完了番号を報告し、間隔制約が解消してから同じ番号で再開する。exit 0 でも成功に数えない |
+| `short_upload_failed` または非 0 終了 | 失敗。エラーと対象番号を報告する。再試行前に state と投稿 CLI の結果を確認する。投稿成否を確定できない場合は確認が済むまで止め、既に投稿済みの番号を重複投稿しない |
+
+state と結果が一致しない場合も未完了として止め、state を手書きで成功へ変更しない。同じ `short_num` の記録は CLI が置換し、別番号は追加する。
+
+生成した全番号について成功・blocked・失敗・未実行を報告する。成功済み番号は再実行せず、残る番号の再開コマンドを番号付きで示す。collection 型は投稿と state 照合までがこの skill の責務であり、全番号の照合が済むまでは完了としない。
 
 ## Gotchas
 
