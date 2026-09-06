@@ -257,3 +257,62 @@ def test_status_cli_reports_unknown_schema_version_as_error(tmp_path, capsys):
     assert exit_code != 0
     assert output["ok"] is False
     assert "schema_version" in output["error"]
+
+
+def test_pair_cli_returns_candidates_and_accepts_multiple_rejections(tmp_path, capsys, monkeypatch):
+    videos = [
+        {
+            "video_id": "win",
+            "title": "W",
+            "views": 3000,
+            "published_at": "2026-01-02",
+            "duration_iso": "PT10M",
+            "thumbnail_url": "w",
+        },
+        {
+            "video_id": "lose",
+            "title": "L",
+            "views": 100,
+            "published_at": "2026-01-01",
+            "duration_iso": "PT10M",
+            "thumbnail_url": "l",
+        },
+    ]
+    videos.extend(
+        {
+            "video_id": f"m{i}",
+            "title": "M",
+            "views": 500,
+            "published_at": "2025-01-01",
+            "duration_iso": "PT10M",
+            "thumbnail_url": "m",
+        }
+        for i in range(8)
+    )
+    thumbnails = tmp_path / "thumbs"
+    thumbnails.mkdir()
+    for video in videos:
+        (thumbnails / f"ref_{video['video_id']}.jpg").write_bytes(b"jpg")
+    competitor = {
+        "id": "UC",
+        "slug": "ref",
+        "name": "Ref",
+        "source": "self",
+        "videos": videos,
+        "thumbnails_dir": thumbnails,
+        "past_sessions": 0,
+    }
+    monkeypatch.setattr(
+        "youtube_automation.commands.analytics.truth_eye.load_skill_config", lambda _name: {"freshness_days": 3}
+    )
+    monkeypatch.setattr(
+        "youtube_automation.commands.analytics.truth_eye.load_truth_eye_population",
+        lambda _dir, freshness_days: ([competitor], set(), []),
+    )
+
+    exit_code = main(["pair", "--channel-dir", str(tmp_path), "--rejected", "other-1", "--rejected", "other-2"])
+
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert output["candidates"][0]["winner"]["video_id"] == "win"
+    assert output["warnings"] == []

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 import yaml
@@ -9,10 +9,12 @@ import yaml
 from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.analytics.truth_eye import (
     TRAINING_RECORD_SCHEMA_VERSION,
+    PAIR_THRESHOLDS,
     VIEWPOINTS,
     collect_training_status,
     read_training_record,
     seal_training_record,
+    select_pair_candidates,
     validate_sealed_draft,
     verify_training_record,
 )
@@ -233,3 +235,112 @@ def test_status_returns_latest_next_try_and_recurring_ai_only_names_only(tmp_pat
     assert status.last_next_try == {"viewpoint": "V03", "text": "try-6"}
     assert status.recurring_ai_only_viewpoints == ({"viewpoint_id": "V03", "name": "配色", "count": 4},)
     assert "secret" not in repr(status.recurring_ai_only_viewpoints)
+
+
+def test_pair_candidates_apply_thresholds_gap_tier_and_rotation(tmp_path):
+    assert (PAIR_THRESHOLDS.gap_days, PAIR_THRESHOLDS.maturity_days, PAIR_THRESHOLDS.min_ratio) == ((5, 14, 30), 14, 3)
+
+    def competitor(slug, winner_date, loser_date, sessions=0):
+        videos = [
+            {
+                "video_id": f"{slug}-w",
+                "title": "Winner",
+                "views": 3000,
+                "published_at": winner_date,
+                "duration_iso": "PT10M",
+                "thumbnail_url": "w",
+            },
+            {
+                "video_id": f"{slug}-l",
+                "title": "Loser",
+                "views": 100,
+                "published_at": loser_date,
+                "duration_iso": "PT10M",
+                "thumbnail_url": "l",
+            },
+        ]
+        videos.extend(
+            {
+                "video_id": f"{slug}-{index}",
+                "title": "middle",
+                "views": 500,
+                "published_at": "2026-01-01",
+                "duration_iso": "PT10M",
+                "thumbnail_url": "m",
+            }
+            for index in range(8)
+        )
+        thumbs = tmp_path / slug
+        thumbs.mkdir()
+        for video in videos:
+            (thumbs / f"{slug}_{video['video_id']}.jpg").write_bytes(b"jpg")
+        return {
+            "id": f"UC-{slug}",
+            "slug": slug,
+            "name": slug,
+            "source": "self",
+            "videos": videos,
+            "thumbnails_dir": thumbs,
+            "past_sessions": sessions,
+        }
+
+    result = select_pair_candidates(
+        [competitor("a", "2026-08-01", "2026-07-20"), competitor("b", "2026-08-01", "2026-07-29", sessions=2)],
+        used_video_ids=set(),
+        rejected_video_ids=(),
+        today=date(2026, 9, 6),
+    )
+
+    assert [candidate["competitor"]["slug"] for candidate in result["candidates"]] == ["b"]
+    assert result["candidates"][0]["reason"]["gap_tier"] == 5
+    assert result["candidates"][0]["winner"]["duration"] == "PT10M"
+
+
+def test_pair_candidate_excludes_used_missing_image_and_three_rejections(tmp_path):
+    videos = [
+        {
+            "video_id": "win",
+            "title": "W",
+            "views": 3000,
+            "published_at": "2026-08-01",
+            "duration_iso": "PT10M",
+            "thumbnail_url": "w",
+        },
+        {
+            "video_id": "lose",
+            "title": "L",
+            "views": 100,
+            "published_at": "2026-07-30",
+            "duration_iso": "PT10M",
+            "thumbnail_url": "l",
+        },
+    ]
+    videos += [
+        {
+            "video_id": f"m{i}",
+            "title": "M",
+            "views": 500,
+            "published_at": "2026-01-01",
+            "duration_iso": "PT10M",
+            "thumbnail_url": "m",
+        }
+        for i in range(8)
+    ]
+    competitor = {
+        "id": "UC",
+        "slug": "ref",
+        "name": "Ref",
+        "source": "self",
+        "videos": videos,
+        "thumbnails_dir": tmp_path,
+        "past_sessions": 0,
+    }
+
+    missing = select_pair_candidates([competitor], set(), (), date(2026, 9, 6))
+    used = select_pair_candidates([competitor], {"win"}, (), date(2026, 9, 6))
+    rejected = select_pair_candidates([competitor], set(), ("a", "b", "c"), date(2026, 9, 6))
+
+    assert missing["candidates"] == []
+    assert any(row["stage"] == "画像欠落除外後" for row in missing["funnel"])
+    assert used["candidates"] == []
+    assert rejected["candidates"] == []
