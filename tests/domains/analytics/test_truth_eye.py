@@ -6,10 +6,12 @@ from datetime import UTC, datetime
 import pytest
 import yaml
 
-from youtube_automation.core.errors import ValidationError
+from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.analytics.truth_eye import (
+    TRAINING_RECORD_SCHEMA_VERSION,
     VIEWPOINTS,
     collect_training_status,
+    read_training_record,
     seal_training_record,
     validate_sealed_draft,
     verify_training_record,
@@ -66,6 +68,8 @@ def test_seal_writes_record_and_sealed_pair(tmp_path):
     text = record.read_text(encoding="utf-8")
     metadata = yaml.safe_load(text.split("---", 2)[1])
     assert set(metadata) == {"schema_version", "menu", "channel", "pair", "sealed", "next_try"}
+    assert metadata["schema_version"] == TRAINING_RECORD_SCHEMA_VERSION
+    assert read_training_record(record).metadata == metadata
     assert metadata["next_try"] is None
     assert metadata["sealed"]["sha256"] == hashlib.sha256(sealed.read_bytes()).hexdigest()
     assert metadata["sealed"]["path"] == sealed.name
@@ -129,7 +133,7 @@ def test_verify_detects_tampering(tmp_path):
 
 def _record(*, next_try=None, phases=None) -> str:
     metadata = {
-        "schema_version": 1,
+        "schema_version": TRAINING_RECORD_SCHEMA_VERSION,
         "menu": "thumbnail",
         "channel": "reference",
         "pair": {"winner": {"video_id": "win"}, "loser": {"video_id": "lose"}},
@@ -175,6 +179,24 @@ def test_status_finds_resume_phase_and_phase_two_turns(tmp_path):
         ("20260903-thumbnail-reference-c.md", 3, 3),
         ("20260904-thumbnail-reference-d.md", 5, 0),
     ]
+
+
+def test_status_stops_on_unknown_schema_version(tmp_path):
+    training = tmp_path / "docs/benchmarks/training"
+    training.mkdir(parents=True)
+    unknown = TRAINING_RECORD_SCHEMA_VERSION + 1
+    record = training / "20260901-thumbnail-reference-a.md"
+    record.write_text(
+        _record(phases={0: "prepared"}).replace(
+            f"schema_version: {TRAINING_RECORD_SCHEMA_VERSION}", f"schema_version: {unknown}"
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ConfigError, match=f"schema_version.*{unknown}"):
+        read_training_record(record)
+    with pytest.raises(ConfigError, match="schema_version"):
+        collect_training_status(tmp_path)
 
 
 def test_status_returns_latest_next_try_and_recurring_ai_only_names_only(tmp_path):

@@ -36,8 +36,11 @@ VIEWPOINTS: tuple[Viewpoint, ...] = (
     Viewpoint("V12", "刺激している欲求", False),
 )
 
+TRAINING_RECORD_SCHEMA_VERSION = 1
+
 _VIDEO_FIELDS = ("video_id", "title", "views", "published_at", "duration")
 _SAFE_STEM_PART = re.compile(r"^[A-Za-z0-9._-]+$")
+_VIEWPOINT_ID = re.compile(r"V(?:0[1-9]|1[0-2])")
 
 
 @dataclass(frozen=True)
@@ -81,13 +84,12 @@ class TrainingRecord:
 def validate_sealed_draft(text: str) -> list[str]:
     """封印分析の固定フォーマットについて欠落項目を返す。"""
     missing: list[str] = []
-    lines = text.splitlines()
+    rows = _viewpoint_rows(text)
     for viewpoint in VIEWPOINTS:
-        matching = [line for line in lines if re.match(rf"^\|\s*{viewpoint.id}\s*\|", line)]
-        if not matching:
+        cells = next((row for row in rows if row[0] == viewpoint.id), None)
+        if cells is None:
             missing.append(viewpoint.id)
             continue
-        cells = [cell.strip() for cell in matching[0].strip().strip("|").split("|")]
         if len(cells) < 3 or not cells[1]:
             missing.append(f"{viewpoint.id}:winner")
         if len(cells) < 3 or not cells[2]:
@@ -133,7 +135,7 @@ def seal_training_record(
     digest = hashlib.sha256(sealed_draft.read_bytes()).hexdigest()
     sealed_at = timestamp.isoformat().replace("+00:00", "Z")
     metadata = {
-        "schema_version": 1,
+        "schema_version": TRAINING_RECORD_SCHEMA_VERSION,
         "menu": "thumbnail",
         "channel": channel,
         "pair": {side: pair_metadata[side] for side in ("winner", "loser")},
@@ -200,7 +202,7 @@ def read_training_record(path: Path) -> TrainingRecord:
     """訓練記録の frontmatter と Phase 0〜5 を読み戻す。"""
     text = path.read_text(encoding="utf-8")
     metadata = _parse_frontmatter(text)
-    if metadata.get("schema_version") != 1:
+    if metadata.get("schema_version") != TRAINING_RECORD_SCHEMA_VERSION:
         raise ConfigError(f"未対応の訓練記録 schema_version です: {metadata.get('schema_version')}")
     phases = tuple(_section_body(text, f"Phase {number}") for number in range(6))
     return TrainingRecord(path, metadata, phases)
@@ -232,6 +234,19 @@ def _section_body(text: str, heading: str) -> str:
     return match.group(1).strip() if match else ""
 
 
+def _viewpoint_rows(text: str) -> list[list[str]]:
+    """先頭セルが観点 ID の Markdown テーブル行を、セル配列にして返す。"""
+    return [
+        cells
+        for cells in (
+            [cell.strip() for cell in line.strip().strip("|").split("|")]
+            for line in text.splitlines()
+            if line.lstrip().startswith("|")
+        )
+        if _VIEWPOINT_ID.fullmatch(cells[0])
+    ]
+
+
 def _resume_phase(phases: tuple[str, ...]) -> int:
     for number, body in enumerate(phases):
         if not _phase_has_content(number, body):
@@ -240,31 +255,27 @@ def _resume_phase(phases: tuple[str, ...]) -> int:
 
 
 def _phase_has_content(number: int, body: str) -> bool:
+    """Phase 1 は空欄のままの照合表を未記入として扱い、他の Phase は本文の有無で判定する。"""
     if number != 1:
         return bool(body.strip())
-    rows = [line for line in body.splitlines() if re.match(r"^\|\s*V\d{2}\s*\|", line)]
+    rows = _viewpoint_rows(body)
     if not rows:
         return bool(body.strip())
-    for row in rows:
-        cells = [cell.strip() for cell in row.strip().strip("|").split("|")]
-        if len(cells) >= 4 and (cells[2] or cells[3]):
-            return True
-    return False
+    # Phase 1 の列は 観点 ID | 観点名 | 伸びた側 | 伸びなかった側。
+    return any(len(cells) >= 4 and (cells[2] or cells[3]) for cells in rows)
 
 
 def _phase_two_turns(body: str) -> int:
+    """Phase 2 の回答見出し（`A:` / `A1:` / `回答:`）を数え、往復数とする。
+
+    見出しの書式は skill 側テンプレート（#4990）が正本なので、テンプレート確定時に一致を確認する。
+    """
     return len(re.findall(r"^(?:[-*]\s*)?(?:\*\*)?(?:A\d*|回答)(?:\*\*)?\s*[:：]", body, re.MULTILINE))
 
 
 def _ai_only_viewpoint_ids(body: str) -> tuple[str, ...]:
-    found: list[str] = []
-    for line in body.splitlines():
-        if not line.lstrip().startswith("|"):
-            continue
-        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
-        if len(cells) >= 4 and re.fullmatch(r"V(?:0[1-9]|1[0-2])", cells[0]) and cells[1] == "AI だけ":
-            found.append(cells[0])
-    return tuple(found)
+    """Phase 4 照合表（観点 ID | 区分 | 人間の記述 | AI の記述）から「AI だけ」の観点 ID を返す。"""
+    return tuple(cells[0] for cells in _viewpoint_rows(body) if len(cells) >= 4 and cells[1] == "AI だけ")
 
 
 def _render_record(metadata: dict) -> str:

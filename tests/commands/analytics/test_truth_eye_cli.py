@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from youtube_automation.commands.analytics.truth_eye import main
-from youtube_automation.domains.analytics.truth_eye import VIEWPOINTS
+from youtube_automation.domains.analytics.truth_eye import TRAINING_RECORD_SCHEMA_VERSION, VIEWPOINTS
 
 
 def _draft() -> str:
@@ -218,11 +218,11 @@ def test_verify_cli_returns_nonzero_and_hashes_after_tamper(tmp_path, capsys):
     assert len(output["actual"]) == 64
 
 
-def test_status_cli_returns_training_summary(tmp_path, capsys):
+def _write_training_record(tmp_path, schema_version=TRAINING_RECORD_SCHEMA_VERSION):
     training = tmp_path / "docs/benchmarks/training"
-    training.mkdir(parents=True)
+    training.mkdir(parents=True, exist_ok=True)
     metadata = {
-        "schema_version": 1,
+        "schema_version": schema_version,
         "menu": "thumbnail",
         "channel": "reference",
         "pair": {},
@@ -236,9 +236,24 @@ def test_status_cli_returns_training_summary(tmp_path, capsys):
         encoding="utf-8",
     )
 
+
+def test_status_cli_returns_training_summary(tmp_path, capsys):
+    _write_training_record(tmp_path)
+
     exit_code = main(["status", "--channel-dir", str(tmp_path)])
 
     output = json.loads(capsys.readouterr().out)
     assert exit_code == 0
     assert output["incomplete_count"] == 1
     assert output["incomplete"][0]["resume_phase"] == 1
+
+
+def test_status_cli_reports_unknown_schema_version_as_error(tmp_path, capsys):
+    _write_training_record(tmp_path, schema_version=TRAINING_RECORD_SCHEMA_VERSION + 1)
+
+    exit_code = main(["status", "--channel-dir", str(tmp_path)])
+
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code != 0
+    assert output["ok"] is False
+    assert "schema_version" in output["error"]
