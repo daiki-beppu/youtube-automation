@@ -230,6 +230,23 @@ def select_pair_candidates(
     today: date,
 ) -> dict:
     """走査済み競合群から固定閾値に従って訓練ペア候補を選ぶ。"""
+    eligible_competitors = _eligible_competitors(competitors)
+    pairs = [
+        pair
+        for competitor, pool, pool_median in eligible_competitors
+        for pair in _competitor_pairs(competitor, pool, pool_median, today)
+    ]
+    selected_tier = _selected_gap_tier(pairs)
+    tier_pairs = [pair for pair in pairs if pair["reason"]["gap_tier"] == selected_tier]
+    unseen = [pair for pair in tier_pairs if _pair_is_unseen(pair, used_video_ids)]
+    with_images = [pair for pair in unseen if _pair_images_exist(pair)]
+    final = _exclude_rejected(with_images, rejected_video_ids)
+    final.sort(key=lambda pair: (pair["reason"]["past_sessions"], -pair["reason"]["ratio"]))
+    funnel = _pair_funnel(competitors, eligible_competitors, pairs, selected_tier, unseen, with_images, final)
+    return {"candidates": final, "funnel": funnel, "bottleneck": _bottleneck(funnel), "warnings": []}
+
+
+def _eligible_competitors(competitors: list[dict]) -> list[tuple[dict, list[dict], float]]:
     eligible_competitors: list[tuple[dict, list[dict], float]] = []
     for competitor in competitors:
         pool = [
@@ -240,57 +257,66 @@ def select_pair_candidates(
         ]
         if len(pool) >= PAIR_THRESHOLDS.min_pool_size:
             eligible_competitors.append((competitor, pool, float(median(int(video["views"]) for video in pool))))
+    return eligible_competitors
 
-    pairs: list[dict] = []
-    for competitor, pool, pool_median in eligible_competitors:
-        per_winner: dict[str, dict] = {}
-        for first_index, first in enumerate(pool):
-            for second in pool[first_index + 1 :]:
-                winner, loser = sorted((first, second), key=lambda video: int(video["views"]), reverse=True)
-                newer_date = max(_published_date(winner), _published_date(loser))
-                if (today - newer_date).days < PAIR_THRESHOLDS.maturity_days:
-                    continue
-                loser_views = int(loser["views"])
-                winner_views = int(winner["views"])
-                if loser_views < PAIR_THRESHOLDS.min_loser_views or not loser_views:
-                    continue
-                ratio = winner_views / loser_views
-                if ratio < PAIR_THRESHOLDS.min_ratio or winner_views < pool_median or loser_views > pool_median:
-                    continue
-                day_gap = abs((_published_date(winner) - _published_date(loser)).days)
-                tier = next((tier for tier in PAIR_THRESHOLDS.gap_days if day_gap <= tier), None)
-                if tier is None:
-                    continue
-                candidate = _pair_payload(competitor, winner, loser, day_gap, tier, ratio, pool_median)
-                current = per_winner.get(str(winner["video_id"]))
-                if current is None or (day_gap, -ratio) < (
-                    current["reason"]["day_gap"],
-                    -current["reason"]["ratio"],
-                ):
-                    per_winner[str(winner["video_id"])] = candidate
-        pairs.extend(per_winner.values())
 
-    selected_tier = next(
+def _competitor_pairs(competitor: dict, pool: list[dict], pool_median: float, today: date) -> list[dict]:
+    per_winner: dict[str, dict] = {}
+    for first_index, first in enumerate(pool):
+        for second in pool[first_index + 1 :]:
+            candidate = _candidate_for_video_pair(competitor, first, second, pool_median, today)
+            if candidate is None:
+                continue
+            winner_id = str(candidate["winner"]["video_id"])
+            current = per_winner.get(winner_id)
+            candidate_rank = (candidate["reason"]["day_gap"], -candidate["reason"]["ratio"])
+            current_rank = None if current is None else (current["reason"]["day_gap"], -current["reason"]["ratio"])
+            if current_rank is None or candidate_rank < current_rank:
+                per_winner[winner_id] = candidate
+    return list(per_winner.values())
+
+
+def _candidate_for_video_pair(
+    competitor: dict, first: dict, second: dict, pool_median: float, today: date
+) -> dict | None:
+    winner, loser = sorted((first, second), key=lambda video: int(video["views"]), reverse=True)
+    if (today - max(_published_date(winner), _published_date(loser))).days < PAIR_THRESHOLDS.maturity_days:
+        return None
+    loser_views = int(loser["views"])
+    winner_views = int(winner["views"])
+    if loser_views < PAIR_THRESHOLDS.min_loser_views:
+        return None
+    ratio = winner_views / loser_views
+    if ratio < PAIR_THRESHOLDS.min_ratio or winner_views < pool_median or loser_views > pool_median:
+        return None
+    day_gap = abs((_published_date(winner) - _published_date(loser)).days)
+    tier = next((tier for tier in PAIR_THRESHOLDS.gap_days if day_gap <= tier), None)
+    return None if tier is None else _pair_payload(competitor, winner, loser, day_gap, tier, ratio, pool_median)
+
+
+def _selected_gap_tier(pairs: list[dict]) -> int | None:
+    return next(
         (tier for tier in PAIR_THRESHOLDS.gap_days if any(pair["reason"]["gap_tier"] == tier for pair in pairs)),
         None,
     )
-    tier_pairs = [pair for pair in pairs if pair["reason"]["gap_tier"] == selected_tier]
-    unseen = [
-        pair
-        for pair in tier_pairs
-        if pair["winner"]["video_id"] not in used_video_ids and pair["loser"]["video_id"] not in used_video_ids
-    ]
-    with_images = [
-        pair
-        for pair in unseen
-        if Path(pair["winner"]["thumbnail_path"]).is_file() and Path(pair["loser"]["thumbnail_path"]).is_file()
-    ]
+
+
+def _pair_is_unseen(pair: dict, used_video_ids: set[str]) -> bool:
+    return pair["winner"]["video_id"] not in used_video_ids and pair["loser"]["video_id"] not in used_video_ids
+
+
+def _pair_images_exist(pair: dict) -> bool:
+    return Path(pair["winner"]["thumbnail_path"]).is_file() and Path(pair["loser"]["thumbnail_path"]).is_file()
+
+
+def _exclude_rejected(pairs: list[dict], rejected_video_ids: tuple[str, ...]) -> list[dict]:
     if len(rejected_video_ids) >= PAIR_THRESHOLDS.max_rejections:
-        final: list[dict] = []
-    else:
-        rejected = set(rejected_video_ids)
-        final = [pair for pair in with_images if pair["winner"]["video_id"] not in rejected]
-    final.sort(key=lambda pair: (pair["reason"]["past_sessions"], -pair["reason"]["ratio"]))
+        return []
+    rejected = set(rejected_video_ids)
+    return [pair for pair in pairs if pair["winner"]["video_id"] not in rejected]
+
+
+def _pair_funnel(competitors, eligible_competitors, pairs, selected_tier, unseen, with_images, final):
     gap_funnel = [
         {"stage": f"{tier} 日段", "count": sum(pair["reason"]["gap_tier"] == tier for pair in pairs)}
         for tier in PAIR_THRESHOLDS.gap_days
@@ -304,7 +330,7 @@ def select_pair_candidates(
         {"stage": "画像欠落除外後", "count": len(with_images)},
         {"stage": "却下後", "count": len(final)},
     ]
-    return {"candidates": final, "funnel": funnel, "bottleneck": _bottleneck(funnel), "warnings": []}
+    return funnel
 
 
 def _pair_payload(competitor, winner, loser, day_gap, tier, ratio, pool_median):
