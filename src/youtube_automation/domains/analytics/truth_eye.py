@@ -14,7 +14,7 @@ from statistics import median
 import yaml
 
 from youtube_automation.core.errors import ConfigError, ValidationError
-from youtube_automation.domains.analytics.benchmark import LIVE_DURATION_ISO, is_short_benchmark_duration
+from youtube_automation.domains.analytics.benchmark import is_live_benchmark_video, is_short_benchmark_video
 
 
 @dataclass(frozen=True)
@@ -52,6 +52,26 @@ class PairThresholds:
 
 
 PAIR_THRESHOLDS = PairThresholds()
+
+_STAGE_POPULATION = "母集団"
+_STAGE_MIN_POOL = "最小プール通過"
+_STAGE_UNSEEN = "既出除外後"
+_STAGE_MISSING_IMAGE = "画像欠落除外後"
+_STAGE_REJECTED = "却下後"
+_GAP_STAGE_SUFFIX = " 日段"
+
+_POPULATION_ADVICE = "母集団がありません。channel-research --benchmark で benchmark を収集してください"
+_MIN_POOL_ADVICE = "走査プールが最小本数に届く競合がありません。channel-research --benchmark で走査本数を増やしてください"
+_GAP_ADVICE = "日差の近いペアがありません。channel-research --benchmark で benchmark を更新するか競合を追加してください"
+_UNSEEN_ADVICE = "候補が過去の訓練記録と重複しています。benchmark に競合を追加するか、兄弟チャンネル連携を増やしてください"
+_MISSING_IMAGE_ADVICE = "サムネイルが未取得です。対象リポジトリで uv run yt-benchmark-collect --force -y を実行してください"
+_REJECTED_ADVICE = "却下で候補が尽きました。benchmark に競合を追加するか、次のセッションで再実行してください"
+_BOTTLENECK_ADVICE = {
+    _STAGE_MIN_POOL: _MIN_POOL_ADVICE,
+    _STAGE_UNSEEN: _UNSEEN_ADVICE,
+    _STAGE_MISSING_IMAGE: _MISSING_IMAGE_ADVICE,
+    _STAGE_REJECTED: _REJECTED_ADVICE,
+}
 
 _VIDEO_FIELDS = ("video_id", "title", "views", "published_at", "duration")
 _SAFE_STEM_PART = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -252,8 +272,7 @@ def _eligible_competitors(competitors: list[dict]) -> list[tuple[dict, list[dict
         pool = [
             video
             for video in competitor["videos"]
-            if video.get("duration_iso") != LIVE_DURATION_ISO
-            and not is_short_benchmark_duration(str(video.get("duration_iso", "")))
+            if not is_live_benchmark_video(video) and not is_short_benchmark_video(video)
         ]
         if len(pool) >= PAIR_THRESHOLDS.min_pool_size:
             eligible_competitors.append((competitor, pool, float(median(int(video["views"]) for video in pool))))
@@ -316,25 +335,40 @@ def _exclude_rejected(pairs: list[dict], rejected_video_ids: tuple[str, ...]) ->
     return [pair for pair in pairs if pair["winner"]["video_id"] not in rejected]
 
 
-def _pair_funnel(competitors, eligible_competitors, pairs, selected_tier, unseen, with_images, final):
+def _pair_funnel(
+    competitors: list[dict],
+    eligible_competitors: list[tuple[dict, list[dict], float]],
+    pairs: list[dict],
+    selected_tier: int | None,
+    unseen: list[dict],
+    with_images: list[dict],
+    final: list[dict],
+) -> list[dict]:
     gap_funnel = [
-        {"stage": f"{tier} 日段", "count": sum(pair["reason"]["gap_tier"] == tier for pair in pairs)}
+        {"stage": f"{tier}{_GAP_STAGE_SUFFIX}", "count": sum(pair["reason"]["gap_tier"] == tier for pair in pairs)}
         for tier in PAIR_THRESHOLDS.gap_days
         if selected_tier is None or tier <= selected_tier
     ]
-    funnel = [
-        {"stage": "母集団", "count": len(competitors)},
-        {"stage": "最小プール通過", "count": len(eligible_competitors)},
+    return [
+        {"stage": _STAGE_POPULATION, "count": len(competitors)},
+        {"stage": _STAGE_MIN_POOL, "count": len(eligible_competitors)},
         *gap_funnel,
-        {"stage": "既出除外後", "count": len(unseen)},
-        {"stage": "画像欠落除外後", "count": len(with_images)},
-        {"stage": "却下後", "count": len(final)},
+        {"stage": _STAGE_UNSEEN, "count": len(unseen)},
+        {"stage": _STAGE_MISSING_IMAGE, "count": len(with_images)},
+        {"stage": _STAGE_REJECTED, "count": len(final)},
     ]
-    return funnel
 
 
-def _pair_payload(competitor, winner, loser, day_gap, tier, ratio, pool_median):
-    def video_payload(video):
+def _pair_payload(
+    competitor: dict,
+    winner: dict,
+    loser: dict,
+    day_gap: int,
+    tier: int,
+    ratio: float,
+    pool_median: float,
+) -> dict:
+    def video_payload(video: dict) -> dict:
         return {
             "video_id": video["video_id"],
             "title": video["title"],
@@ -360,15 +394,20 @@ def _pair_payload(competitor, winner, loser, day_gap, tier, ratio, pool_median):
     }
 
 
-def _published_date(video: dict):
+def _published_date(video: dict) -> date:
     return datetime.strptime(str(video["published_at"])[:10], "%Y-%m-%d").date()
 
 
 def _bottleneck(funnel: list[dict]) -> dict:
     drops = [(before["count"] - after["count"], after["stage"]) for before, after in pairwise(funnel)]
-    stage = max(drops, default=(0, "母集団"))[1]
-    advice = "channel-research --benchmark で benchmark を更新するか、競合・兄弟連携を追加してください"
-    return {"stage": stage, "advice": advice}
+    stage = max(drops, key=lambda drop: drop[0], default=(0, _STAGE_POPULATION))[1]
+    return {"stage": stage, "advice": _bottleneck_advice(stage)}
+
+
+def _bottleneck_advice(stage: str) -> str:
+    if stage.endswith(_GAP_STAGE_SUFFIX):
+        return _GAP_ADVICE
+    return _BOTTLENECK_ADVICE.get(stage, _POPULATION_ADVICE)
 
 
 def _validate_pair(pair: dict) -> dict:
