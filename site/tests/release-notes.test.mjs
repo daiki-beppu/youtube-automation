@@ -337,7 +337,7 @@ test("ガイド sidebar は読者タスク別5群で全ページを一度ずつ�
   assert.equal(hrefsWithin(sidebar).filter((href) => href === "/guides/streaming-healthcheck").length, 1);
 });
 
-test("スキル sidebar は workflow 順8群で19 skill と検索入口を案内する", async () => {
+test("スキル sidebar は workflow 順8群で20 skill と検索入口を案内する", async () => {
   const html = await readOperatorDoc("/skills");
   const sidebar = html.match(/<nav data-blume-nav-tree>([\s\S]*?)<\/nav>/)?.[1] ?? "";
   const labels = WORKFLOW_SKILL_GROUPS.map(({ label }) => label);
@@ -346,8 +346,8 @@ test("スキル sidebar は workflow 順8群で19 skill と検索入口を案内
   );
 
   for (const label of labels) assert.match(sidebar, new RegExp(`>${label}<`));
-  assert.equal(skillHrefs.length, 19);
-  assert.equal(new Set(skillHrefs).size, 19);
+  assert.equal(skillHrefs.length, 20);
+  assert.equal(new Set(skillHrefs).size, 20);
   assert.match(sidebar, />できることから探す<[^]*href="\/skills"/);
   assert.equal(hrefsWithin(sidebar).filter((href) => href === "/skills/features").length, 1);
 });

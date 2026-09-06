@@ -31,7 +31,7 @@ export const WORKFLOW_SKILL_GROUPS = [
   },
   { label: "公開", skills: ["publish", "distrokid-helper"] },
   { label: "運用・交流", skills: ["reply", "streaming"] },
-  { label: "分析・監査", skills: ["analytics", "audit"] },
+  { label: "分析・監査", skills: ["analytics", "audit", "truth-eye"] },
   { label: "メンテ・追従", skills: ["automation", "skill-feedback"] },
 ] as const satisfies readonly SkillCategory[];
 
