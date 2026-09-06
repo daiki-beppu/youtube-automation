@@ -92,6 +92,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-stream-bandwidth": "youtube_automation.commands.youtube.stream_bandwidth",
     "yt-stream-broadcast-recover": "youtube_automation.commands.youtube.stream_broadcast_recover",
     "yt-theme-compare": "youtube_automation.commands.analytics.theme_compare",
+    "yt-truth-eye": "youtube_automation.commands.analytics.truth_eye",
     "yt-ttp-health": "youtube_automation.commands.analytics.ttp_health",
     "yt-thumbnail-auto-select": "youtube_automation.commands.thumbnail.auto_select_thumbnail",
     "yt-thumbnail-check": "youtube_automation.commands.thumbnail.thumbnail_check",

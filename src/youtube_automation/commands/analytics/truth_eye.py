@@ -6,6 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
+from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.analytics.truth_eye import (
     seal_training_record,
@@ -26,8 +27,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+def run(args: argparse.Namespace) -> int:
     try:
         if args.command == "seal":
             pair = json.loads(args.pair.read_text(encoding="utf-8"))
@@ -56,6 +56,10 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, json.JSONDecodeError, ValidationError) as error:
         print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False))
         return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    return run_cli(build_parser, run, argv, handled_errors=())
 
 
 if __name__ == "__main__":
