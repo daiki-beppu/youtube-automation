@@ -94,7 +94,8 @@
       {"path": "docs/plans/thumbnail-comparison.md", "owner": "thumbnail", "reason": "人が比較判断を追記する作業メモ"},
       {"path": "collections/live/<id>/20-documentation/postmortem.md", "owner": "wf-new", "reason": "運用者が記入する postmortem 入力"},
       {"path": "collections/<id>/20-documentation/postmortem.md", "owner": "analytics", "reason": "公開後レビューの手書き所見"},
-      {"path": "collections/<id>/20-documentation/thumbnail-prompts.md", "owner": "wf-new", "reason": "企画時の画像生成 prompt 入力"}
+      {"path": "collections/<id>/20-documentation/thumbnail-prompts.md", "owner": "wf-new", "reason": "企画時の画像生成 prompt 入力"},
+      {"path": "docs/benchmarks/training/*.md", "owner": "truth-eye", "reason": "人間が記入する訓練記録と、その封印分析（AI 生成・sha256 封印）"}
     ],
     "repository_docs": [
       {"path": "docs/architecture.md", "owner": "repository", "reason": "設計説明であり下流運用成果物ではない"},

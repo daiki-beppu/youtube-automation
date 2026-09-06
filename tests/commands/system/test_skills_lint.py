@@ -672,21 +672,21 @@ def test_authoring_guidelines_require_shallow_delegation_or_chain_manifest() -> 
 def test_cli_lint_rejects_distributed_skill_count_above_limit(
     fake_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    _populate_valid_skill_count(fake_repo / ".claude" / "skills", 20)
+    _populate_valid_skill_count(fake_repo / ".claude" / "skills", 21)
 
     assert main(["lint"]) == 1
     out = capsys.readouterr().out
     assert (
-        "配布対象の skill が 20 件です (上限 19 件 — "
+        "配布対象の skill が 21 件です (上限 20 件 — "
         "新しい skill を足すなら既存 skill の mode として畳めないかを先に検討してください)"
     ) in out
 
 
 def test_cli_lint_accepts_distributed_skill_count_at_limit(fake_repo: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    _populate_valid_skill_count(fake_repo / ".claude" / "skills", 19)
+    _populate_valid_skill_count(fake_repo / ".claude" / "skills", 20)
 
     assert main(["lint"]) == 0
-    assert "lint 合格: 19 skill" in capsys.readouterr().out
+    assert "lint 合格: 20 skill" in capsys.readouterr().out
 
 
 def test_cli_lint_does_not_count_directory_without_skill_md(
@@ -724,7 +724,7 @@ def test_distributed_skill_count_limit_matches_current_inventory() -> None:
         if (path / "SKILL.md").is_file() and path.name not in _lint._DEV_ONLY_SKILL_NAMES
     }
 
-    assert len(distributed) == _lint._MAX_SKILL_COUNT == 19
+    assert len(distributed) == _lint._MAX_SKILL_COUNT == 20
 
 
 def test_cli_delegation_reports_each_depth_longest_path_and_summary(
