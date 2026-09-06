@@ -135,6 +135,7 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-suno-verify": "ローカル成果物検証のみ",
     "yt-suno-verify-playlist": "ローカル成果物検証のみ",
     "yt-theme-compare": "収集済みデータのローカル分析のみ",
+    "yt-truth-eye": "ローカルの benchmark・訓練記録・封印ファイルの読み書きと Git commit のみ",
     "yt-ttp-health": "収集済み benchmark_*.json のローカル分析のみ",
     "yt-thumbnail-auto-select": "ローカルのサムネイル採点・選定のみ",
     "yt-thumbnail-correlate": "CDN 画像 DL + ローカル相関計算のみ",
