@@ -9,6 +9,7 @@ import yaml
 from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.analytics.truth_eye import (
     VIEWPOINTS,
+    collect_training_status,
     seal_training_record,
     validate_sealed_draft,
     verify_training_record,
@@ -124,3 +125,89 @@ def test_verify_detects_tampering(tmp_path):
 
     assert verification.ok is False
     assert verification.expected != verification.actual
+
+
+def _record(*, next_try=None, phases=None) -> str:
+    metadata = {
+        "schema_version": 1,
+        "menu": "thumbnail",
+        "channel": "reference",
+        "pair": {"winner": {"video_id": "win"}, "loser": {"video_id": "lose"}},
+        "sealed": {"path": "record.sealed.md", "sha256": "abc", "sealed_at": "2026-09-01T00:00:00Z"},
+        "next_try": next_try,
+    }
+    contents = phases or {}
+    body = "\n\n".join(f"## Phase {number}\n\n{contents.get(number, '')}" for number in range(6))
+    return f"---\n{yaml.safe_dump(metadata, allow_unicode=True, sort_keys=False)}---\n\n{body}\n"
+
+
+def test_status_finds_resume_phase_and_phase_two_turns(tmp_path):
+    training = tmp_path / "docs/benchmarks/training"
+    training.mkdir(parents=True)
+    phase_one_table = (
+        "| 観点 ID | 観点名 | 伸びた側 | 伸びなかった側 |\n"
+        "|---|---|---|---|\n"
+        "| V01 | 主役と占有率 | large subject | small subject |"
+    )
+    (training / "20260901-thumbnail-reference-a.md").write_text(_record(phases={0: "prepared"}), encoding="utf-8")
+    (training / "20260902-thumbnail-reference-b.md").write_text(
+        _record(phases={0: "prepared", 1: phase_one_table}), encoding="utf-8"
+    )
+    (training / "20260903-thumbnail-reference-c.md").write_text(
+        _record(
+            phases={
+                0: "prepared",
+                1: phase_one_table,
+                2: "Q: first\nA: one\n\nQ: second\nA: two\n\nQ: third\nA: three",
+            }
+        ),
+        encoding="utf-8",
+    )
+    (training / "20260904-thumbnail-reference-d.md").write_text(
+        _record(phases={number: f"phase {number}" for number in range(6)}), encoding="utf-8"
+    )
+
+    status = collect_training_status(tmp_path)
+
+    assert [(item.record.name, item.resume_phase, item.phase2_turns) for item in status.incomplete] == [
+        ("20260901-thumbnail-reference-a.md", 1, 0),
+        ("20260902-thumbnail-reference-b.md", 2, 0),
+        ("20260903-thumbnail-reference-c.md", 3, 3),
+        ("20260904-thumbnail-reference-d.md", 5, 0),
+    ]
+
+
+def test_status_returns_latest_next_try_and_recurring_ai_only_names_only(tmp_path):
+    training = tmp_path / "docs/benchmarks/training"
+    training.mkdir(parents=True)
+    table = (
+        "| 観点 ID | 区分 | 人間の記述 | AI の記述 |\n"
+        "|---|---|---|---|\n"
+        "| V03 | AI だけ | human | secret-ai-description |\n"
+        "| V09 | 対立 | human | another-secret |"
+    )
+    for day in range(1, 7):
+        next_try = {"viewpoint": "V03", "text": f"try-{day}"}
+        phase4 = table if day >= 3 else "| V01 | 一致 | x | y |"
+        (training / f"2026090{day}-thumbnail-reference-{day}.md").write_text(
+            _record(next_try=next_try, phases={4: phase4}), encoding="utf-8"
+        )
+    (training / "20260907-thumbnail-reference-incomplete.md").write_text(
+        _record(phases={4: table.replace("V03", "V09").replace("対立", "AI だけ")}), encoding="utf-8"
+    )
+    (training / "20260908-thumbnail-reference-ignore.sealed.md").write_text(
+        _record(next_try={"viewpoint": "V01", "text": "sealed"}, phases={4: table}), encoding="utf-8"
+    )
+    sibling = tmp_path / "../sibling/docs/benchmarks/training"
+    sibling.mkdir(parents=True)
+    (sibling / "20260909-thumbnail-reference-sibling.md").write_text(
+        _record(next_try={"viewpoint": "V01", "text": "sibling"}, phases={4: table}), encoding="utf-8"
+    )
+
+    status = collect_training_status(tmp_path)
+
+    assert status.completed_count == 6
+    assert status.incomplete_count == 1
+    assert status.last_next_try == {"viewpoint": "V03", "text": "try-6"}
+    assert status.recurring_ai_only_viewpoints == ({"viewpoint_id": "V03", "name": "配色", "count": 4},)
+    assert "secret" not in repr(status.recurring_ai_only_viewpoints)

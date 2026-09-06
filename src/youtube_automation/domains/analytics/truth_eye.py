@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
 
-from youtube_automation.core.errors import ValidationError
+from youtube_automation.core.errors import ConfigError, ValidationError
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,29 @@ class VerificationResult:
     ok: bool
     expected: str
     actual: str
+
+
+@dataclass(frozen=True)
+class IncompleteTrainingRecord:
+    record: Path
+    resume_phase: int
+    phase2_turns: int
+
+
+@dataclass(frozen=True)
+class TrainingStatus:
+    incomplete: tuple[IncompleteTrainingRecord, ...]
+    last_next_try: dict | None
+    recurring_ai_only_viewpoints: tuple[dict, ...]
+    completed_count: int
+    incomplete_count: int
+
+
+@dataclass(frozen=True)
+class TrainingRecord:
+    path: Path
+    metadata: dict
+    phases: tuple[str, ...]
 
 
 def validate_sealed_draft(text: str) -> list[str]:
@@ -138,6 +162,50 @@ def verify_training_record(record: Path) -> VerificationResult:
     return VerificationResult(expected == actual, expected, actual)
 
 
+def collect_training_status(channel_dir: Path) -> TrainingStatus:
+    """チャンネル内の訓練記録から再開状態と成長トラッキングを集計する。"""
+    training_dir = channel_dir / "docs" / "benchmarks" / "training"
+    paths = (
+        sorted(path for path in training_dir.glob("*.md") if not path.name.endswith(".sealed.md"))
+        if training_dir.is_dir()
+        else []
+    )
+    records = [read_training_record(path) for path in paths]
+    completed = [record for record in records if record.metadata.get("next_try") is not None]
+    incomplete_records = [record for record in records if record.metadata.get("next_try") is None]
+    incomplete = tuple(
+        IncompleteTrainingRecord(
+            record=record.path,
+            resume_phase=_resume_phase(record.phases),
+            phase2_turns=_phase_two_turns(record.phases[2]),
+        )
+        for record in incomplete_records
+    )
+
+    latest = completed[-1] if completed else None
+    last_next_try = latest.metadata["next_try"] if latest is not None else None
+    counts: Counter[str] = Counter()
+    for record in completed[-5:]:
+        counts.update(set(_ai_only_viewpoint_ids(record.phases[4])))
+    names = {viewpoint.id: viewpoint.name for viewpoint in VIEWPOINTS}
+    recurring = tuple(
+        {"viewpoint_id": viewpoint_id, "name": names[viewpoint_id], "count": counts[viewpoint_id]}
+        for viewpoint_id in (viewpoint.id for viewpoint in VIEWPOINTS)
+        if counts[viewpoint_id] >= 2
+    )
+    return TrainingStatus(incomplete, last_next_try, recurring, len(completed), len(incomplete))
+
+
+def read_training_record(path: Path) -> TrainingRecord:
+    """訓練記録の frontmatter と Phase 0〜5 を読み戻す。"""
+    text = path.read_text(encoding="utf-8")
+    metadata = _parse_frontmatter(text)
+    if metadata.get("schema_version") != 1:
+        raise ConfigError(f"未対応の訓練記録 schema_version です: {metadata.get('schema_version')}")
+    phases = tuple(_section_body(text, f"Phase {number}") for number in range(6))
+    return TrainingRecord(path, metadata, phases)
+
+
 def _validate_pair(pair: dict) -> dict:
     if not isinstance(pair, dict):
         raise ValidationError("pair JSON は object で指定してください")
@@ -164,6 +232,41 @@ def _section_body(text: str, heading: str) -> str:
     return match.group(1).strip() if match else ""
 
 
+def _resume_phase(phases: tuple[str, ...]) -> int:
+    for number, body in enumerate(phases):
+        if not _phase_has_content(number, body):
+            return number
+    return 5
+
+
+def _phase_has_content(number: int, body: str) -> bool:
+    if number != 1:
+        return bool(body.strip())
+    rows = [line for line in body.splitlines() if re.match(r"^\|\s*V\d{2}\s*\|", line)]
+    if not rows:
+        return bool(body.strip())
+    for row in rows:
+        cells = [cell.strip() for cell in row.strip().strip("|").split("|")]
+        if len(cells) >= 4 and (cells[2] or cells[3]):
+            return True
+    return False
+
+
+def _phase_two_turns(body: str) -> int:
+    return len(re.findall(r"^(?:[-*]\s*)?(?:\*\*)?(?:A\d*|回答)(?:\*\*)?\s*[:：]", body, re.MULTILINE))
+
+
+def _ai_only_viewpoint_ids(body: str) -> tuple[str, ...]:
+    found: list[str] = []
+    for line in body.splitlines():
+        if not line.lstrip().startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip().strip("|").split("|")]
+        if len(cells) >= 4 and re.fullmatch(r"V(?:0[1-9]|1[0-2])", cells[0]) and cells[1] == "AI だけ":
+            found.append(cells[0])
+    return tuple(found)
+
+
 def _render_record(metadata: dict) -> str:
     frontmatter = yaml.safe_dump(metadata, allow_unicode=True, sort_keys=False).rstrip()
     rows = ["| 観点 ID | 観点名 | 伸びた側 | 伸びなかった側 |", "|---|---|---|---|"]
@@ -175,6 +278,10 @@ def _render_record(metadata: dict) -> str:
 
 def _read_frontmatter(path: Path) -> dict:
     text = path.read_text(encoding="utf-8")
+    return _parse_frontmatter(text)
+
+
+def _parse_frontmatter(text: str) -> dict:
     if not text.startswith("---\n"):
         raise ValidationError("訓練記録に YAML frontmatter がありません")
     parts = text.split("---", 2)
