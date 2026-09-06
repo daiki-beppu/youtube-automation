@@ -155,6 +155,7 @@ yt_stream_archive_check = _make_entrypoint("youtube_automation.commands.youtube.
 yt_stream_bandwidth = _make_entrypoint("youtube_automation.commands.youtube.stream_bandwidth")
 yt_stream_broadcast_recover = _make_entrypoint("youtube_automation.commands.youtube.stream_broadcast_recover")
 yt_theme_compare = _make_entrypoint("youtube_automation.commands.analytics.theme_compare")
+yt_truth_eye = _make_entrypoint("youtube_automation.commands.analytics.truth_eye")
 yt_ttp_health = _make_entrypoint("youtube_automation.commands.analytics.ttp_health")
 yt_thumbnail_auto_select = _make_entrypoint("youtube_automation.commands.thumbnail.auto_select_thumbnail")
 yt_traffic_trend = _make_entrypoint("youtube_automation.commands.analytics.traffic_trend")
