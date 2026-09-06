@@ -71,3 +71,34 @@ def test_related_skill_descriptions_point_human_training_to_truth_eye():
     for skill_name in ("channel-research", "thumbnail"):
         description = inventory.frontmatter(skill_name)["description"]
         assert "人間の眼を鍛える訓練は /truth-eye" in description
+
+
+def test_architecture_glossary_covers_truth_eye_vocabulary():
+    architecture = (REPO_ROOT / "docs/architecture.md").read_text(encoding="utf-8")
+    section = architecture.split("### 真実の目（訓練）", 1)[1].split("\n### ", 1)[0]
+    terms = (
+        "ペア",
+        "伸びた側",
+        "伸びなかった側",
+        "ブラインド回答",
+        "封印分析",
+        "出し切り宣言",
+        "照合表",
+        "対立点",
+        "試す 1 点",
+        "訓練記録",
+        "訓練メニュー",
+        "完了セッション",
+        "未完セッション / 未完了記録",
+        "観点 ID",
+        "母集団",
+        "兄弟チャンネル",
+        "走査プール",
+        "候補ペア",
+        "日差段",
+        "承認ゲート",
+        "走査記録",
+        "ベンチマーク対象",
+    )
+    for term in terms:
+        assert section.count(f"**{term}**:") == 1
