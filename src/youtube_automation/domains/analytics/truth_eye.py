@@ -263,13 +263,14 @@ def select_pair_candidates(
         for competitor, pool, pool_median in eligible_competitors
         for pair in _competitor_pairs(competitor, pool, pool_median, today)
     ]
-    selected_tier = _selected_gap_tier(pairs)
-    tier_pairs = [pair for pair in pairs if pair["reason"]["gap_tier"] == selected_tier]
-    unseen = [pair for pair in tier_pairs if _pair_is_unseen(pair, used_video_ids)]
+    unseen_pairs = [pair for pair in pairs if _pair_is_unseen(pair, used_video_ids)]
+    selected_tier = _selected_gap_tier(unseen_pairs)
+    unseen = [pair for pair in unseen_pairs if pair["reason"]["gap_tier"] == selected_tier]
     with_images = [pair for pair in unseen if _pair_images_exist(pair)]
     final = _exclude_rejected(with_images, rejected_video_ids)
     final.sort(key=lambda pair: (pair["reason"]["past_sessions"], -pair["reason"]["ratio"]))
-    funnel = _pair_funnel(competitors, eligible_competitors, pairs, selected_tier, unseen, with_images, final)
+    funnel_tier = selected_tier if selected_tier is not None else _selected_gap_tier(pairs)
+    funnel = _pair_funnel(competitors, eligible_competitors, pairs, funnel_tier, unseen, with_images, final)
     return {"candidates": final, "funnel": funnel, "bottleneck": _bottleneck(funnel), "warnings": []}
 
 

@@ -470,6 +470,18 @@ def test_pair_order_prefers_gap_tier_then_fewest_sessions_then_ratio(tmp_path):
     ]
 
 
+def test_pair_candidates_advance_gap_tier_when_nearer_pairs_are_used(tmp_path):
+    competitors = [
+        _pair_competitor(tmp_path, "used-near"),
+        _pair_competitor(tmp_path, "unseen-wide", loser_published="2026-07-22"),
+    ]
+
+    result = select_pair_candidates(competitors, {"used-near-w"}, (), date(2026, 9, 6))
+
+    assert [candidate["competitor"]["slug"] for candidate in result["candidates"]] == ["unseen-wide"]
+    assert result["candidates"][0]["reason"]["gap_tier"] == 14
+
+
 def test_bottleneck_advice_is_specific_to_the_stage_that_dropped_the_most(tmp_path):
     today = date(2026, 9, 6)
     no_image = [_pair_competitor(tmp_path, "no-image", with_thumbnails=False)]
