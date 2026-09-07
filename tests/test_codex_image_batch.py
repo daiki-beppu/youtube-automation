@@ -247,41 +247,17 @@ def test_batch_reports_config_failure_after_environment_is_ready(tmp_path: Path)
     assert not (tmp_path / "codex.log").exists()
 
 
-@pytest.mark.parametrize(
-    ("channel_slug", "diagnostic"),
-    [
-        (None, "workspace ルートでは --channel <slug> または CHANNEL=<slug> を指定してください"),
-        ("missing", "CHANNEL='missing' に対応するチャンネルが見つかりません"),
-    ],
-)
-def test_batch_rejects_missing_or_wrong_workspace_channel_before_jobs(
-    tmp_path: Path,
-    channel_slug: str | None,
-    diagnostic: str,
-) -> None:
-    workspace = tmp_path / "workspace"
-    _workspace_channel(workspace, "alpha")
-    manifest = _manifest(tmp_path, ["one", "two"])
-
-    result = _run_batch(tmp_path, manifest, cwd=workspace, channel_slug=channel_slug)
-
-    assert result.returncode != 0
-    assert diagnostic in result.stderr
-    assert "候補: alpha" in result.stderr
-    assert not (tmp_path / "codex.log").exists()
-    assert not (tmp_path / "runner-state.json").exists()
-
-
-def test_batch_resolves_channel_slug_from_workspace_root(tmp_path: Path) -> None:
+def test_batch_requires_channel_dir_outside_configured_directory(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     _workspace_channel(workspace, "alpha")
     manifest = _manifest(tmp_path, ["one", "two"])
 
     result = _run_batch(tmp_path, manifest, cwd=workspace, channel_slug="alpha")
 
-    assert result.returncode == 0, result.stderr
-    state = json.loads((tmp_path / "runner-state.json").read_text())
-    assert sorted(state["calls"]) == ["one", "two"]
+    assert result.returncode != 0
+    assert "CHANNEL_DIR" in result.stderr
+    assert not (tmp_path / "codex.log").exists()
+    assert not (tmp_path / "runner-state.json").exists()
 
 
 def test_batch_finishes_remaining_jobs_and_reports_failures(tmp_path: Path) -> None:

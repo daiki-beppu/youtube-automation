@@ -13,7 +13,7 @@ import tempfile
 from pathlib import Path
 
 from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.configuration import find_workspace_root, load_config, reset
+from youtube_automation.configuration import load_config, reset
 from youtube_automation.core.errors import ChannelRegistryError, ConfigError
 from youtube_automation.infrastructure.analytics.channel_registry import (
     DEFAULT_CHANNEL_REGISTRY,
@@ -63,10 +63,14 @@ assets/stock/**/*.ogg
 
 
 def _workspace_root(start: Path) -> Path:
-    detected = find_workspace_root(start)
-    if detected is not None:
-        return detected
     current = start.expanduser().resolve()
+    # 移行用 CLI の削除まで、旧 workspace 検出を export 内に閉じ込める。
+    for parent in (current, *current.parents):
+        channels_root = parent / "channels"
+        if channels_root.is_dir() and any(
+            (channel / "config" / "channel").is_dir() for channel in channels_root.iterdir()
+        ):
+            return parent
     for parent in (current, *current.parents):
         if (parent / "channels").is_dir():
             return parent

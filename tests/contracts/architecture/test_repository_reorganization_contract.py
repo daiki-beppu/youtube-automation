@@ -185,13 +185,9 @@ PUBLIC_CONFIGURATION_SYMBOLS = {
     "ScheduleConfig",
     "Shorts",
     "channel_dir",
-    "explicit_channel_selection",
-    "find_workspace_root",
     "load_config",
     "load_schedule_config",
     "reset",
-    "select_channel",
-    "workspace_channels",
 }
 
 LAYER_FORBIDDEN_IMPORTS = {
