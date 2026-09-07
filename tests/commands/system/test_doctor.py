@@ -625,7 +625,9 @@ class TestClientSecrets:
         assert r.status == "fail"
         assert str(secrets_dir / "client_secrets.json") in r.message
         assert r.next_action is not None
-        assert "bash .claude/skills/setup/references/oauth-client-wizard.sh" in r.next_action["instructions"]
+        instructions = r.next_action["instructions"]
+        assert "bash .claude/skills/setup/references/oauth-client-wizard.sh" in instructions
+        assert "fallback 状態" not in instructions
 
     def test_uses_submodule_fallback_path(self, tmp_path):
         self._write_valid_client_secrets(tmp_path / "automation" / "auth" / "client_secrets.json")
@@ -690,10 +692,13 @@ class TestClientSecrets:
         r = doctor.check_client_secrets(tmp_path)
 
         assert r.next_action is not None
-        command = r.next_action["instructions"].split("`")[1]
+        instructions = r.next_action["instructions"]
+        command = instructions.split("`")[1]
         executable, script = shlex.split(command)
         assert executable == "bash"
         assert (REPO_ROOT / script).is_file()
+        # wizard では解けない fallback 取得失敗は誘導へ潰さず原因として残す
+        assert "fallback 状態: 1Password / CLIENT_SECRETS_JSON fallback 取得失敗: op read failed" in instructions
 
     def test_valid(self, tmp_path):
         self._write_valid_client_secrets(tmp_path / "auth" / "client_secrets.json")

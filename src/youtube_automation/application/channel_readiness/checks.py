@@ -1073,7 +1073,7 @@ def _load_client_secrets_data(channel_dir: Path) -> tuple[Path | str, object | N
 
 
 def check_client_secrets(channel_dir: Path) -> CheckResult:
-    path, data, error, _fallback_error = _load_client_secrets_data(channel_dir)
+    path, data, error, fallback_error = _load_client_secrets_data(channel_dir)
     if error:
         return CheckResult(
             id="client_secrets",
@@ -1093,9 +1093,12 @@ def check_client_secrets(channel_dir: Path) -> CheckResult:
                     if project_id
                     else "https://console.cloud.google.com/apis/credentials"
                 ),
+                # Console 手順の正本は wizard 側にあるため誘導だけを返す。
+                # fallback 取得失敗は wizard では解けない別種の実行時エラーなので付記する。
                 "instructions": (
                     "チャンネルルートで "
                     "`bash .claude/skills/setup/references/oauth-client-wizard.sh` を起動してください。"
+                    + (f" fallback 状態: {fallback_error}" if fallback_error else "")
                 ),
             },
         )
