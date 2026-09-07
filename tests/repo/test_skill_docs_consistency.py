@@ -1440,6 +1440,14 @@ def test_public_setup_guide_owns_installation_and_oauth_completion() -> None:
     assert "Download JSON" not in onboarding_setup
 
 
+def test_oauth_module_docstring_documents_download_json_route() -> None:
+    oauth_handler = _read("src/youtube_automation/infrastructure/auth/youtube.py")
+    module_docstring = oauth_handler.split('"""', 2)[1]
+    for expected in ("Download JSON", "yt-doctor --fix-client-secrets"):
+        assert expected in module_docstring
+    assert "secret を発行して auth/client_secrets.json に配置" not in module_docstring
+
+
 def test_channel_new_regeneration_documents_ttp_wf_new_readiness_gate() -> None:
     regeneration_mode = _read(".claude/skills/setup/references/regeneration-mode.md")
     rules = _read(".claude/skills/setup/references/config-generation-rules.md")
