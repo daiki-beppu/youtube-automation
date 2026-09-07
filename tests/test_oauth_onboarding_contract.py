@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from tests.helpers.paths import REPO_ROOT
+
 
 def _make_workspace_channel_worktree(tmp_path: Path) -> Path:
     """workspace channel かつ linked worktree の channel_dir を作る。
