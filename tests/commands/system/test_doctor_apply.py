@@ -315,6 +315,28 @@ def test_apply_stops_at_gcp_human_before_oauth(monkeypatch, tmp_path: Path, caps
     assert commands == []
 
 
+def test_apply_requires_human_when_billing_probe_failed(monkeypatch, tmp_path: Path, capsys) -> None:
+    """#4933: describe 自体の失敗（権限不足など）も上流 Terraform 誘導で止め、GCP を変更しない。"""
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "yt-example")
+    monkeypatch.setattr(doctor, "_run", lambda argv, **kwargs: (1, "", "PERMISSION_DENIED"))
+    monkeypatch.setattr(doctor, "run_all_checks", lambda directory: [doctor.check_billing(directory)])
+    monkeypatch.setattr(
+        doctor,
+        "_run_apply_command",
+        lambda _argv, _cwd: (_ for _ in ()).throw(AssertionError("billing probe failure must not run")),
+    )
+
+    code = doctor.main(["--apply", "--json", "--target", str(tmp_path)])
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["apply"]["stop_reason"] == "human_required"
+    assert payload["apply"]["check_id"] == "billing_linked"
+    assert payload["apply"]["next_action"]["kind"] == "human"
+    assert payload["apply"]["next_action"]["url"].endswith("/infra/terraform/gcp/README.md")
+    assert payload["apply"]["executed"] == []
+
+
 def test_apply_rejects_removed_billing_flag(monkeypatch, tmp_path: Path, capsys) -> None:
     monkeypatch.setattr(doctor, "run_all_checks", lambda _: [_result("ready")])
     with pytest.raises(SystemExit) as error:

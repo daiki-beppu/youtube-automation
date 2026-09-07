@@ -829,13 +829,15 @@ def check_gcloud_account() -> CheckResult:
     )
 
 
-def _terraform_gcp_action() -> dict:
-    return {
-        "kind": "human",
-        "instructions": "GCP 層は上流 Terraform が管理する。infra/terraform/gcp/ で "
-        "terraform plan → apply してから再診断してください。",
-        "url": f"https://github.com/{UPSTREAM_REPO}/blob/main/infra/terraform/gcp/README.md",
-    }
+# GCP 層 4 check の fail は全て human 対応（上流 Terraform）へ誘導する。
+# CheckResult.__post_init__ が dict を frozen な ManualRemediation へ変換するため、
+# この dict 自体は読み取り専用として共有してよい。
+_TERRAFORM_GCP_ACTION: dict = {
+    "kind": "human",
+    "instructions": "GCP 層は上流 Terraform が管理する。infra/terraform/gcp/ で "
+    "terraform plan → apply してから再診断してください。",
+    "url": f"https://github.com/{UPSTREAM_REPO}/blob/main/infra/terraform/gcp/README.md",
+}
 
 
 def check_gcp_project(channel_dir: Path) -> CheckResult:
@@ -845,7 +847,7 @@ def check_gcp_project(channel_dir: Path) -> CheckResult:
             id="gcp_project",
             status="fail",
             message="project_id が環境変数 / ADC quota project のいずれにも無い",
-            next_action=_terraform_gcp_action(),
+            next_action=_TERRAFORM_GCP_ACTION,
         )
     code, _, err = _run(["gcloud", "projects", "describe", project_id, "--format=value(projectId)"])
     if code != 0:
@@ -853,7 +855,7 @@ def check_gcp_project(channel_dir: Path) -> CheckResult:
             id="gcp_project",
             status="fail",
             message=f"プロジェクト {project_id} が見つからない: {err.strip()}",
-            next_action=_terraform_gcp_action(),
+            next_action=_TERRAFORM_GCP_ACTION,
         )
     return CheckResult(id="gcp_project", status="ok", message=f"プロジェクト {project_id} 存在")
 
@@ -882,14 +884,14 @@ def check_billing(channel_dir: Path) -> CheckResult:
             id="billing_linked",
             status="fail",
             message=f"billing 情報取得失敗: {err.strip()}",
-            next_action=_terraform_gcp_action(),
+            next_action=_TERRAFORM_GCP_ACTION,
         )
     if out.strip().lower() != "true":
         return CheckResult(
             id="billing_linked",
             status="fail",
             message=f"プロジェクト {project_id} に billing 未紐付け",
-            next_action=_terraform_gcp_action(),
+            next_action=_TERRAFORM_GCP_ACTION,
         )
     return CheckResult(id="billing_linked", status="ok", message="billing 紐付け済み")
 
@@ -917,7 +919,7 @@ def check_apis_enabled(channel_dir: Path) -> CheckResult:
             id="apis_enabled",
             status="fail",
             message=f"services list 失敗: {err.strip()}",
-            next_action=_terraform_gcp_action(),
+            next_action=_TERRAFORM_GCP_ACTION,
         )
     enabled = set(out.strip().splitlines())
     missing = [a for a in REQUIRED_APIS if a not in enabled]
@@ -926,7 +928,7 @@ def check_apis_enabled(channel_dir: Path) -> CheckResult:
             id="apis_enabled",
             status="fail",
             message=f"未有効 API: {', '.join(missing)}",
-            next_action=_terraform_gcp_action(),
+            next_action=_TERRAFORM_GCP_ACTION,
         )
     return CheckResult(
         id="apis_enabled",
@@ -1024,14 +1026,14 @@ def check_iam_aiplatform_user(channel_dir: Path) -> CheckResult:
             id="iam_aiplatform_user",
             status="fail",
             message=f"IAM policy 取得失敗: {err.strip()}",
-            next_action=_terraform_gcp_action(),
+            next_action=_TERRAFORM_GCP_ACTION,
         )
     if not out.strip():
         return CheckResult(
             id="iam_aiplatform_user",
             status="fail",
             message=f"user:{account} に roles/aiplatform.user 未付与",
-            next_action=_terraform_gcp_action(),
+            next_action=_TERRAFORM_GCP_ACTION,
         )
     return CheckResult(
         id="iam_aiplatform_user",

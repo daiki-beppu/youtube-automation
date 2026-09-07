@@ -365,6 +365,9 @@ def _run_apply_loop(
                 next_action=_decision_action("--project-id"),
             )
         action = unresolved.next_action
+        # gcp_project の fail は human next_action を持つため、選択済み project が
+        # それでも解決しない（存在しない ID など）ケースでは machine 層の
+        # `gcloud config set project` を繰り返さず、check の human へ落とす。
         if apply_kind is ApplyKind.PROJECT and project_id is not None and current_project_id != project_id:
             action = _ai_exec_action(["gcloud", "config", "set", "project", project_id])
         if (
