@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import math
-import stat
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -39,21 +38,6 @@ def _experiment_module():
     from youtube_automation.commands.analytics import experiment
 
     return experiment
-
-
-def _bytes(path: Path) -> bytes:
-    if not path.exists():
-        return b""
-    try:
-        mode = path.lstat().st_mode
-    except OSError as error:
-        raise ValidationError(f"JSONL を確認できません: {path}") from error
-    if not stat.S_ISREG(mode):
-        raise ValidationError(f"JSONL は regular file である必要があります: {path}")
-    try:
-        return path.read_bytes()
-    except OSError as error:
-        raise ValidationError(f"JSONL を読めません: {path}") from error
 
 
 def _decode_json_lines(
@@ -97,7 +81,7 @@ def _decode_json_lines(
 
 
 def _read_insights(path: Path) -> tuple[bytes, list[dict[str, object]]]:
-    content = _bytes(path)
+    content = transaction.read_jsonl_bytes(path)
     _, insights_schema = _experiment_module().load_schema()
     return content, _decode_json_lines(path, content, insights_schema, insights_schema)
 
