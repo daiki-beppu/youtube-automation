@@ -1256,38 +1256,11 @@ def test_apply_channel_config_check_uses_target_even_when_channel_dir_differs(
     assert main(["apply", "--target", str(repo), "--tag", "v5.6.0"]) == 0
 
 
-def test_channel_config_check_validates_every_channel_in_multi_channel_workspace(
+def test_channel_config_check_fails_when_repository_has_no_channel_config(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    repo = tmp_path / "workspace"
-    repo.mkdir()
-    (repo / "pyproject.toml").write_text(INLINE_TABLE_PYPROJECT, encoding="utf-8")
-    channel_roots = [repo / "channels" / slug for slug in ("ambient", "jazz")]
-    for channel_root in channel_roots:
-        (channel_root / "config" / "channel").mkdir(parents=True)
-    observed_targets: list[Path] = []
-
-    def _doctor(cmd: list[str], **kwargs):
-        target = Path(cmd[-1])
-        observed_targets.append(target)
-        assert kwargs["cwd"] == target
-        payload = {"checks": [{"id": "channel_config", "status": "ok", "message": "config/channel/ ロード成功"}]}
-        return automation_update.subprocess.CompletedProcess(cmd, 0, json.dumps(payload), "")
-
-    monkeypatch.setattr(automation_update.subprocess, "run", _doctor)
-
-    result = automation_update._check_channel_config(repo)
-
-    assert observed_targets == channel_roots
-    assert result == "2 チャンネルの config/channel/ ロード成功"
-
-
-def test_channel_config_check_fails_when_workspace_has_no_channel_config(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    repo = tmp_path / "workspace"
+    repo = tmp_path / "repository"
     repo.mkdir()
 
     def _doctor(cmd: list[str], **kwargs):

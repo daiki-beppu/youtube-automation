@@ -104,6 +104,23 @@ def test_collect_channel_restores_environment_and_configuration_after_success(
     assert os.environ.get("CHANNEL") == initial_slug
 
 
+def test_channel_context_resolves_channel_dir_when_stale_channel_slug_remains(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """単一リポジトリでは残存 CHANNEL を解決できないため、切替中は退避されていなければならない."""
+    channel = tmp_path / "selected"
+    (channel / "config" / "channel").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CHANNEL_DIR", raising=False)
+    monkeypatch.setenv("CHANNEL", "stale-slug")
+
+    with dashboard_refresh._channel_context(channel):
+        assert configuration.channel_dir() == channel
+
+    assert os.environ["CHANNEL"] == "stale-slug"
+
+
 @pytest.mark.parametrize("days", [7, 30, 90])
 def test_collect_channel_passes_selected_days_to_standard_collection(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, days: int

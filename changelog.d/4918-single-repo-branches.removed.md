@@ -1,0 +1,1 @@
+- state Git 管理・skills sync・automation update・dashboard refresh・hybrid runner の旧 workspace 専用分岐を削除し、単一チャンネルの Git 管理と CHANNEL_DIR / CHANNEL の復元を維持しました。

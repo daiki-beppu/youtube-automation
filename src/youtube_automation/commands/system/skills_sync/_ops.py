@@ -120,25 +120,21 @@ def _report_orphan_skill_configs(target_dir: Path, source_dir: Path) -> None:
     from youtube_automation.commands.system.skills_sync import _migrate_config
 
     migratable = set(_migrate_config.SKILL_CONFIG_MIGRATIONS)
-    workspace = target_dir.parent.parent
-    config_dirs = [workspace / "config" / "skills"]
-    channels_dir = workspace / "channels"
-    if channels_dir.is_dir():
-        config_dirs.extend(channel / "config" / "skills" for channel in channels_dir.iterdir() if channel.is_dir())
-    for config_dir in config_dirs:
-        location = config_dir.relative_to(workspace).as_posix()
-        configured = (
-            {entry.stem for entry in config_dir.iterdir() if entry.is_file() and entry.suffix in _SKILL_CONFIG_SUFFIXES}
-            if config_dir.is_dir()
-            else set()
+    channel_root = target_dir.parent.parent
+    config_dir = channel_root / "config" / "skills"
+    location = config_dir.relative_to(channel_root).as_posix()
+    configured = (
+        {entry.stem for entry in config_dir.iterdir() if entry.is_file() and entry.suffix in _SKILL_CONFIG_SUFFIXES}
+        if config_dir.is_dir()
+        else set()
+    )
+    for name in sorted(configured & migratable):
+        print(
+            f"  [warn] 未移行の skill-config です: {name} ({location}) — "
+            f"yt-skills migrate-config --channel-dir {config_dir.parent.parent} --dry-run"
         )
-        for name in sorted(configured & migratable):
-            print(
-                f"  [warn] 未移行の skill-config です: {name} ({location}) — "
-                f"yt-skills migrate-config --channel-dir {config_dir.parent.parent} --dry-run"
-            )
-        for name in _orphan_skill_config_names(config_dir, configurable | migratable):
-            print(f"  [warn] 対応する skill が同梱されていません: {name} ({location})")
+    for name in _orphan_skill_config_names(config_dir, configurable | migratable):
+        print(f"  [warn] 対応する skill が同梱されていません: {name} ({location})")
 
 
 def _ensure_target_parent(target: Path) -> None:

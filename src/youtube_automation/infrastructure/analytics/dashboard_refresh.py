@@ -40,6 +40,7 @@ def _channel_context(channel: Path) -> Iterator[None]:
     previous_dir = os.environ.get("CHANNEL_DIR")
     previous_slug = os.environ.get("CHANNEL")
     os.environ["CHANNEL_DIR"] = str(channel)
+    # 残存 CHANNEL は単一リポジトリでは解決できず ConfigError になるため、切替中だけ退避する
     os.environ.pop("CHANNEL", None)
     reset_config()
     try:
