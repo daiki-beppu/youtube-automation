@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import subprocess
 import tempfile
 from dataclasses import dataclass
 from importlib.resources import files
@@ -14,6 +13,7 @@ from typing import Final
 
 from youtube_automation.core.errors import ConfigError, WorkflowStateError
 from youtube_automation.domains.collections.inventory import iter_collections
+from youtube_automation.infrastructure.vcs._git import run_git
 
 STATE_GITIGNORE_MARKER: Final[str] = "# yt-state-git control plane (ADR-0024)"
 _ROOT_HISTORY_NAMES: Final[tuple[str, ...]] = (
@@ -60,16 +60,6 @@ def state_gitignore_block() -> str:
     template = channel_gitignore_template()
     marker_at = template.index(STATE_GITIGNORE_MARKER)
     return template[marker_at:].rstrip() + "\n"
-
-
-def _run_git(repository: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", *args],
-        cwd=repository,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
 
 
 def _regular_directory(path: Path, *, label: str) -> None:
@@ -167,7 +157,7 @@ def build_pull_context(channel_dir: Path) -> StateGitContext:
         raise ConfigError(f"channel directory に symlink は使えません: {raw}")
     _regular_directory(raw, label="channel directory")
     channel = raw.resolve()
-    top_level = _run_git(channel, "rev-parse", "--show-toplevel")
+    top_level = run_git(channel, "rev-parse", "--show-toplevel")
     if top_level.returncode != 0:
         raise ConfigError(f"channel directory は Git repository 内でなければなりません: {channel}")
     repository = Path(top_level.stdout.strip()).resolve()
@@ -201,14 +191,14 @@ def _changed_paths(context: StateGitContext, *, cached: bool) -> set[str]:
     args = ["diff", "--name-only"]
     if cached:
         args.insert(1, "--cached")
-    result = _run_git(context.repository, *args, "--")
+    result = run_git(context.repository, *args, "--")
     if result.returncode != 0:
         raise ConfigError("Gitの変更状態を確認できません")
     return set(result.stdout.splitlines())
 
 
 def _untracked_paths(context: StateGitContext) -> set[str]:
-    result = _run_git(context.repository, "ls-files", "--others", "--exclude-standard")
+    result = run_git(context.repository, "ls-files", "--others", "--exclude-standard")
     if result.returncode != 0:
         raise ConfigError("Gitの未追跡状態を確認できません")
     return set(result.stdout.splitlines())
@@ -229,7 +219,7 @@ def validate_migration_worktree(context: StateGitContext) -> None:
 
 
 def _is_tracked(context: StateGitContext, path: Path) -> bool:
-    result = _run_git(context.repository, "ls-files", "--error-unmatch", "--", _repo_relative(context, path))
+    result = run_git(context.repository, "ls-files", "--error-unmatch", "--", _repo_relative(context, path))
     return result.returncode == 0
 
 
@@ -246,7 +236,7 @@ def _policy_probe_paths(context: StateGitContext) -> tuple[str, ...]:
 def _ignored_policy_paths(context: StateGitContext) -> tuple[str, ...]:
     ignored: list[str] = []
     for relative in _policy_probe_paths(context):
-        result = _run_git(context.repository, "check-ignore", "--no-index", "--quiet", "--", relative)
+        result = run_git(context.repository, "check-ignore", "--no-index", "--quiet", "--", relative)
         if result.returncode == 0:
             ignored.append(relative)
         elif result.returncode != 1:
@@ -318,7 +308,7 @@ def apply_state_git(context: StateGitContext) -> None:
         ignored_paths = _ignored_policy_paths(context)
         if ignored_paths:
             raise ConfigError(f"Git ignoreを解除できません: {ignored_paths[0]}")
-        added = _run_git(context.repository, "add", "--", *(_repo_relative(context, path) for path in paths))
+        added = run_git(context.repository, "add", "--", *(_repo_relative(context, path) for path in paths))
         if added.returncode != 0:
             raise ConfigError("Git indexへ制御面JSONを追加できません")
     except (ConfigError, OSError) as exc:

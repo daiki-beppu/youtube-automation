@@ -13,6 +13,7 @@ from youtube_automation.domains.analytics.truth_eye import (
     validate_sealed_draft,
     verify_training_record,
 )
+from youtube_automation.infrastructure.vcs.training_commit import commit_training_files
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,6 +38,18 @@ def run(args: argparse.Namespace) -> int:
                 print(json.dumps({"ok": False, "missing": missing}, ensure_ascii=False))
                 return 1
             result = seal_training_record(pair, args.sealed_draft, args.channel_dir)
+            stem = result.record.name.removesuffix(".md")
+            commit_result = commit_training_files(
+                args.channel_dir,
+                (result.record, result.sealed),
+                f"docs(truth-eye): 訓練記録を封印する {stem}",
+            )
+            commit_payload = {
+                "committed": commit_result.committed,
+                "commit": commit_result.commit,
+                "reason": commit_result.reason,
+                "changed_files": list(commit_result.changed_files),
+            }
             print(
                 json.dumps(
                     {
@@ -45,6 +58,7 @@ def run(args: argparse.Namespace) -> int:
                         "sealed": str(result.sealed),
                         "sha256": result.sha256,
                         "sealed_at": result.sealed_at,
+                        **commit_payload,
                     },
                     ensure_ascii=False,
                 )
