@@ -150,8 +150,8 @@ def test_setup_entrypoints_do_not_keep_stale_oauth_contract() -> None:
 def _make_workspace_channel_worktree(tmp_path: Path) -> Path:
     """workspace channel かつ linked worktree の channel_dir を作る。
 
-    workspace root fallback と main worktree fallback の両方が候補に載る唯一の構造で、
-    `client_secrets_file_candidates()` の全 4 候補を一度に観測できる。
+    旧 workspace の配下でも候補が増えず、main worktree fallback を含む
+    `client_secrets_file_candidates()` の全 3 候補だけが返ることを観測する。
     """
     main_root = tmp_path / "main"
     gitdir = main_root / ".git" / "worktrees" / "alpha"
@@ -170,14 +170,12 @@ def test_client_secrets_resolution_order_matches_oauth_setup(tmp_path: Path, mon
 
     monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)
     channel = _make_workspace_channel_worktree(tmp_path)
-    workspace_root = channel.parents[1]
     main_root = tmp_path / "main"
 
     candidates = client_secrets_file_candidates(channel)
     assert candidates == [
         channel / "auth" / "client_secrets.json",
         channel / "automation" / "auth" / "client_secrets.json",
-        workspace_root / "auth" / "client_secrets.json",
         main_root.resolve() / "auth" / "client_secrets.json",
     ]
 
@@ -185,13 +183,13 @@ def test_client_secrets_resolution_order_matches_oauth_setup(tmp_path: Path, mon
     documented_tokens = (
         "<channel_dir>/auth/",
         "<channel_dir>/automation/auth/",
-        "<workspace_root>/auth/",
         "<main_worktree_root>/auth/",
     )
     assert len(documented_tokens) == len(candidates)
 
     oauth_setup = (REPO_ROOT / "docs" / "oauth-setup.md").read_text(encoding="utf-8")
     resolution_section = oauth_setup.split("`client_secrets.json` の解決順", 1)[1].split("## 動作確認", 1)[0]
+    assert "<workspace_root>/auth/" not in resolution_section
     positions = []
     for token in documented_tokens:
         assert token in resolution_section, f"docs/oauth-setup.md is missing {token!r}"

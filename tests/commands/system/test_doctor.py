@@ -661,15 +661,19 @@ class TestClientSecrets:
         r = doctor.check_client_secrets(tmp_path)
         assert r.status == "ok"
 
-    def test_uses_workspace_root_fallback(self, tmp_path):
+    def test_does_not_use_workspace_root_fallback(self, tmp_path, monkeypatch):
         workspace = tmp_path / "workspace"
         channel = workspace / "channels" / "alpha"
         (channel / "config" / "channel").mkdir(parents=True)
         self._write_valid_client_secrets(workspace / "auth" / "client_secrets.json")
 
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.secrets.get_secret",
+            lambda _name: (_ for _ in ()).throw(ConfigError("secret unavailable")),
+        )
         r = doctor.check_client_secrets(channel)
 
-        assert r.status == "ok"
+        assert r.status == "fail"
 
     def test_rejects_client_secrets_directory(self, tmp_path):
         (tmp_path / "auth" / "client_secrets.json").mkdir(parents=True)

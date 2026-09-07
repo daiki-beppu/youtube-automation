@@ -130,9 +130,7 @@ cd ../../..
 
 1. `<channel_dir>/auth/client_secrets.json`（推奨）
 2. `<channel_dir>/automation/auth/client_secrets.json`（submodule 互換フォールバック）
-3. `<workspace_root>/auth/client_secrets.json`
-   - `channel_dir` が workspace 配下のチャンネルとして解決できる場合のみ候補に加わる
-4. `<main_worktree_root>/auth/client_secrets.json`
+3. `<main_worktree_root>/auth/client_secrets.json`
    - git worktree では gitignore された `auth/` が複製されないため、main 作業ツリー側の実体を最後のフォールバックとして参照する（#1721）
 
 いずれのファイルも存在しない場合は、1Password / `CLIENT_SECRETS_JSON` による secret fallback を試みる。
