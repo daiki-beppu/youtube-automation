@@ -12,7 +12,7 @@ skill / CLI ごとの実効 scope と read-only token の設計は [`oauth-scope
 
 ### 5. GCP / ADC / OAuth を完了する
 
-setup は project 選択、Billing 紐付け、必要 API の有効化、ADC quota project、IAM、Reporting job を診断順に進める。外部の GCP 状態を変える前には、対象 project・account・実行コマンドを表示して承認を求める。
+setup は GCP / ADC / OAuth / Reporting job を診断順に確認する。project / billing / API / IAM の不足は、後述の GCP 層の正本へ誘導する。GCP 層を Terraform で整えてから setup を再実行し、ADC / OAuth のローカル認証を進める。
 
 認証 CLI は setup 自身が対話 session で起動する。利用者がターミナルへ別途コマンドをコピーして実行する必要はない。
 
@@ -42,17 +42,11 @@ Google Auth Platform の GUI は API で自動化できないため、setup が 
 
 ## 上級者向け代替ルートと参照情報
 
-推奨ルートを使わず GCP project を手動管理したい場合に限り、以下の Terraform 経路を使う。`client_secrets.json` の解決順、Vertex AI の project / location 解決、セキュリティ、トラブルシューティングもこの後に記載する。この経路は廃止しないが、初回利用者の標準手順ではない。
+### GCP 層（project / billing / API / IAM）
 
-ここに掲載するコマンドも、原則として Claude デスクトップアプリへ「対象 project と変更内容を確認してから、この手順を実行してください」と依頼する。利用者が直接ターミナルへ入力するのは、組織の運用規則で AI エージェントの実行が許可されない場合に限る。
+first-party の共有 GCP 構成は、上流の [`infra/terraform/gcp/README.md`](../infra/terraform/gcp/README.md) を正本として Terraform で管理する。`yt-doctor` は GCP 層の検証と正本への誘導のみを行い、project / billing / API / IAM を変更しない。
 
-### 上流 Terraform: GCP 層の唯一の変更経路
-
-GCP 層（project / billing / API / IAM）の変更経路は上流専属の [`infra/terraform/gcp/README.md`](../infra/terraform/gcp/README.md) だけである（[ADR-0030](adr/0030-terraform-sole-change-path-for-gcp.md)）。GCS backend を指定して init し、既存リソースの import を完了してから apply する。下流チャンネルリポジトリには Terraform 資産を配布しない。external user は上流リポジトリを clone し、自分の tfvars で `infra/terraform/gcp/` を apply する。
-
-gcloud で project を作成・変更する半自動スクリプト経路は廃止した。マシン層（gcloud login / ADC / quota project / project 選択）とチャンネル層（OAuth client / `client_secrets.json` / `token.json` / Reporting job）は引き続き `/setup --tool` が担当する。
-
-この Terraform 経路でも `client_secrets.json` の手動配置を行う。次節はその手動経路向けであり、推奨のルート 0 は `/setup` の Download JSON → `done` → `yt-doctor --fix-client-secrets` → JSON 再診断を使う。
+external user は上流リポジトリを clone し、同じ README に従って自分の tfvars で apply する。Terraform 資産は下流チャンネルリポジトリへ配布しない。GCP 層の構築・変更・トラブルシューティングは上流 README、OAuth の本人操作と secret 解決順は本ガイドを参照する。
 
 ---
 
@@ -157,31 +151,6 @@ Vertex AI で以下を利用する。`aiplatform.googleapis.com` が有効化さ
 ---
 
 ## トラブルシューティング
-
-### GCP 層共通
-
-#### `Permission denied` / 認証エラー
-`gcloud auth application-default login` で ADC を更新。必要なら quota project を固定:
-```bash
-gcloud auth application-default set-quota-project <project-id>
-```
-
-#### `roles/aiplatform.user` 付与でエラー
-IAM 付与権限がない。Organization / Project オーナー権限を持つアカウントで実行すること。
-
-#### プロジェクト作成上限に達した
-GCP のプロジェクト作成は 1 アカウントあたり上限あり（初期は少ない）。不要プロジェクトを削除するか、上限緩和申請。
-
-#### `billingEnabled` エラー（Vertex AI / aiplatform 有効化時）
-Billing account が紐付いていない。上流 `infra/terraform/gcp/` の `billing_account` を設定して apply する。
-
-### terraform 固有
-
-#### `already exists but is not managed by this terraform configuration`
-`project_id` が既存の共有プロジェクトを指し、`imports.tf` が読み込まれていることを確認する。プロジェクトを新規作成して回避せず、[`infra/terraform/gcp/README.md`](../infra/terraform/gcp/README.md) の import 手順に戻る。
-
-#### `Error 400: ... not enabled for billing`
-`aiplatform.googleapis.com` には Billing が必須。`billing_account` を正しく指定。
 
 ### YouTube OAuth 固有
 

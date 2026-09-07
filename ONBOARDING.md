@@ -30,14 +30,14 @@
 
 空フォルダでの prerequisites、`uv init`、automation package と skill の導入は、公開ガイド [`docs/tool-setup.md`](docs/tool-setup.md) を正本とする。`/setup --tool` による GCP / OAuth / ADC の本人操作と完了確認は、[`docs/oauth-setup.md`](docs/oauth-setup.md) を正本とする。本書には同じコマンドや OAuth GUI 手順を複製しない。
 
-公開ガイドの推奨ルートを完了すると、automation CLI、同期済み skill、API 認証、動画アップロード前提が揃う。その後、この onboarding の §3 に進み、新規チャンネルなら `/setup --channel` を実行する。手動 bootstrap / Terraform、secret 解決順、トラブルシューティングも同じ公開ガイドの上級者向け節を参照する。
+公開ガイドの推奨ルートを完了すると、automation CLI、同期済み skill、API 認証、動画アップロード前提が揃う。その後、この onboarding の §3 に進み、新規チャンネルなら `/setup --channel` を実行する。GCP 層は上流の [`infra/terraform/gcp/README.md`](infra/terraform/gcp/README.md)、secret 解決順と OAuth のトラブルシューティングは公開ガイドを参照する。
 
 ### 2.4 初期設定後の GCP 課金確認
 
-`/setup` で Billing を紐付けたあとの実際の利用料金は、リポジトリ内の推定値ではなく **Google Cloud Billing** を正として確認する。
+Terraform で Billing を紐付けたあとの実際の利用料金は、リポジトリ内の推定値ではなく **Google Cloud Billing** を正として確認する。
 
 1. 下流チャンネルリポジトリで `uv run yt-doctor --json` を実行し、`checks` 内の `id` が `gcp_project` の項目から対象の project ID を確認する。
-2. [Google Cloud Console の Billing](https://console.cloud.google.com/billing) を開き、`/setup` で対象プロジェクトに紐付けた Billing account を選ぶ。
+2. [Google Cloud Console の Billing](https://console.cloud.google.com/billing) を開き、Terraform で対象プロジェクトに紐付けた Billing account を選ぶ。
 3. **Reports** で期間（Time range）を指定し、**Projects** を手順 1 の project ID に絞る。まず **Service**、必要に応じて **SKU** でグループ化または絞り込み、どのサービス・SKU がその期間の料金を発生させたか確認する。画面の見方は [Cloud Billing Reports の公式手順](https://cloud.google.com/billing/docs/how-to/reports) を参照する。
 4. USD を含む単価を確認する場合は、同じ Billing account の **Pricing** で対象の Service / SKU を検索し、表示時点の `List price`（契約単価がある場合は `Contract price`）を確認する。価格は選択した Billing account の通貨で表示されるため、通貨も併せて確認する。参照方法と各列の意味は [Pricing の公式手順](https://cloud.google.com/billing/docs/how-to/pricing-table) を参照する。
 

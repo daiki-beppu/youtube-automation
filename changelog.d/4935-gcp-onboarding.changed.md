@@ -1,0 +1,1 @@
+- 公開 OAuth ガイドと ONBOARDING の GCP 層を上流 Terraform README への案内に統一し、廃止済み bootstrap と重複する GCP トラブルシューティングを削除した。
