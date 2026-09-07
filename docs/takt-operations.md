@@ -96,7 +96,7 @@ gh stack sync --prune          # 下段 merge 後の追随。merge 済みロー�
      --json databaseId,workflowName,headSha,status,conclusion,url
    ```
 
-4. 対象 PR の最新 HEAD に対する `CI` / `Dashboard` / `Extensions` / `Audio Studio` / `Release notes site` の queued / in_progress run だけを `gh run cancel <run-id>` で止める。`Code review`、autofix、main push、release、他 stack の run は対象外。起動が遅れている場合は再取得し、キャンセル要求後も終了を確認する。すでに完了した run はその結果を保持する。
+4. 対象 PR の最新 HEAD に対する、後述「CI 失敗の自動修正」の PR をゲートする 5 workflow の queued / in_progress run だけを `gh run cancel <run-id>` で止める。`Code review`、autofix、main push、release、他 stack の run は対象外。起動が遅れている場合は再取得し、キャンセル要求後も終了を確認する。すでに完了した run はその結果を保持する。
 5. 延期した PR 番号・HEAD・workflow・run ID を作業報告に残す。修正段と最上段の最新 HEAD で対象 CI が完了し、成功したことを確認するまで修正ループを終えない。コードレビューは既存のゲートに従う。
 
 `[skip ci]` や必須チェックの削除による省略は使わない。キャンセルによる未検証状態はそのまま残し、次のマージ前手順で解消する。
@@ -109,6 +109,8 @@ gh stack sync --prune          # 下段 merge 後の追随。merge 済みロー�
 4. 各段の必須チェックと実行対象 CI / review が成功し、保留・キャンセル・失敗した必要チェックがなく、HEAD が検証中から変わっていないことを確認して、下記の `gh stack merge` へ進む。キャンセルを理由に required check を弱めない。
 
 コマンドの仕様: [gh run cancel](https://cli.github.com/manual/gh_run_cancel)、[gh run rerun](https://cli.github.com/manual/gh_run_rerun)、[再実行時の SHA / ref](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs)。
+
+`github/gh-stack` の `top` は最上段への移動、`push` は既存 stack の active branch の push 専用コマンドである（[公式コマンド一覧](https://github.com/github/gh-stack/blob/main/skills/gh-stack/references/commands.md)）。`submit` は push に加えて PR / stack の作成・更新も行う。2026-09-07 に `gh stack top --help` / `gh stack push --help` で実在と引数を確認済み。環境の CLI と食い違う場合は、その環境の `--help` を確認する。
 
 ### merge
 
@@ -128,6 +130,8 @@ gh stack merge <stack番号|PR番号> --yes --squash
 | `gh stack submit` | `--auto` | PR タイトルを 1 件ずつ対話で聞く |
 | `gh stack init` / `add` / `checkout` | branch 名・番号を positional で渡す | 対話メニューが出る |
 | `gh stack merge` | `--yes` | 対話ウィザードが出る |
+
+`gh stack top` / `push` / `rebase --upstack` は非対話で実行でき、対話抑制フラグは不要。`push` / `rebase` は複数 remote の場合に `remote.pushDefault` または `--remote origin` を指定する。`--upstack` は対話抑制ではなく伝播範囲の指定である。
 
 ### 落とし穴
 
