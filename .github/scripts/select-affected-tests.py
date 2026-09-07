@@ -80,6 +80,7 @@ PATH_TEST_MAP: Final = (
             "tests/repo/test_skill_page_generation_contract.py",
         ),
     ),
+    (".github/workflows/terraform-static.yml", ("tests/repo/test_terraform_workflows.py",)),
     (".github/scripts/", ("tests/repo/test_select_affected_tests.py",)),
     (".github/scripts/any-usage-gate.sh", ("tests/repo/test_any_usage_gate.py",)),
     # resolver / cleaner は any-usage-gate.sh から subprocess で呼ばれるだけで
