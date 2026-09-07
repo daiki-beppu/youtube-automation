@@ -92,34 +92,13 @@ gcloud auth login
 
 #### `gcp_project` — GCP プロジェクト未確定
 
-利用者に既存流用か新規作成か聞く:
-
-- 既存流用: project ID を聞く（project ID は ADC quota project から自動解決され、必要時だけ `GOOGLE_CLOUD_PROJECT` process env で上書きできる）
-- 新規作成: チャンネル情報から推奨 project ID と表示名を生成し、利用者に提示して承認またはカスタム入力を求める
-
-新規作成時の推奨値:
-
-- チャンネル名: `config/channel/meta.json` の `channel.name` が存在すればそれを使う。未設定の場合は `<channel_dir>` のベースネームを title case 化して使う (例: `lofi-beats` -> `Lofi Beats`)
-- project ID: `yt-{channel-slug}`。`channel-slug` はチャンネル名を kebab-case 化し、英小文字・数字・ハイフン以外をハイフンに置換、連続ハイフンを 1 個に畳み、先頭末尾のハイフンを削る
-- project ID は GCP 制約に合わせて 6-30 文字、英小文字開始、末尾は英小文字か数字（ハイフン終端は不可）に収める。`yt-{channel-slug}` が 30 文字を超える場合は次の 3 段で truncate する:
-  1. `yt-` prefix は必ず保持し、超過分は `channel-slug` の末尾から削って全体を 30 文字以内にする（prefix 側からは削らない）
-  2. 切り詰め後の末尾がハイフンになった場合は、そのハイフンも追加で削る（例: `yt-midnight-drive-time-lounge-a`（31 文字）を先頭 30 文字で単純に切ると `yt-midnight-drive-time-lounge-`（30 文字、末尾ハイフンで GCP 制約違反）になるため、ハイフンを削って `yt-midnight-drive-time-lounge`（29 文字）にする）
-  3. 上記処理後に 6 文字未満になる・空になる・truncate で意味が読み取れなくなる場合は自動生成をやめ、カスタム入力を求める
-- project 表示名 (`--name`): `{チャンネル名} YouTube` (例: `Lo-Fi Beats YouTube`)
-
-利用者には「推奨 project ID は `<suggested-project-id>`、表示名は `<channel-name> YouTube`。この ID で作成してよいか、またはカスタム project ID を入力してください」と確認する。project ID はグローバルユニークなので、作成失敗時は別 ID を聞いてリトライする。
-
-新規作成を選んだ場合は、決定した project ID と表示名を示し、「Google Cloud に外部 resource を作成し、作成後も resource は残る」と警告する。AskUserQuestion で「project を作成」/「中止」の明示 2 択を提示し、作成が承認されるまで次のコマンドを実行しない:
-
-```bash
-gcloud projects create <project-id> --name="<channel-name> YouTube"
-```
-
-新規作成の成功後、または既存 project ID が決まった後は、手動で `gcloud config set` を実行しない。必ず先に「GCP 変更 plan の承認」へ戻る。この project ID で新たに実行可能になる全変更を再表示する。AskUserQuestion で実行が承認された後だけ次を実行し、中止ならここで停止する。project 選択と後続の ADC quota project 設定は `--apply` が診断順に行う。
+利用者に既存 project ID を 1 問で確認し、`--project-id <project-id>` を `apply_flags` に保持して再診断する。project 選択はマシン層の設定であり、`--apply` が後続の ADC quota project 設定とともに診断順に行う。
 
 ```bash
 uv run yt-doctor --apply --json --project-id <project-id>
 ```
+
+project 自体の作成・変更は GCP 層の責務として上流 `infra/terraform/gcp/` が管理する。既存 project が用意されていなければ上流 README を案内し、上流での apply 完了後に再診断する。
 
 #### `billing_linked` — billing 未紐付け
 
@@ -161,7 +140,7 @@ GCP 層は上流 `infra/terraform/gcp/` が管理する。fail なら `next_acti
 
 **[HUMAN STEP]** で依頼 (`yt-doctor` の `next_action.url` をそのまま使う):
 
-HUMAN STEP を出す前に、`gcp_project` と同じルールでチャンネル名を解決し、以下の推奨名をメッセージに含める:
+HUMAN STEP を出す前に、`config/channel/meta.json` の `channel.name` を使い、未設定なら `<channel_dir>` のベースネームを title case 化してチャンネル名を解決し、以下の推奨名をメッセージに含める:
 
 - Google Auth Platform > Branding のアプリ名: `{チャンネル名} YouTube Automation` (例: `Lo-Fi Beats YouTube Automation`)
 - OAuth クライアント ID 名: `{チャンネル名} Desktop Client` (例: `Lo-Fi Beats Desktop Client`)

@@ -43,7 +43,8 @@ guardが成功した後、uv未導入なら選択modeの成果物操作より先
 | `--regenerate` | `references/regeneration-mode.md` |
 | `--push` | `references/push-mode.md` |
 
-`--tool` は `uv run yt-setup-dirs` を含む現行 doctor wizard をそのまま実行し、GCP / OAuth / ADC bootstrap の唯一の正規入口とする。Google Auth Platform の Branding / Audience / Clients 設定と `client_secrets.json` の既存契約も `references/tool.md` で維持する。手動 script / Terraform を明示的に選ぶ上級者向け資産は同じ owner の `references/gcp-bootstrap.md` に置く。`--tool` では `config/channel/*.json` を生成しない。運用設定の `workflow.post_publish.skip_approvals` も `references/tool.md` の既存インタビューで扱う。
+`--tool` は `uv run yt-setup-dirs` と doctor wizard でツール導入、マシン層の認証・設定、チャンネル層の OAuth / Reporting job を進める。GCP 層の project / billing / API / IAM は上流 Terraform が管理し、doctor は検証と誘導を行う。
+Google Auth Platform の Branding / Audience / Clients 設定と `client_secrets.json`、運用設定の `workflow.post_publish.skip_approvals` は `references/tool.md` で扱う。`--tool` では `config/channel/*.json` を生成しない。
 
 `--channel` は `references/channel-mode.md` を唯一の正として読み、移設前の新規開設 Step 1〜10 と同じ契約を実行する。TTP hearing、seed confirmation、config、duration、persona、branding、readiness、initial save の順序、success / failure / blocked / resume / idempotency、不可逆操作前の承認 gate と成果物契約を変えない。
 

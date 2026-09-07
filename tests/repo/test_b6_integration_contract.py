@@ -117,7 +117,10 @@ MERGE_SOURCE_EXISTS = {"legacy-26", "legacy-27"}
 
 # receipt は B6 統合時点の履歴として凍結するため、その後に恒久削除した owner だけを明示的に除外する。
 # terraform-gcp/ は上流 infra/terraform/gcp/ 専属になり配布を廃止した（#4928）。
-RETIRED_OWNERS = {".claude/skills/setup/references/terraform-gcp/README.md"}
+RETIRED_OWNERS = {
+    ".claude/skills/setup/references/terraform-gcp/README.md",
+    ".claude/skills/setup/references/gcp-bootstrap.md",
+}
 
 
 def _read_receipt() -> dict[str, object]:
@@ -253,7 +256,6 @@ def test_b6_receipt_points_every_mapping_to_an_existing_owner() -> None:
         f"{legacy}benchmark_collector.py": f"{research}benchmark_collector.py",
         f"{legacy}fetch_benchmark_comments.py": f"{research}fetch_benchmark_comments.py",
         f"{legacy}generate_image.py": f"{setup}generate_image.py",
-        f"{legacy}gcp-bootstrap.md": f"{setup}gcp-bootstrap.md",
         f"{legacy}import-mode.md": f"{setup}import-mode.md",
         f"{legacy}regeneration-mode.md": f"{setup}regeneration-mode.md",
         f"{legacy}verification.md": f"{setup}verification.md",
@@ -394,11 +396,6 @@ def test_built_sdist_contains_only_approved_members(tmp_path: Path) -> None:
         "infra/terraform/gcp/README.md",
     }
     assert oauth_entrypoints <= members
-    setup_gcp_assets = {
-        ".claude/skills/setup/references/gcp-bootstrap.md",
-        ".claude/skills/setup/references/gcp-bootstrap.sh",
-    }
-    assert setup_gcp_assets <= members
     forbidden_prefixes = (
         ".github/",
         ".takt/",
@@ -410,7 +407,7 @@ def test_built_sdist_contains_only_approved_members(tmp_path: Path) -> None:
         "plans/",
         "site/",
     )
-    # allowlist へ明示した member（例: ルート B の infra README）だけが forbidden prefix の例外になる
+    # allowlist へ明示した member（例: GCP 層の唯一の変更経路である infra README）だけが例外になる
     assert not [member for member in members if member.startswith(forbidden_prefixes) and member not in allowed_exact]
     forbidden_names = {
         "client_secrets.json",

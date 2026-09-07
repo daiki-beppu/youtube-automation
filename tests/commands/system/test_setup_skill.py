@@ -25,7 +25,6 @@ _SETUP_RUNBOOK = _SKILLS_DIR / "setup" / "references" / "check-runbook.md"
 _SETUP_CHAIN_MANIFEST = _SKILLS_DIR / "setup" / "references" / "setup-chain-manifest.json"
 _SETUP_CHAIN_STATE = _SKILLS_DIR / "setup" / "references" / "setup-chain-state.py"
 _SETUP_MODE_GUARD = _SKILLS_DIR / "setup" / "references" / "setup-mode-guard.py"
-_SETUP_GCP_GUIDE = _SKILLS_DIR / "setup" / "references" / "gcp-bootstrap.md"
 _SETUP_CHANNEL_MODE = _SKILLS_DIR / "setup" / "references" / "channel-mode.md"
 _SETUP_IMPORT_MODE = _SKILLS_DIR / "setup" / "references" / "import-mode.md"
 _SETUP_REGENERATE_MODE = _SKILLS_DIR / "setup" / "references" / "regeneration-mode.md"
@@ -53,6 +52,14 @@ def _setup_text() -> str:
         + "\n"
         + _SETUP_RUNBOOK.read_text(encoding="utf-8")
     )
+
+
+def _runbook_section(check_id: str) -> str:
+    """check-runbook.md から check_id 見出し 1 節だけを切り出す（次の h4 見出しの手前まで）。"""
+    runbook = _SETUP_RUNBOOK.read_text(encoding="utf-8")
+    heading = f"#### `{check_id}`"
+    assert heading in runbook, f"check-runbook.md に {check_id} の節が無い"
+    return runbook.split(heading, 1)[1].split("\n#### ", 1)[0]
 
 
 def _load_setup_chain_state() -> ModuleType:
@@ -162,27 +169,6 @@ def test_setup_mode_guard_resolves_each_exclusive_mode(arguments: tuple[str, ...
 
     assert result.returncode == 0
     assert json.loads(result.stdout) == {"status": "ok", "mode": mode}
-
-
-def test_setup_tool_is_the_canonical_gcp_oauth_adc_bootstrap_entrypoint() -> None:
-    skill = _SETUP_SKILL.read_text(encoding="utf-8")
-    tool = _SETUP_TOOL.read_text(encoding="utf-8")
-    guide = _SETUP_GCP_GUIDE.read_text(encoding="utf-8")
-
-    assert "GCP / OAuth / ADC bootstrap の唯一の正規入口" in skill
-    assert "doctor wizard が正規入口" in guide
-    for contract in (
-        "Google Auth Platform",
-        "Branding",
-        "Audience",
-        "Clients",
-        "client_secrets.json",
-        "approval",
-        "API 有効化",
-        "ADC quota project",
-        "IAM 付与",
-    ):
-        assert contract in tool
 
 
 def test_setup_chain_manifest_declares_default_chain_and_mode_only_steps() -> None:
@@ -365,31 +351,55 @@ def test_setup_skill_branches_on_all_apply_stop_reasons() -> None:
     assert "uv run yt-doctor --apply --json --project-id <project-id>" in startup
 
 
-def test_setup_skill_requires_approval_before_apply_mutations() -> None:
-    text = _setup_text()
-    startup = text.split("## 起動時のチェック", 1)[1].split("## 認証コマンドと人間操作の責務", 1)[0]
+def test_setup_skill_keeps_a_single_approval_gate_without_gcp_plan_approval() -> None:
+    """#4934 `single-gate-no-gcp-plan`: 承認は起動時の 1 gate のみで、GCP 変更 plan の再承認を持たない."""
+    tool = _SETUP_TOOL.read_text(encoding="utf-8")
+    startup = tool.split("## 起動時のチェック", 1)[1].split("## 認証コマンドと人間操作の責務", 1)[0]
 
-    assert "uv run yt-doctor --json" in startup
-    assert "AskUserQuestion" in startup
-    assert "「表示した変更を実行」/「中止」の明示 2 択" in startup
-    assert "GCP 変更は外部反映" in startup
-    assert "prune は列挙したファイルを削除" in startup
-    assert startup.index("uv run yt-doctor --json") < startup.index("uv run yt-doctor --apply --json")
+    # 単一 gate は残り、警告文は 3 層再編後の文言になっている
+    assert "AskUserQuestion により「表示した変更を実行」/「中止」の明示 2 択" in startup
+    assert "「prune は列挙したファイルを削除し、Reporting job は YouTube 側に作成される」と警告する" in startup
+    assert "承認されなければここで停止する" in startup
+
+    # GCP 変更 plan の承認節と再承認ループは、節名を変えた形でも復活させない
+    assert "GCP 変更 plan" not in tool
+    assert "再承認" not in tool
+    # decision_required は `gcp_project` の `--project-id` 1 問だけに縮める（project 作成の承認を持たない）
+    decision = startup.split("`decision_required`:", 1)[1].split("`command_failed`:", 1)[0]
+    assert "--project-id <project-id>" in decision
+    assert "マシン層の project 選択" in decision
+    for mutation in ("gcloud projects create", "billing projects link", "services enable"):
+        assert mutation not in decision, f"decision_required に GCP 層の変更コマンド {mutation!r} が残っている"
 
 
-def test_setup_skill_reapproves_project_scoped_plan_after_decisions() -> None:
-    text = _setup_text()
-    startup = text.split("## 起動時のチェック", 1)[1].split("## 認証コマンドと人間操作の責務", 1)[0]
-    plan = startup.split("### GCP 変更 plan の承認", 1)[1]
+def test_setup_runbook_routes_gcp_layer_checks_to_upstream_terraform() -> None:
+    """#4934 `runbook-routes-to-terraform`: GCP 層 4 節が変更コマンドを持たず上流 Terraform へ誘導する."""
+    # GCP 層の変更コマンドを runbook 側に複製しない（terraform コマンドの実行手順も置かない）
+    for check_id in ("gcp_project", "billing_linked", "apis_enabled", "iam_aiplatform_user"):
+        section = _runbook_section(check_id)
+        assert "infra/terraform/gcp/" in section, f"{check_id} の節に上流 Terraform への誘導が無い"
+        for mutation in (
+            "gcloud projects create",
+            "gcloud services enable",
+            "gcloud beta billing",
+            "billing projects link",
+            "add-iam-policy-binding",
+            "terraform apply",
+        ):
+            assert mutation not in section, f"{check_id} の節に変更コマンド {mutation!r} が残っている"
 
-    assert "`--project-id` を追加・変更するたび" in plan
-    assert "正確な project ID" in plan
-    assert "active account" in plan
-    for mutation in ("Billing 紐付け", "API 有効化", "ADC quota project", "IAM 付与", "Reporting job 作成"):
-        assert mutation in plan
-    assert "「表示した GCP 変更を実行」/「中止」の 2 択" in plan
-    assert "承認されるまで flag 付き `--apply` を実行しない" in plan
-    assert "前回の承認を無効" in plan
+    # gcp_project はマシン層の project 選択だけを行い、project 自体は上流の責務と明示する
+    gcp_project = _runbook_section("gcp_project")
+    assert "uv run yt-doctor --apply --json --project-id <project-id>" in gcp_project
+    assert "project 自体の作成・変更は GCP 層の責務として上流 `infra/terraform/gcp/` が管理する" in gcp_project
+
+    # 残る 3 節は同一の誘導文。1 箇所だけ書き換えたときの追従漏れをここで機械担保する
+    routing = (
+        "GCP 層は上流 `infra/terraform/gcp/` が管理する。fail なら `next_action.url` の README に従って"
+        "上流で plan → apply を行い、完了後に `uv run yt-doctor --json` で再診断する。"
+    )
+    for check_id in ("billing_linked", "apis_enabled", "iam_aiplatform_user"):
+        assert routing in _runbook_section(check_id), f"{check_id} の節が上流 Terraform への誘導文と一致しない"
 
 
 def test_setup_skill_gates_numbered_duplicate_deletion() -> None:
@@ -446,45 +456,6 @@ def test_setup_skill_delegates_minimum_directory_generation_to_setup() -> None:
     assert "`/setup` は `uv run yt-setup-dirs`" in text
     assert "`/setup --tool` では `config/channel/*.json` を生成しない" in text
     assert "OAuth クライアント JSON の配置先 `auth/`" in text
-
-
-def test_setup_skill_suggests_gcp_project_id_from_channel_name() -> None:
-    text = _setup_text()
-    assert "`config/channel/meta.json` の `channel.name`" in text
-    assert "`yt-{channel-slug}`" in text
-    assert "kebab-case" in text
-    assert "6-30 文字" in text
-    assert "`--name`): `{チャンネル名} YouTube`" in text
-    assert "承認またはカスタム入力" in text
-
-
-def test_setup_skill_requires_explicit_project_creation_approval() -> None:
-    text = _setup_text()
-    section = text.split("#### `gcp_project`", 1)[1].split("#### `billing_linked`", 1)[0]
-
-    assert "決定した project ID と表示名を示し" in section
-    assert "Google Cloud に外部 resource を作成" in section
-    assert "AskUserQuestion" in section
-    assert "「project を作成」/「中止」の明示 2 択" in section
-    assert "作成が承認されるまで次のコマンドを実行しない" in section
-
-
-def test_setup_project_section_routes_through_plan_approval() -> None:
-    text = _setup_text()
-    project = text.split("#### `gcp_project`", 1)[1].split("#### `billing_linked`", 1)[0]
-    assert "必ず先に「GCP 変更 plan の承認」へ戻る" in project
-    assert "AskUserQuestion で実行が承認された後だけ" in project
-    assert "中止ならここで停止する" in project
-
-
-def test_setup_skill_suggests_oauth_app_and_client_names() -> None:
-    text = _setup_text()
-    assert "`gcp_project` と同じルールでチャンネル名を解決" in text
-    assert "`{チャンネル名} YouTube Automation`" in text
-    assert "`{チャンネル名} Desktop Client`" in text
-    assert "Google Auth Platform > Branding のアプリ名: <channel-name> YouTube Automation" in text
-    assert "OAuth クライアント ID 名: <channel-name> Desktop Client" in text
-    assert "OAuth 同意画面のアプリ名: <channel-name> YouTube Automation" not in text
 
 
 def test_skills_use_uv_run_for_doctor_json() -> None:

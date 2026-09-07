@@ -8,6 +8,8 @@
 
 利用者は GCP / OAuth に不慣れな前提。**すべてのコマンドの起動・実行・再診断は AI または setup スクリプトが担当する。** 利用者には、ブラウザ上のログイン・アカウント選択・OAuth 同意・秘密情報入力など、認証本人にしか行えない操作だけを `[HUMAN STEP]` として依頼する。
 
+external user は上流リポジトリを clone し、自分の tfvars で `infra/terraform/gcp/` を apply する。
+
 ## 前提
 
 本スキルはセットアップの起点であり、前工程スキルの成果物を要求しない。確認するのは以下のみ:
@@ -40,9 +42,9 @@
 |---|---|---|
 | YouTube Data API（oauth_token 手順の `uv run yt-oauth` 接続テスト） | 約 1 call | OAuth 認証の実行有無 |
 | YouTube Reporting API（`uv run yt-doctor` 診断 + `uv run yt-analytics --reporting-create-job`、無料枠） | 数 call（quota 課金なし） | Reporting job の作成有無 |
-| Vertex AI（Gemini / Veo / Lyria） | 0（`gcloud services enable` は API 有効化のみで生成呼び出しなし） | — |
+| Vertex AI（Gemini / Veo / Lyria） | 0（診断・認証設定のみで生成呼び出しなし） | — |
 
-- 上限 / 承認: plain 診断（`uv run yt-doctor --json`）と書き込み系 check（playlist_create_dry_run 等）は読み取り専用 / dry-run で、YouTube 側への変更は発生しない。`yt-doctor --apply` は別であり、ローカルの skill 同期・古い managed skill 削除と、GCP の project 選択・Billing 紐付け・API 有効化・ADC quota project・IAM 付与・Reporting job 作成を行い得る。そのため以下の承認 gate を通す。
+- 上限 / 承認: plain 診断（`uv run yt-doctor --json`）と書き込み系 check（playlist_create_dry_run 等）は読み取り専用 / dry-run で、YouTube 側への変更は発生しない。`yt-doctor --apply` はローカルの skill 同期・古い managed skill 削除に加え、マシン層の project 選択・ADC quota project 設定と、チャンネル層の Reporting job 作成を行い得る。GCP 層（project / billing / API / IAM）の変更は上流 `infra/terraform/gcp/` が管理し、doctor は検証と誘導を行う。そのため以下の承認 gate を通す。
 
 ## 起動時のチェック
 
@@ -70,20 +72,14 @@
 4. `pyproject.toml` に `youtube-channels-automation` 依存が無ければ `uv add git+https://github.com/daiki-beppu/youtube-automation.git` を Bash で実行する
 5. `uv run yt-skills sync --asset skills --force` / `uv run yt-skills sync --asset claude-md` / `uv run yt-skills sync --asset auth-template` を Bash で実行する
 6. `uv run yt-setup-dirs` を Bash で実行し、OAuth クライアント JSON の配置先 `auth/` など setup に必要な最小ディレクトリを作成する
-7. 初回のみ `uv run yt-doctor --json` を読み取り preflight として実行し、`checks[].next_action` から現時点の変更対象・コマンドを表示する。project ID がすでに解決できる場合は、後述の「GCP 変更 plan の承認」に従って連続実行で新たに到達し得る変更も全件表示する。`skills_synced` が prune を求める場合は、実在する managed legacy skill の削除対象パスを 1 件ずつ列挙する。その上で AskUserQuestion により「表示した変更を実行」/「中止」の明示 2 択を提示し、「GCP 変更は外部反映され、prune は列挙したファイルを削除する」と警告する。承認されなければここで停止する
+7. 初回のみ `uv run yt-doctor --json` を読み取り preflight として実行し、`checks[].next_action` から現時点の変更対象・コマンドを表示する。`skills_synced` が prune を求める場合は、実在する managed legacy skill の削除対象パスを 1 件ずつ列挙する。その上で AskUserQuestion により「表示した変更を実行」/「中止」の明示 2 択を提示し、「prune は列挙したファイルを削除し、Reporting job は YouTube 側に作成される」と警告する。承認されなければここで停止する
 8. 承認後、収集済み決定 flag を保持する `apply_flags` を空で初期化し、`uv run yt-doctor --apply --json <apply_flags>` を 1 回実行して JSON の `apply.stop_reason` を読む。初回は flag 無しの `uv run yt-doctor --apply --json` となる
 9. `completed`: 冒頭の「完了条件」を確認し、「運用設定インタビュー」後に「完了時」を報告する
 10. `human_required`: `apply.check_id` の §Steps を参照する。`apply.next_action.reason == "authentication"` なら `apply.next_action.cmd` を AI が対話 session で起動してから、ブラウザ認証だけを `[HUMAN STEP]` として依頼する。その他は対応する `[HUMAN STEP]` を 1 つだけ依頼して停止する。認証コマンドまたは人間操作の完了後、必要な後処理と現在の `apply_flags` をすべて付けた手順 8 の再診断は AI が行う。`analytics_report` stale の例外は「完了条件」に従う
-11. `decision_required`: `apply.check_id` が `gcp_project` なら project ID を利用者に 1 問で確認する。値を `apply_flags` へ仮追加または同名 flag の値を仮置換し、後述の「GCP 変更 plan の承認」で、その flag により新たに実行可能になる全コマンドと正確な project / account を再表示する。AskUserQuestion の「表示した GCP 変更を実行」/「中止」の 2 択で承認された後だけ flag を確定して再実行する。以後 `completed` まで全 flag を毎回付け、値を変更するたびに plan を再表示・再承認する。project が決定済みなら `uv run yt-doctor --apply --json --project-id <project-id>` となる
+11. `decision_required`: `apply.check_id` が `gcp_project` なら既存 project ID を利用者に 1 問で確認し、`--project-id <project-id>` を `apply_flags` に保持して手順 8 を再実行する。以後 `completed` まで全 flag を毎回付け、`uv run yt-doctor --apply --json --project-id <project-id>` でマシン層の project 選択を行う。
 12. `command_failed`: `apply.check_id` / `apply.cmd` / `apply.stderr` を利用者に示し、AI が §Steps に沿って原因を診断・解消してから、現在の `apply_flags` をすべて付けて手順 8 を再実行する。認証・承認入力以外のコマンドを利用者へ委ねない
 
 `--apply` は `ai-exec` を診断順に連続実行し、各コマンド後に再診断する。AI は `apply.executed` を実行済み履歴として読み、§Steps に残る同じ `ai-exec` コマンドを重複実行してはならない。`stop_reason` が上記 4 値以外、または JSON が読めない場合は安全側に停止し、CLI 出力を示す。
-
-### GCP 変更 plan の承認
-
-project ID が解決済み、または `apply_flags` へ `--project-id` を追加・変更するたびに、次回 `--apply` が連続診断で到達し得る変更 plan を承認前に再作成する。`gcloud auth list` で active account を読み取り、正確な project ID、active account と、§Steps に記載した project 選択・ADC quota project・Reporting job 作成のうち未解決の全コマンドを展開して表示する。Billing 紐付け・API 有効化・IAM 付与は上流 Terraform の担当であり、この plan と doctor の実行対象に含めない。
-
-表示後、「これらは project `<project-id>` の外部 GCP 状態を変更する」と警告し、AskUserQuestion で「表示した GCP 変更を実行」/「中止」の 2 択を提示する。承認されるまで flag 付き `--apply` を実行しない。値の追加・変更は前回の承認を無効にし、必ず plan を再表示して承認を取り直す。
 
 `/setup` は `uv run yt-setup-dirs` で `auth/`, `branding/`, `collections/`, `data/`, `docs/channel/personas/`, `docs/benchmarks/`, `research/` を冪等に作成する。`/setup --tool` では `config/channel/*.json` を生成しない。新規チャンネルの config、TTP メモ、ペルソナ、branding は `/setup --channel` の責務。
 

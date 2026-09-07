@@ -404,7 +404,11 @@ assert "wheel-identity-check" not in legacy._cache
     for asset in _SETUP_MIGRATED_ASSETS:
         assert (distributed_references / asset).is_file()
         assert not (downstream / ".claude" / "skills" / "channel-new" / "references" / asset).exists()
-    for markdown in (channel_mode, *(distributed_references / name for name in opening_assets if name.endswith(".md"))):
+    for markdown in (
+        channel_mode,
+        distributed_references / "tool.md",
+        *(distributed_references / name for name in opening_assets if name.endswith(".md")),
+    ):
         local_links = [
             link
             for link in re.findall(r"\[[^]]+\]\(([^)]+)\)", markdown.read_text(encoding="utf-8"))
@@ -447,28 +451,6 @@ assert "wheel-identity-check" not in legacy._cache
     assert not (downstream / ".claude" / "skills" / "audience-persona-design").exists()
     assert not (downstream / ".claude" / "skills" / "viewing-scene").exists()
     assert not (downstream / ".claude" / "skills" / "creative-constraints").exists()
-
-    bootstrap_guide = distributed_references / "gcp-bootstrap.md"
-    assert bootstrap_guide.is_file()
-    guide_text = bootstrap_guide.read_text(encoding="utf-8")
-    local_links = [
-        link
-        for link in re.findall(r"\[[^]]+\]\(([^)]+)\)", guide_text)
-        if not link.startswith(("http://", "https://", "#"))
-    ]
-    assert local_links
-    assert all((distributed_references / link).is_file() for link in local_links)
-    for relative in ("gcp-bootstrap.sh",):
-        assert (distributed_references / relative).is_file()
-    for script_name in ("gcp-bootstrap.sh",):
-        script = distributed_references / script_name
-        assert script.is_file()
-        references = re.findall(
-            r"(?:`|\s)([A-Za-z0-9_.-]+\.md)(?:`|\s|[「」])",
-            script.read_text(encoding="utf-8"),
-        )
-        assert references
-        assert all((distributed_references / reference).is_file() for reference in references)
 
     settings = json.loads((downstream / ".claude" / "settings.json").read_text(encoding="utf-8"))
     assert settings["permissions"]["allow"]

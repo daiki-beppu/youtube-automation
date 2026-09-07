@@ -10,6 +10,12 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 **唯一の変更経路**: 取り込み完了後の共有 GCP プロジェクトへの変更を Terraform に集約する運用原則（[ADR-0030](adr/0030-terraform-sole-change-path-for-gcp.md)）。
 
+**GCP 層**: project / billing / API / IAM。変更経路は上流 `infra/terraform/gcp/` の Terraform のみ。
+
+**マシン層**: gcloud login / ADC / quota project / project 選択。各マシンで人間が認証し、`yt-doctor --apply` が設定コマンドを実行してよい。
+
+**チャンネル層**: OAuth client / `client_secrets.json` / `token.json` / Reporting job。チャンネルごとに下流 setup で準備する。
+
 ### 配布・移行
 
 > [!NOTE]
