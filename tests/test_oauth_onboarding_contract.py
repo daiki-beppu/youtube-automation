@@ -82,3 +82,19 @@ def test_client_secrets_resolution_order_matches_oauth_setup(tmp_path: Path, mon
         assert token in resolution_section, f"docs/oauth-setup.md is missing {token!r}"
         positions.append(resolution_section.index(token))
     assert positions == sorted(positions), "docs/oauth-setup.md lists the candidates out of implementation order"
+
+
+def test_public_gcp_guides_reference_upstream_instead_of_removed_assets() -> None:
+    """Public entrypoints must resolve to the upstream owner after asset removal."""
+    upstream = REPO_ROOT / "infra/terraform/gcp/README.md"
+    for relative, target in (
+        ("ONBOARDING.md", "infra/terraform/gcp/README.md"),
+        ("docs/oauth-setup.md", "../infra/terraform/gcp/README.md"),
+    ):
+        guide = REPO_ROOT / relative
+        text = guide.read_text(encoding="utf-8")
+        assert f"]({target})" in text
+        assert (guide.parent / target).resolve() == upstream
+        assert upstream.is_file()
+        assert "gcp-bootstrap" not in text
+        assert "references/terraform-gcp" not in text
