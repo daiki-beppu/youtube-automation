@@ -405,7 +405,7 @@ def test_built_sdist_contains_only_approved_members(tmp_path: Path) -> None:
         "plans/",
         "site/",
     )
-    # allowlist へ明示した member（例: ルート B の infra README）だけが forbidden prefix の例外になる
+    # allowlist へ明示した member（例: GCP 層の唯一の変更経路である infra README）だけが例外になる
     assert not [member for member in members if member.startswith(forbidden_prefixes) and member not in allowed_exact]
     forbidden_names = {
         "client_secrets.json",

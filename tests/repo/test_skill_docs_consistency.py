@@ -1122,6 +1122,31 @@ def test_common_docs_list_optional_channel_config_files() -> None:
             assert name in text, f"{path} missing {name}"
 
 
+def _glossary_entry(glossary: str, term: str) -> str:
+    marker = f"**{term}**:"
+    assert marker in glossary, f"docs/architecture.md の用語集に {term!r} の定義行が無い"
+    return glossary.split(marker, 1)[1].split("\n\n", 1)[0]
+
+
+def test_glossary_defines_gcp_machine_and_channel_layers() -> None:
+    """#4934: setup の 3 層責務（GCP / マシン / チャンネル）を用語集で定義する."""
+    glossary = _read("docs/architecture.md").split("## プロジェクト用語集", 1)[1].split("\n## ", 1)[0]
+
+    gcp_layer = _glossary_entry(glossary, "GCP 層")
+    machine_layer = _glossary_entry(glossary, "マシン層")
+    channel_layer = _glossary_entry(glossary, "チャンネル層")
+
+    # GCP 層は Terraform だけが変えられる（ADR-0030）。doctor / gcloud を変更経路として書かない
+    for term in ("project", "billing", "API", "IAM", "infra/terraform/gcp/"):
+        assert term in gcp_layer, f"GCP 層 の定義に {term!r} が無い"
+    # マシン層は人間の認証 + `--apply` が設定コマンドを実行してよい層
+    for term in ("ADC", "quota project", "yt-doctor --apply"):
+        assert term in machine_layer, f"マシン層 の定義に {term!r} が無い"
+    # チャンネル層は下流 setup がチャンネルごとに準備する層
+    for term in ("client_secrets.json", "token.json", "Reporting job"):
+        assert term in channel_layer, f"チャンネル層 の定義に {term!r} が無い"
+
+
 def test_distrokid_skill_uses_helper_name() -> None:
     skill_path = ROOT / ".claude" / "skills" / "distrokid-helper" / "SKILL.md"
     assert skill_path.exists()
@@ -1428,8 +1453,11 @@ def test_oauth_module_and_setup_guide_distinguish_automatic_and_manual_routes() 
         assert expected in route_zero
     assert "client_secrets.json` 配置は PKCE / GUI 制約で AI 実行不可" not in route_zero
 
-    manual_routes = oauth_setup.split("### ルート A", 1)[1].split("## Google Auth Platform 手動設定", 1)[0]
-    assert "ルート A / B では `client_secrets.json` の手動配置を行う" in manual_routes
+    # #4934: gcloud 半自動化の「ルート A」は廃止し、GCP 層の代替ルートは上流 Terraform 1 本に絞る
+    manual_route = oauth_setup.split("### 上流 Terraform", 1)[1].split("## Google Auth Platform 手動設定", 1)[0]
+    assert "この Terraform 経路でも `client_secrets.json` の手動配置を行う" in manual_route
+    assert "infra/terraform/gcp/README.md" in manual_route
+    assert "gcp-bootstrap" not in oauth_setup
 
 
 def test_channel_new_regeneration_documents_ttp_wf_new_readiness_gate() -> None:

@@ -42,42 +42,17 @@ Google Auth Platform の GUI は API で自動化できないため、setup が 
 
 ## 上級者向け代替ルートと参照情報
 
-推奨ルートを使わず既存 GCP project を手動管理したい場合に限り、以下の bootstrap / Terraform を使う。`client_secrets.json` の解決順、Vertex AI の project / location 解決、セキュリティ、トラブルシューティングもこの後に記載する。これらの経路は廃止しないが、初回利用者の標準手順ではない。
+推奨ルートを使わず GCP project を手動管理したい場合に限り、以下の Terraform 経路を使う。`client_secrets.json` の解決順、Vertex AI の project / location 解決、セキュリティ、トラブルシューティングもこの後に記載する。この経路は廃止しないが、初回利用者の標準手順ではない。
 
 ここに掲載するコマンドも、原則として Claude デスクトップアプリへ「対象 project と変更内容を確認してから、この手順を実行してください」と依頼する。利用者が直接ターミナルへ入力するのは、組織の運用規則で AI エージェントの実行が許可されない場合に限る。
 
-### ルート A: `gcp-bootstrap.sh`（gcloud 半自動化・最速）
+### 上流 Terraform: GCP 層の唯一の変更経路
 
-チャンネル単位で気軽に立ち上げたいケース。1 コマンドでプロジェクト作成〜API 有効化〜IAM・ADC quota project 設定まで完結する。冪等なので再実行しても安全。
+GCP 層（project / billing / API / IAM）の変更経路は上流専属の [`infra/terraform/gcp/README.md`](../infra/terraform/gcp/README.md) だけである（[ADR-0030](adr/0030-terraform-sole-change-path-for-gcp.md)）。GCS backend を指定して init し、既存リソースの import を完了してから apply する。下流チャンネルリポジトリには Terraform 資産を配布しない。external user は上流リポジトリを clone し、自分の tfvars で `infra/terraform/gcp/` を apply する。
 
-```bash
-# 最小 (既存プロジェクト流用)
-.claude/skills/setup/references/gcp-bootstrap.sh my-existing-project
+gcloud で project を作成・変更する半自動スクリプト経路は廃止した。マシン層（gcloud login / ADC / quota project / project 選択）とチャンネル層（OAuth client / `client_secrets.json` / `token.json` / Reporting job）は引き続き `/setup --tool` が担当する。
 
-# 新規プロジェクト作成 + Billing 紐付け
-.claude/skills/setup/references/gcp-bootstrap.sh \
-  --create \
-  --billing-account 012345-6789AB-CDEF01 \
-  my-new-yt-channel
-```
-
-主なオプション:
-
-| オプション | 意味 |
-|-----------|------|
-| `--create` | プロジェクトが存在しなければ作成 |
-| `--billing-account ID` | Billing account を紐付け（Vertex AI に必須） |
-| `--adc-email EMAIL` | `aiplatform.user` 付与先アカウント（既定: `gcloud config account`） |
-| `--skip-adc` | `gcloud auth application-default login` を省略 |
-| `--dry-run` | 変更せずプレビュー |
-
-完了時に Google Auth Platform 手動設定用の Console URL が表示されるので、Branding / Audience / Clients を設定し、`client_secrets.json` を配置する（[Google Auth Platform 手動設定](#google-auth-platform-手動設定) 参照）。
-
-### ルート B: 上流の共有 GCP 構成管理
-
-共有プロジェクトの IaC は上流専属の [`infra/terraform/gcp/README.md`](../infra/terraform/gcp/README.md) に従う。GCS backend を指定して init し、既存リソースの import を完了してから apply する。下流チャンネルリポジトリには Terraform 資産を配布しない。
-
-ルート A / B では `client_secrets.json` の手動配置を行う。次節はその手動経路向けであり、推奨のルート 0 は `/setup` の Download JSON → `done` → `yt-doctor --fix-client-secrets` → JSON 再診断を使う。
+この Terraform 経路でも `client_secrets.json` の手動配置を行う。次節はその手動経路向けであり、推奨のルート 0 は `/setup` の Download JSON → `done` → `yt-doctor --fix-client-secrets` → JSON 再診断を使う。
 
 ---
 
@@ -85,7 +60,7 @@ Google Auth Platform の GUI は API で自動化できないため、setup が 
 
 `gcloud` / Terraform いずれも Google Auth Platform の Branding / Audience / Clients 設定には対応していないため、ここは Console での手動作業が必要:
 
-1. スクリプト / terraform 出力に表示された URL を開く
+1. `yt-doctor` の `next_action.url` / terraform 出力に表示された URL を開く
    - 形式: `https://console.cloud.google.com/apis/credentials?project=<PROJECT_ID>`
 2. 左メニューで **Google Auth Platform** を開く
 3. **Branding** でアプリ名、ユーザーサポートメール、デベロッパー連絡先を入力して保存
@@ -183,7 +158,7 @@ Vertex AI で以下を利用する。`aiplatform.googleapis.com` が有効化さ
 
 ## トラブルシューティング
 
-### bootstrap/terraform 共通
+### GCP 層共通
 
 #### `Permission denied` / 認証エラー
 `gcloud auth application-default login` で ADC を更新。必要なら quota project を固定:
@@ -198,12 +173,7 @@ IAM 付与権限がない。Organization / Project オーナー権限を持つ�
 GCP のプロジェクト作成は 1 アカウントあたり上限あり（初期は少ない）。不要プロジェクトを削除するか、上限緩和申請。
 
 #### `billingEnabled` エラー（Vertex AI / aiplatform 有効化時）
-Billing account が紐付いていない。`--billing-account` を渡して再実行するか、Console で紐付け。
-
-### bootstrap 固有
-
-#### `project-id が複数指定されました`
-位置引数として project-id を渡せるのは 1 つだけ。フラグの前後を確認。
+Billing account が紐付いていない。上流 `infra/terraform/gcp/` の `billing_account` を設定して apply する。
 
 ### terraform 固有
 

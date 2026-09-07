@@ -54,6 +54,14 @@ def _setup_text() -> str:
     )
 
 
+def _runbook_section(check_id: str) -> str:
+    """check-runbook.md から check_id 見出し 1 節だけを切り出す（次の h4 見出しの手前まで）。"""
+    runbook = _SETUP_RUNBOOK.read_text(encoding="utf-8")
+    heading = f"#### `{check_id}`"
+    assert heading in runbook, f"check-runbook.md に {check_id} の節が無い"
+    return runbook.split(heading, 1)[1].split("\n#### ", 1)[0]
+
+
 def _load_setup_chain_state() -> ModuleType:
     spec = importlib.util.spec_from_file_location("setup_chain_state", _SETUP_CHAIN_STATE)
     assert spec is not None and spec.loader is not None
@@ -341,6 +349,57 @@ def test_setup_skill_branches_on_all_apply_stop_reasons() -> None:
     assert "--project-id <project-id>" in startup
     assert "以後 `completed` まで全 flag を毎回付け" in startup
     assert "uv run yt-doctor --apply --json --project-id <project-id>" in startup
+
+
+def test_setup_skill_keeps_a_single_approval_gate_without_gcp_plan_approval() -> None:
+    """#4934 `single-gate-no-gcp-plan`: 承認は起動時の 1 gate のみで、GCP 変更 plan の再承認を持たない."""
+    tool = _SETUP_TOOL.read_text(encoding="utf-8")
+    startup = tool.split("## 起動時のチェック", 1)[1].split("## 認証コマンドと人間操作の責務", 1)[0]
+
+    # 単一 gate は残り、警告文は 3 層再編後の文言になっている
+    assert "AskUserQuestion により「表示した変更を実行」/「中止」の明示 2 択" in startup
+    assert "「prune は列挙したファイルを削除し、Reporting job は YouTube 側に作成される」と警告する" in startup
+    assert "承認されなければここで停止する" in startup
+
+    # GCP 変更 plan の承認節と再承認ループは、節名を変えた形でも復活させない
+    assert "GCP 変更 plan" not in tool
+    assert "再承認" not in tool
+    # decision_required は `gcp_project` の `--project-id` 1 問だけに縮める（project 作成の承認を持たない）
+    decision = startup.split("`decision_required`:", 1)[1].split("`command_failed`:", 1)[0]
+    assert "--project-id <project-id>" in decision
+    assert "マシン層の project 選択" in decision
+    for mutation in ("gcloud projects create", "billing projects link", "services enable"):
+        assert mutation not in decision, f"decision_required に GCP 層の変更コマンド {mutation!r} が残っている"
+
+
+def test_setup_runbook_routes_gcp_layer_checks_to_upstream_terraform() -> None:
+    """#4934 `runbook-routes-to-terraform`: GCP 層 4 節が変更コマンドを持たず上流 Terraform へ誘導する."""
+    # GCP 層の変更コマンドを runbook 側に複製しない（terraform コマンドの実行手順も置かない）
+    for check_id in ("gcp_project", "billing_linked", "apis_enabled", "iam_aiplatform_user"):
+        section = _runbook_section(check_id)
+        assert "infra/terraform/gcp/" in section, f"{check_id} の節に上流 Terraform への誘導が無い"
+        for mutation in (
+            "gcloud projects create",
+            "gcloud services enable",
+            "gcloud beta billing",
+            "billing projects link",
+            "add-iam-policy-binding",
+            "terraform apply",
+        ):
+            assert mutation not in section, f"{check_id} の節に変更コマンド {mutation!r} が残っている"
+
+    # gcp_project はマシン層の project 選択だけを行い、project 自体は上流の責務と明示する
+    gcp_project = _runbook_section("gcp_project")
+    assert "uv run yt-doctor --apply --json --project-id <project-id>" in gcp_project
+    assert "project 自体の作成・変更は GCP 層の責務として上流 `infra/terraform/gcp/` が管理する" in gcp_project
+
+    # 残る 3 節は同一の誘導文。1 箇所だけ書き換えたときの追従漏れをここで機械担保する
+    routing = (
+        "GCP 層は上流 `infra/terraform/gcp/` が管理する。fail なら `next_action.url` の README に従って"
+        "上流で plan → apply を行い、完了後に `uv run yt-doctor --json` で再診断する。"
+    )
+    for check_id in ("billing_linked", "apis_enabled", "iam_aiplatform_user"):
+        assert routing in _runbook_section(check_id), f"{check_id} の節が上流 Terraform への誘導文と一致しない"
 
 
 def test_setup_skill_gates_numbered_duplicate_deletion() -> None:
