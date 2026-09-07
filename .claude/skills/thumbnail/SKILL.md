@@ -1,7 +1,7 @@
 ---
 name: thumbnail
 purpose: 作る
-description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、実効 text_render.mode に従い、既定 ai_burn_in で文字入り候補を生成・承認してから textless 背景を作るとき、または deterministic で textless main.png/jpg を先行生成して実フォント合成するとき、`--compare` で生成済み候補を競合と 320px 比較するとき、`--test` で Studio の A/B テストを設計・記録するとき、`--iterate` で伸びた動画の勝因を次のサムネへ還元するとき、または `--loop` で textless main.png/jpg から Veo / fal.ai / Gemini Omni Flash のループ動画背景を生成するとき。「サムネイル生成」「画像生成」「アイキャッチ」「サムネ比較」「モバイル表示テスト」「サムネ A/B テスト」「Test & Compare」「伸びた動画のサムネ改善」「ループ動画」「Hailuo」「背景動画」「loop.mp4」で発動。競合の勝ちパターン分析は channel-research の thumbnail mode、SVG・汎用画像生成には使わない"
+description: "Use when コレクションの YouTube サムネイル（thumbnail.jpg）を CTR 最適化し、実効 text_render.mode に従い、既定 ai_burn_in で文字入り候補を生成・承認してから textless 背景を作るとき、または deterministic で textless main.png/jpg を先行生成して実フォント合成するとき、`--compare` で生成済み候補を競合と 320px 比較するとき、`--test` で Studio の A/B テストを設計・記録するとき、`--iterate` で伸びた動画の勝因を次のサムネへ還元するとき、または `--loop` で textless main.png/jpg から Veo / fal.ai / Gemini Omni Flash のループ動画背景を生成するとき。「サムネイル生成」「画像生成」「アイキャッチ」「サムネ比較」「モバイル表示テスト」「サムネ A/B テスト」「Test & Compare」「伸びた動画のサムネ改善」「ループ動画」「Hailuo」「背景動画」「loop.mp4」で発動。競合の勝ちパターン分析は channel-research の thumbnail mode、人間の眼を鍛える訓練は /truth-eye を使う。SVG・汎用画像生成には使わない"
 ---
 
 ## 前後工程

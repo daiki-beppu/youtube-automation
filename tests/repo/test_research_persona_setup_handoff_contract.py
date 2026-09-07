@@ -124,7 +124,7 @@ RESIDUAL_LINE_MARKERS = {
     ),
 }
 RESIDUAL_SHA256 = {
-    "channel-research": "4f6922be67b975ef98e0a93478d9aa7ebca384f9b1f62b887a07ea11d5f40f83",
+    "channel-research": "bd2bc206a61d7f97a891d6916baac61b23ec574eda9609671700b6f893a7b34c",
 }
 
 
