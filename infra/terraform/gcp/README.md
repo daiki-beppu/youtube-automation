@@ -47,14 +47,12 @@ cd infra/terraform/gcp
 cp terraform.tfvars.example terraform.tfvars
 # → project_id, adc_email, billing_account を実値に書き換え
 
-# 2. apply
-terraform init
+# 2. bootstrap stack の output bucket_name を使って初回 backend 設定
+terraform init -backend-config="bucket=$(terraform -chdir=../bootstrap output -raw bucket_name)"
 terraform plan
-terraform apply
-
-# 3. project ID を ADC quota project に設定
-gcloud auth application-default set-quota-project "$(terraform output -raw project_id)"
 ```
+
+backend の bucket 名は `terraform -chdir=../bootstrap output -raw bucket_name` で取得するため、先に bootstrap stack の構築を完了しておく。GCP stack は未 apply で state が無いため初回設定となり、init 後も state は空のまま。既存リソースの import を行う #4929 まで apply は実行しない。
 
 Vertex AI の location はモデル用途別にアプリが決定する。project ID を一時的に上書きする必要がある実行だけ `GOOGLE_CLOUD_PROJECT` process env を使う。
 

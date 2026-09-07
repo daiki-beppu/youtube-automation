@@ -134,3 +134,21 @@ def test_streaming_readme_documents_executable_state_migration_commands():
     assert "rm -f terraform.tfstate terraform.tfstate.backup" in streaming_text, (
         "streaming README にローカル tfstate 削除手順が無い"
     )
+
+
+def test_gcp_backend_uses_isolated_gcs_prefix_and_injected_bucket():
+    text = strip_hcl_comments(read_file(_GCP_VERSIONS_TF))
+    terraform_block = extract_block(text, r"terraform")
+    assert terraform_block is not None
+    backend_block = extract_block(terraform_block, r'backend\s+"gcs"')
+    assert backend_block is not None
+    assert re.search(r'\bprefix\s*=\s*"gcp"', backend_block)
+    assert not re.search(r"\bbucket\s*=", backend_block)
+
+
+def test_gcp_tfvars_example_only_assigns_declared_variables():
+    variables = strip_hcl_comments(read_file(_GCP_VARIABLES_TF))
+    example = strip_hcl_comments(read_file(_GCP_DIR / "terraform.tfvars.example"))
+    declared = set(re.findall(r'\bvariable\s+"([^\"]+)"', variables))
+    assigned = set(re.findall(r"^\s*(\w+)\s*=", example, re.MULTILINE))
+    assert assigned <= declared, f"未定義の変数: {assigned - declared}"

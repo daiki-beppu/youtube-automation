@@ -1,14 +1,13 @@
 # 使い方:
 #   cp terraform.tfvars.example terraform.tfvars
 #   <実値に書き換え>
-#   terraform init
-#   terraform apply
+#   terraform init -backend-config="bucket=$(terraform -chdir=../bootstrap output -raw bucket_name)"
+#   terraform plan
 
 project_id      = "my-youtube-channel-prod"
 create_project  = true
 billing_account = "012345-6789AB-CDEF01"
 adc_email       = "you@example.com"
-location        = "us-central1"
 
 # 任意
 # project_name = "My YouTube Channel"
@@ -19,4 +18,5 @@ location        = "us-central1"
 #   "youtubeanalytics.googleapis.com",
 #   "aiplatform.googleapis.com",
 #   "generativelanguage.googleapis.com",
+#   "storage.googleapis.com",
 # ]
