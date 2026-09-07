@@ -81,7 +81,7 @@
 
 ### GCP 変更 plan の承認
 
-project ID が解決済み、または `apply_flags` へ `--project-id` を追加・変更するたびに、次回 `--apply` が連続診断で到達し得る変更 plan を承認前に再作成する。`gcloud auth list` で active account を読み取り、正確な project ID、billing account ID（決定済みの場合）、active account と、§Steps に記載した project 選択・Billing 紐付け・API 有効化・ADC quota project・IAM 付与・Reporting job 作成のうち未解決の全コマンドを展開して表示する。
+project ID が解決済み、または `apply_flags` へ `--project-id` を追加・変更するたびに、次回 `--apply` が連続診断で到達し得る変更 plan を承認前に再作成する。`gcloud auth list` で active account を読み取り、正確な project ID、active account と、§Steps に記載した project 選択・ADC quota project・Reporting job 作成のうち未解決の全コマンドを展開して表示する。Billing 紐付け・API 有効化・IAM 付与は上流 Terraform の担当であり、この plan と doctor の実行対象に含めない。
 
 表示後、「これらは project `<project-id>` の外部 GCP 状態を変更する」と警告し、AskUserQuestion で「表示した GCP 変更を実行」/「中止」の 2 択を提示する。承認されるまで flag 付き `--apply` を実行しない。値の追加・変更は前回の承認を無効にし、必ず plan を再表示して承認を取り直す。
 
