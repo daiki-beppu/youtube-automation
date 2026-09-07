@@ -113,6 +113,7 @@ export const operatorDocMap = [
   { source: "docs/upgrades/v5.4.0.md", route: "/releases/upgrades/v5.4.0" },
   { source: "docs/upgrades/v5.5.0.md", route: "/releases/upgrades/v5.5.0" },
   { source: "docs/upgrades/v5.5.1.md", route: "/releases/upgrades/v5.5.1" },
+  { source: "docs/upgrades/v6.0.0.md", route: "/releases/upgrades/v6.0.0" },
 ] as const satisfies readonly OperatorDocMapping[];
 
 /** Internal marker allowing staged operator entries through release-only fields. */

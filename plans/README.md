@@ -82,7 +82,7 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) | REJE
 - **references/ の vestigial symlink 5 本**（M、MED リスク）— `get_channel_status.py`（配布テンプレが「廃止」と明言）/ `fetch_benchmark_comments.py` / `finalize_master.py` / `compare_thumbnails.py` / `setup/generate_image.py`。契約テスト（`test_analytics_consolidation.py:91` 等）が存在を凍結しており、downstream 互換 shim か否かの意図確認が先
 - **`bench/` ディレクトリ全体の去就**（S〜M）— perf #131 時限計測フェーズ産・CI 非接続。`bench_strategic_analytics.py` は `time.sleep` を計測しており実コードを測っていない。032 は孤児 1 本のみ削除、残りは「削除 or CI smoke 接続」の判断待ち
 - **`domains/uploads/descriptions_md.py`**（S-M、MED リスク）— 現役 `load_description_document` と重複する第 2 実装。B4 契約テストが「public owner」と assert しており契約変更を伴う
-- **4 CLI（yt-ad-coverage / yt-document-review / yt-media-acceptance / yt-workspace-status）**— skill / doc / workflow から参照ゼロ。power-user 用か忘れ物かの判断待ち（keeper は SKILL.md へ配線、残りは削除）
+- **3 CLI（yt-ad-coverage / yt-document-review / yt-media-acceptance）**— skill / doc / workflow から参照ゼロ。power-user 用か忘れ物かの判断待ち（keeper は SKILL.md へ配線、残りは削除）
 - **legacy_utils の未契約 shim 3 本（cli_arguments / genai_client / setup_directory_contract）**— downstream 契約リスト外。`profile` / `worktree` の削除前例に倣い「契約に載せる or removed へ」の判断待ち
 
 **修正系（stale 参照・誤名）**:

@@ -36,6 +36,7 @@ const expectedSources = [
   "docs/upgrades/v5.4.0.md",
   "docs/upgrades/v5.5.0.md",
   "docs/upgrades/v5.5.1.md",
+  "docs/upgrades/v6.0.0.md",
 ];
 
 const createRepository = async (map = operatorDocMap) => {
@@ -72,7 +73,7 @@ test("追従ドキュメントをすべてアップデート tab 配下へ割り
     routes.get("docs/migration/high-cpm-locales.md"),
     "/releases/high-cpm-locales"
   );
-  for (const version of ["v5.4.0", "v5.5.0", "v5.5.1"]) {
+  for (const version of ["v5.4.0", "v5.5.0", "v5.5.1", "v6.0.0"]) {
     assert.equal(
       routes.get(`docs/upgrades/${version}.md`),
       `/releases/upgrades/${version}`
@@ -82,6 +83,7 @@ test("追従ドキュメントをすべてアップデート tab 配下へ割り
 
 test("バージョン別アップグレードの navigation を map から新しい版順に導出する", () => {
   assert.deepEqual(upgradeGuideRoutes(operatorDocMap), [
+    "/releases/upgrades/v6.0.0",
     "/releases/upgrades/v5.5.1",
     "/releases/upgrades/v5.5.0",
     "/releases/upgrades/v5.4.0",
