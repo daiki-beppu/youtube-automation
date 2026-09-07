@@ -1,0 +1,2 @@
+- GCP Terraform stack の読み取り専用 drift workflow を追加し、drift・apply 待ち・job 失敗の Discord 通知とローカルでの解消手順を定義した。
+- Drift SA の project 読み取りに必要な Cloud Resource Manager API を、既存 6 API と別の Terraform resource で管理する。
