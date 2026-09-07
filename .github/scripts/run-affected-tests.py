@@ -110,7 +110,15 @@ def main() -> int:
         return 2
 
     total = _total_test_modules()
-    command = ["nix", "develop", "--command", "uv", "run", "pytest", "-n", "auto"]
+    command = [
+        "nix",
+        "develop",
+        "--command",
+        "bash",
+        ".claude/skills/automation/references/pytest-quiet.sh",
+        "-n",
+        "auto",
+    ]
     if targets is None:
         print(f"Full pytest suite: {total}/{total} targets")
     else:

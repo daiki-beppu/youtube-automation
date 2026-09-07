@@ -30,6 +30,8 @@ YouTube チャンネル運営を自動化するツールキット。`youtube-cha
 
 ## 開発ワークフロー
 
+- pytest は `bash .claude/skills/automation/references/pytest-quiet.sh <pytest引数>` を標準入口とする。devShell / Cloud での呼び出しと診断時の直接実行は `docs/development.md`「pytest の成功ログを抑える」を参照する
+
 - このリポジトリでは takt を使用しない。実装・検証・レビュー対応は worktree 上のエージェントセッションで直接進める。issue / worktree 運用は `docs/takt-operations.md` を参照する
 - issue は **1 issue = 1 PR = 1 振る舞い変更**の粒度に割る（要件 3 件以上 / 影響ファイル 4 件以上 / 独立した関心事 2 つ以上 / 複数 PR 見込みのいずれかで分割）。分割は sub-issue で階層化し、実装順の依存は `addBlockedBy` で表す
 - PR は **stacked PR 前提**。worktree 内で `gh stack init` / `add` で積む。merge は `gh pr merge` ではなく `gh stack merge --yes --squash`（非対話フラグと落とし穴は `docs/takt-operations.md`）

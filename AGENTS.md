@@ -39,7 +39,7 @@ This file provides guidance to Codex CLI (developers.openai.com/codex) when work
 
 この節は Codex Cloud の task 実行時だけに適用する。Cloud 設定画面で環境変数 `UV_PROJECT_ENVIRONMENT=/workspace/youtube-automation/.venv` を設定し、既存の Nix setup / maintenance script が同期した同じ環境を checkout と linked worktree から使う。task 中は準備済み環境を変更せず、`uv run --no-sync` で検証する。
 
-- 変更した test file / node ID と、変更に直接必要な `tests/repo/` の contract test を focused test の対象にする。標準形は `uv run --no-sync pytest <targets>`
+- 変更した test file / node ID と、変更に直接必要な `tests/repo/` の contract test を focused test の対象にする。標準形は `UV_NO_SYNC=1 bash .claude/skills/automation/references/pytest-quiet.sh <targets>`（内部の `uv run pytest` に `--no-sync` 相当を適用）
 - 10,000 件超の full suite は GitHub Actions を正とし、Cloud では PR の CI 完了を確認する
 - CI failure の修正ループでは、失敗した test を Cloud で単独再現してから修正する
 - task 中は `nix develop`、`uv sync`、引数なしの `pytest`、全 test 指定、full collection に対する `pytest -n auto` を実行しない
