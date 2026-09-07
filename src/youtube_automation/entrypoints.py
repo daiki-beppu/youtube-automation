@@ -10,10 +10,7 @@ from typing import cast
 from youtube_automation.cli_stdio import configure_utf8_stdio
 
 _CHANNEL_OPTION_CONFLICTS = {
-    "youtube_automation.commands.channel.channel",
     "youtube_automation.commands.channel.channel_export",
-    "youtube_automation.commands.channel.channel_import",
-    "youtube_automation.commands.channel.workspace_status",
     "youtube_automation.commands.analytics.benchmark_collector",
     "youtube_automation.commands.analytics.fetch_benchmark_comments",
     "youtube_automation.commands.analytics.video_analyze",
@@ -90,9 +87,7 @@ yt_benchmark_comments = _make_entrypoint("youtube_automation.commands.analytics.
 yt_bulk_update_desc = _make_entrypoint("youtube_automation.commands.metadata.bulk_update_descriptions")
 yt_bulk_update_synthetic_media = _make_entrypoint("youtube_automation.commands.metadata.bulk_update_synthetic_media")
 yt_captions_upload = _make_entrypoint("youtube_automation.commands.youtube.captions_upload")
-yt_channel = _make_entrypoint("youtube_automation.commands.channel.channel")
 yt_channel_export = _make_entrypoint("youtube_automation.commands.channel.channel_export")
-yt_channel_import = _make_entrypoint("youtube_automation.commands.channel.channel_import")
 yt_channel_init = _make_entrypoint("youtube_automation.commands.channel.channel_init")
 yt_channel_seed = _make_entrypoint("youtube_automation.commands.channel.channel_seed")
 yt_channel_settings = _make_entrypoint("youtube_automation.commands.channel.channel_settings")
@@ -100,8 +95,6 @@ yt_channel_status = _make_entrypoint("youtube_automation.commands.channel.channe
 yt_channels = _make_entrypoint("youtube_automation.commands.system.channels")
 yt_session_start = _make_entrypoint("youtube_automation.commands.system.session_start")
 yt_changelog_compile = _make_entrypoint("youtube_automation.commands.system.changelog_compile")
-yt_workspace_status = _make_entrypoint("youtube_automation.commands.channel.workspace_status")
-yt_workspace_guard = _make_entrypoint("youtube_automation.commands.channel.workspace_guard")
 yt_workflow_state = _make_entrypoint("youtube_automation.commands.collections.workflow_state_cli")
 yt_workflow_status = _make_entrypoint("youtube_automation.commands.collections.workflow_status")
 yt_hybrid_runner = _make_entrypoint("youtube_automation.commands.system.hybrid_runner")

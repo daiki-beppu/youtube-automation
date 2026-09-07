@@ -1137,7 +1137,7 @@
         "Updated consumer: src/youtube_automation/commands/youtube/playlist_manager.py",
         "Updated consumer: src/youtube_automation/commands/youtube/pinned_comment.py",
         "Updated consumer: src/youtube_automation/commands/channel/channel_settings.py",
-        "Updated consumer: src/youtube_automation/commands/channel/channel_import.py",
+        "Retired consumer (#4915): src/youtube_automation/commands/channel/channel_import.py",
         "Updated consumer: src/youtube_automation/commands/channel/channel_status.py",
         "Updated consumer: src/youtube_automation/commands/channel/channel_init.py",
         "Updated consumer: src/youtube_automation/commands/channel/channel_seed.py",

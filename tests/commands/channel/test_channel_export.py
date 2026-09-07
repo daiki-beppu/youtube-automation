@@ -141,6 +141,67 @@ def test_export_validation_failure_rolls_back_without_touching_source(tmp_path: 
     assert source.exists()
 
 
+@pytest.mark.parametrize("slug", ["../escape", "UPPER", "two words", "", ".hidden"])
+def test_export_rejects_invalid_slug(tmp_path: Path, slug: str) -> None:
+    workspace, _ = _workspace(tmp_path)
+    destination = tmp_path / "exported"
+
+    assert channel_export.export_channel(slug, destination, workspace=workspace) == channel_export.EXIT_USAGE
+    assert not destination.exists()
+
+
+def test_export_missing_required_config_rolls_back_with_missing_name(tmp_path: Path, capsys) -> None:
+    workspace, source = _workspace(tmp_path)
+    (source / "config/channel/content.json").unlink()
+    destination = tmp_path / "exported"
+
+    assert (
+        channel_export.export_channel("demo", destination, workspace=workspace, allow_dirty=True)
+        == channel_export.EXIT_VALIDATION
+    )
+    assert not destination.exists()
+    assert not list(tmp_path.glob(".channel-export-*"))
+    captured = capsys.readouterr().err
+    assert "必須 config が不足しています" in captured
+    assert "content.json" in captured
+
+
+def test_export_config_load_error_rolls_back(tmp_path: Path, capsys) -> None:
+    workspace, source = _workspace(tmp_path)
+    (source / "config/channel/content.json").write_text("{}", encoding="utf-8")
+    destination = tmp_path / "exported"
+
+    assert (
+        channel_export.export_channel("demo", destination, workspace=workspace, allow_dirty=True)
+        == channel_export.EXIT_VALIDATION
+    )
+    assert not destination.exists()
+    assert not list(tmp_path.glob(".channel-export-*"))
+    assert "必須キー" in capsys.readouterr().err
+
+
+def test_workspace_root_prefers_detected_workspace(tmp_path: Path) -> None:
+    workspace, source = _workspace(tmp_path)
+
+    assert channel_export._workspace_root(source / "config") == workspace.resolve()
+
+
+def test_workspace_root_falls_back_to_channels_directory_ancestor(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    (workspace / "channels").mkdir(parents=True)
+    nested = workspace / "channels" / "empty" / "deep"
+    nested.mkdir(parents=True)
+
+    assert channel_export._workspace_root(nested) == workspace.resolve()
+
+
+def test_workspace_root_falls_back_to_start_without_channels_directory(tmp_path: Path) -> None:
+    start = tmp_path / "no-workspace"
+    start.mkdir()
+
+    assert channel_export._workspace_root(start) == start.resolve()
+
+
 def test_initial_commit_excludes_copied_secrets_and_media(tmp_path: Path) -> None:
     workspace, source = _workspace(tmp_path)
     ignored = ["auth/client_secrets.json", "auth/token.json", "auth/backups/old-token.json"]
