@@ -117,9 +117,11 @@ MERGE_SOURCE_EXISTS = {"legacy-26", "legacy-27"}
 
 # receipt は B6 統合時点の履歴として凍結するため、その後に恒久削除した owner だけを明示的に除外する。
 # terraform-gcp/ は上流 infra/terraform/gcp/ 専属になり配布を廃止した（#4928）。
+# 逆移行ガイドは 7 チャンネルの独立リポジトリ移行完了で役目を終え削除した（#4921）。
 RETIRED_OWNERS = {
     ".claude/skills/setup/references/terraform-gcp/README.md",
     ".claude/skills/setup/references/gcp-bootstrap.md",
+    "docs/migration/workspace-to-single-repo.md",
 }
 
 

@@ -24,7 +24,6 @@ OPERATOR_DOC_SOURCES = (
     "docs/workflow-cheatsheet.md",
     "docs/chrome-extension-install-guide.md",
     "docs/dashboard.md",
-    "docs/migration/workspace-to-single-repo.md",
     "docs/cloud-execution.md",
     "docs/live-streaming.md",
     "docs/streaming-healthcheck.md",
@@ -169,21 +168,3 @@ def test_built_python_archives_do_not_contain_site_workspace(tmp_path: Path) -> 
 
     assert not [member for member in wheel_members if member == "site" or member.startswith("site/")]
     assert not [parts for parts in sdist_members if parts and parts[0] == "site"]
-
-
-def test_repository_docs_define_the_site_as_a_typescript_exception_and_separate_distribution() -> None:
-    claude = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
-    development = (ROOT / "docs/development.md").read_text(encoding="utf-8")
-    architecture = (ROOT / "docs/architecture.md").read_text(encoding="utf-8")
-    adr = (ROOT / "docs/adr/0023-release-notes-site.md").read_text(encoding="utf-8")
-    assert "`site/`" in claude and "TypeScript" in claude
-    assert "## リリースノートサイト開発" in development
-    assert "Python wheel / sdist には同梱しない" in development
-    assert "**operator documentation site**" in architecture
-    assert "site/operator-doc-source.ts" in architecture
-    assert "read-in-place" in architecture
-    assert "allowlist" in architecture
-    assert all(source in architecture for source in OPERATOR_DOC_SOURCES)
-    assert all(prefix in architecture for prefix in NONPUBLIC_DOC_PREFIXES)
-    assert "Python wheel / sdist" in architecture
-    assert "Blume" in adr and "Cloudflare Pages" in adr

@@ -126,10 +126,7 @@ export default defineConfig({
         items: [
           {
             label: "移行ガイド",
-            items: [
-              "/releases/workspace-to-single-repo",
-              "/releases/high-cpm-locales",
-            ],
+            items: ["/releases/high-cpm-locales"],
           },
           {
             label: "バージョン別アップグレード",

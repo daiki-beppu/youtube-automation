@@ -37,7 +37,6 @@ yt_benchmark_comments = _make_entrypoint("youtube_automation.commands.analytics.
 yt_bulk_update_desc = _make_entrypoint("youtube_automation.commands.metadata.bulk_update_descriptions")
 yt_bulk_update_synthetic_media = _make_entrypoint("youtube_automation.commands.metadata.bulk_update_synthetic_media")
 yt_captions_upload = _make_entrypoint("youtube_automation.commands.youtube.captions_upload")
-yt_channel_export = _make_entrypoint("youtube_automation.commands.channel.channel_export")
 yt_channel_init = _make_entrypoint("youtube_automation.commands.channel.channel_init")
 yt_channel_seed = _make_entrypoint("youtube_automation.commands.channel.channel_seed")
 yt_channel_settings = _make_entrypoint("youtube_automation.commands.channel.channel_settings")
