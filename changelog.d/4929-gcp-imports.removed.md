@@ -1,1 +1,0 @@
-- `create_project` 変数と `data "google_project"` による既存参照分岐を削除し、共有プロジェクトを `google_project` リソース 1 つで管理するよう統一しました。既存流用は `create_project = false` ではなく `imports.tf` の import で表します。

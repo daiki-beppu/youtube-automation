@@ -7,6 +7,112 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.0.0] - 2026-09-07
+
+
+### Added
+
+- 共有 GCP プロジェクト・API 6 件・Vertex AI IAM を宣言的 import で Terraform 管理へ取り込み、`deletion_policy = "PREVENT"` と `prevent_destroy` による二重の削除保護を追加しました。
+- Terraform を GCP 構成の唯一の変更経路とする ADR-0030 と、取り込み・drift 確認の運用手順を整備しました。
+- Terraform の 4 stack に認証不要の静的 CI（fmt / validate と r2 mock test）を追加し、CI と stack の Terraform バージョン整合性を検証する（#4930）。
+- GCP drift 検知用の GitHub main 限定 WIF と読み取り専用 SA を追加し、tfstate 本文の読み取りを gcp/ prefix に限定しました。
+- GCP Terraform stack の読み取り専用 drift workflow を追加し、drift・apply 待ち・job 失敗の Discord 通知とローカルでの解消手順を定義した。
+- Drift SA の project 読み取りに必要な Cloud Resource Manager API を、既存 6 API と別の Terraform resource で管理する。
+- OAuth client の Console 手動設定を setup wizard に統合し、固定アプリ名と In production への切替を案内する。
+- fal.ai queue・storage API の安全な HTTP client と `FAL_KEY` の secret 解決を追加した（#4946）。
+- fal の GET / download が未検証のリダイレクトを拒否し、HTTPS と host allowlist の境界を維持するようにした（#4946）。
+- media client 共通の HTTP エラー変換・URL 検証を `infrastructure/media/_http_support.py` に集約し、fal / MiniMax の両 client から共有するようにした（#4946）。
+- fal queue request の再開状態を原子的に保存する task store を追加した（#4947）。
+- ダウンロード済みの生動画と結果を再開 state に対応付け、後処理を API 再送信なしで再開できるようにした（#4947）。
+- video task store 共通の state 永続化・fail-closed な読み出しを `infrastructure/media/_task_store_support.py` に集約し、fal / MiniMax の両 store から共有するようにした（#4947）。
+- fal queue 経由で MiniMax H3 動画を安全に生成・再開する video generator を追加
+- 後処理が成功するまで動画を公開せず、失敗時は保存済み生動画から再開します。終端失敗は次回再送信可能にし、一時的な polling エラーは設定回数まで再試行します。
+- 推論時間は完了 status から取得し、expanded prompt は動画ごとの隣接ファイルへ保存します。
+- `yt-generate-loop-video` に fal.ai のループ動画生成 engine と skill-config による既定 engine 選択を追加。
+- `loop.fal.max_poll_retries` を生成境界へ渡し、一時的な polling 障害の再試行回数を設定できます。
+- `yt-generate-shorts-loop` に fal.ai を使う `--engine fal` と 9:16 用のリサイズ設定を追加。
+- fal 生出力の実寸をアップスケール前に canvas 想定値と併記し、最終出力寸法と区別します。Shorts の polling 再試行回数も設定できます。
+- `yt-truth-eye seal` と `verify` を追加し、訓練記録と sha256 封印分析を生成・検証可能にした
+- Truth Eye の記録テンプレートと封印分析だけを、作業ツリーが clean な場合に自動 commit する機能を追加
+- `yt-truth-eye status` を追加し、未完了訓練の再開 Phase と直近セッションの成長トラッキングを確認可能にした
+- `yt-truth-eye pair` を追加し、自チャンネルと兄弟の benchmark 走査記録から承認用ペア候補を選定可能にした
+- ブラインド分析と照合でサムネイルの観察眼を鍛える `/truth-eye` skill を追加
+- 公開サイトの `/skills` に `/truth-eye` の解説ページを追加
+
+### Changed
+
+- 開発運用を worktree 上の直接実装に統一し、takt を標準経路とする規定を削除した。
+- GCP Terraform stack の state 保存先を GCS backend（prefix `gcp`、bucket は init 時注入）に揃え、初回 init 手順と tfvars 設定例を更新した。
+- 共有プロジェクトの `billing_account` を必須変数にし、`billing_account` / `adc_email` を `sensitive` として plan / apply 出力から秘匿するようにしました。既存の `terraform.tfvars` に `billing_account` がない場合は追記が必要です。
+- 管理対象 API の既定値に `youtubereporting.googleapis.com` を追加し、doctor が要求する API を包含するようにしました。
+- setup を GCP・マシン・チャンネルの 3 層責務に整理し、GCP 変更を上流 Terraform へ誘導する。旧 bootstrap 資産と GCP 変更の追加承認ループを削除する。
+- `docs/oauth-setup.md` の GCP 層代替ルートを上流 Terraform 1 本に統一し、削除済み `gcp-bootstrap.sh` を案内する「ルート A」節を削除する。
+- 公開 OAuth ガイドと ONBOARDING の GCP 層を上流 Terraform README への案内に統一し、廃止済み bootstrap と重複する GCP トラブルシューティングを削除した。
+- `smooth_loop()` のクロスフェード再エンコードと同じパスで指定解像度へ Lanczos アップスケールできるようにした（#4945）。
+- ループ動画の構造化プロンプト設定を engine 間で共有しつつ、engine 固有設定による上書きを維持しました。
+- benchmark の走査記録を動画情報 6 キーへ拡張し、走査した全動画のサムネイルを保存するよう変更
+- channel-research と thumbnail の発動条件に、人間の観察眼を鍛える訓練は `/truth-eye` を使う棲み分けを追加
+- `/wf-new --batch` の完了前に全件contact sheetによる視覚QAを統合し、旧グローバルスキルの形式固定gateを使わず現行ownerの成果物契約で検証するようにした（#5031）。
+- stack 修正中は直接修正した段と最上段の CI を完走させ、中間段をキャンセルで延期し、マージ前に対象全段の最新状態を検証する運用手順を追加した（#5076）。
+
+### Removed
+
+- workspace 専用の `yt-channel` / `yt-channel-import` / `yt-workspace-status` / `yt-workspace-guard` と対応 module を削除しました。チャンネルは独立リポジトリで運用し、一覧は `yt-channels list`、状態確認は各リポジトリの `yt-doctor` / `yt-channel-status` を使用してください。旧 guard hook は `yt-skills sync --asset settings` で除去できます。
+- `yt-doctor` の workspace 共有 root に対する bootstrap 診断・修復と `oauth_client_sharing` 診断を削除しました。対象は `--target` → `CHANNEL_DIR` → cwd のチャンネル祖先（未設定なら cwd）で解決し、旧 `CHANNEL` / 共通 `--channel` による切り替えを行わず、診断・`--apply` は対象チャンネル内で実行します。
+- OAuth client の探索候補から旧 workspace root の `auth/client_secrets.json` を削除しました。チャンネルの `auth/`、submodule 互換の `automation/auth/`、main worktree の `auth/` の順に探索します。明示 `CLIENT_SECRETS_DIR`、secret fallback、token / backups の扱いは維持します。
+- state Git 管理・skills sync・automation update・dashboard refresh・hybrid runner の旧 workspace 専用分岐を削除し、単一チャンネルの Git 管理と CHANNEL_DIR の復元を維持しました。
+- 全 yt-* の共通 --channel / CHANNEL による選択と workspace 自動検出を削除し、CHANNEL_DIR → cwd 祖先の設定解決に統一しました。各コマンド固有の --channel と競合チャンネル向け旧引数の拒否は維持します。
+- `yt-channel-export` は削除され、workspace から戻す手段は無くなります。v6.0.0 への更新前に、v5.8.0 の export CLI を使って独立したチャンネルリポジトリへ移行してください。
+- 逆移行ガイドと registry の書込・バックアップ生成を削除しました。registry の読込と `yt-channels` / `yt-dashboard` の利用は継続できます。
+- setup skill から GCP Terraform 資産の下流配布を廃止し、共有インフラの構成管理を上流 `infra/terraform/gcp/` に集約しました。
+- `create_project` 変数と `data "google_project"` による既存参照分岐を削除し、共有プロジェクトを `google_project` リソース 1 つで管理するよう統一しました。既存流用は `create_project = false` ではなく `imports.tf` の import で表します。
+- yt-doctor の GCP 診断を読み取り専用にし、未設定時は上流 Terraform での修復を案内する。--billing-account と GCP 変更の自動実行を削除し、--project-id によるマシン側の project 選択と ADC quota project 設定は維持する。
+- --apply の gcp_project step は、--project-id を選択しても project が解決しない場合に gcloud config set project を繰り返さず、上流 Terraform 誘導の human で停止する。
+- `yt-generate-loop-video` から MiniMax 直 API の `h3` engine と関連実装・設定を削除しました。
+- 利用不能になった MiniMax 音楽生成経路、CLI、API クライアント、シークレット設定を削除し、音楽エンジンを Suno と Lyria に限定しました。
+- 対応外の `music_engine` は警告で通過させず、設定読み込み時に `ConfigError` として拒否します。
+
+### Fixed
+
+- 秘密ファイル編集ガードを標準 PreToolUse JSON 入力に対応させ、下流の `.env`・認証 JSON 編集を拒否するよう修正しました。欠損・不正入力は内容を出力せず拒否し、上流のみの lockfile 保護も維持します。
+- settings の diff と sync dry-run で hook の追加・除去候補を一致させ、既知の旧 progress hook と秘密ファイル編集ガードを承認後に移行するよう修正しました。ローカル hook と timeout を保持し、再同期で重複追加しません。
+- collection Shorts の投稿手順を生成番号ごとの `--short-num` 指定へ修正し、既存承認の再利用、投稿間隔による blocked、番号別の結果と state の照合・再開条件を明確にしました。
+- channel-research 一括実行を各 step に対応する reference へ振り分け、skip 後も次工程へ進むよう手順を修正しました。voice を含む四工程の状態を全体の完了条件とし、blocked・error は停止を維持します。
+- streaming / reply live で非配布の Terraform 資産を上流 checkout から確認・利用する手順を明確にし、欠損時は取得先を示して停止するよう修正しました。comments 設定は配布済み設定モデルから新規生成でき、既存 state や秘密情報のコピーは不要です。
+- music prompt の再開時に JSON/HTML pair と承認時の digest を照合し、不正・未承認・承認後に変更された成果物を完了扱いしないよう修正しました。旧成果物で承認 digest が無い場合は再承認を案内し、正常な承認済み成果物は再生成・再レビューせず再開できます。
+- 動画制作の再開時に既存review ownerの承認digestとprobeを照合し、空・破損・改変した動画を完了扱いしないよう修正しました。ownerが記録するファイル名を01-master配下へ解決し、正常な承認済み動画は再生成せず再開します。
+- `yt-generate-videos-batch` と `yt-wf-batch` の一括生成でも `assets.master_video` と同じ遷移で承認digestを記録し、バッチ生成した動画の再開が blocked にならないよう修正しました。
+- thumbnail skillの入口で既定ai_burn_inとdeterministicの生成順序を明示し、Codex候補の確定を共通QA・digest検証・承認finalizerへ統一しました。
+- 戦略成果物を使うflop分析・value-loop監査の入力を検証済みJSON+HTMLへ揃え、破損pairとlegacy不足を区別しました。方向性の保存雛形と戦略skillの書き込み宣言も現行契約へ統一しました。
+- release Shortsを設定された対象言語だけ生成するよう修正しました。空設定・対象本編の欠落・生成失敗を非0で報告し、既定JP/ENと開始秒・尺の上書きを維持します。
+- setupのmode guardをuv不要の標準Pythonで起動するよう修正しました。排他違反とruntime不足は副作用なしで停止し、有効modeはuv未導入でもtool bootstrapへ進めます。
+- wf-newの委譲先重複を除き、企画候補を出す入口から実際の企画referenceへ参照するよう明確化しました。
+- wf-nextの一段実行原則に、既存の動画・説明文生成2並列だけを例外として明記しました。成果物検証とstate更新は引き続き親が担当します。
+- publishの単発modeは対象referenceの完了条件だけ、一括実行は全対象stepの完了条件で判定するよう整理しました。任意cleanや投稿バッチに無関係な投稿完了を要求しません。
+- DistroKid準備のthumbnail設定確認を実効設定の検証に揃え、任意overrideがない場合も既定値で続行できるようにしました。不正な設定では停止します。
+- skill開発ガイドのlint説明を現行の検証範囲へ揃え、通常PRの変更履歴をchangelog fragment手順へ統一しました。CHANGELOG直接編集はrelease prepareのみの例外として維持します。
+- Studio Library の遅延読み込みを待ってから clip 探索を終了し、曲数が多い環境でも Multitrack export を継続できるようにした（#5036）。
+- em-dash・en-dash で区切られた楽曲タイトルの各セグメントで、先頭の冠詞を正しく大文字化するよう修正した（#5060）。
+
+### Migration
+
+所要時間の目安: 独立リポジトリへの移行済みなら 10〜30 分。旧 workspace の移行は制作データ量と一周検証に応じて別途必要です。
+
+local fix 衝突注意:
+- automation / setup / streaming / channel-research / music / video / thumbnail / wf-new / wf-next / publish / distrokid と配布 settings の hook。`yt-skills diff` で独自修正を確認し、必要な変更を保全してください。
+
+Python module 移動: なし。旧 workspace と MiniMax 直 API の module は機能廃止で削除されました。fal は別 API の新規実装であり、旧 import の互換先ではありません。共通 HTTP・state 保存 helper の抽出は内部実装で、公開 module の移動はありません。
+
+サマリ:
+
+- 共通 `--channel` / `CHANNEL` を使う独自スクリプトは cwd または `CHANNEL_DIR` へ変更してください。OAuth client は各チャンネルの `auth/` 等、継続する探索先へ配置してください。
+- 動画の旧 `h3` engine は `fal` へ変更し、`FAL_KEY` を設定してください。MiniMax 音楽生成は廃止され、Suno / Lyria のみ利用できます。対応外の音楽 engine は設定エラーになります。
+- GCP の変更経路は上流 Terraform に統一されました。既存 Terraform 利用者は `billing_account` の設定と import / backend 手順を確認してください。doctor は GCP を読み取り専用で診断します。
+- 制作再開時は承認 digest と成果物の整合性を検証します。旧成果物に承認 digest がない場合は、該当工程で再承認してください。
+
+
+- v6.0.0 では 1 チャンネル = 1 リポジトリへ統一します。旧構造の利用者は更新前に v5.8.0 の export CLI で独立リポジトリへ戻してください。戻し方・更新手順と SessionStart 自動追従（自動 commit、push なし）の既定動作、無効化用 `YOUTUBE_AUTOMATION_DISABLE_SESSION_UPDATE=1` を公開アップグレードガイド `docs/upgrades/v6.0.0.md` にまとめました。
+
 ## [5.8.0] - 2026-09-05
 
 ### Added
@@ -3107,3 +3213,5 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 [5.1.1]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.1.1
 [5.0.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.0.0
 [2.0.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v2.0.0
+
+[6.0.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v6.0.0

@@ -1,2 +1,0 @@
-- setup を GCP・マシン・チャンネルの 3 層責務に整理し、GCP 変更を上流 Terraform へ誘導する。旧 bootstrap 資産と GCP 変更の追加承認ループを削除する。
-- `docs/oauth-setup.md` の GCP 層代替ルートを上流 Terraform 1 本に統一し、削除済み `gcp-bootstrap.sh` を案内する「ルート A」節を削除する。

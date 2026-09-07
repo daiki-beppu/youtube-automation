@@ -1,1 +1,0 @@
-- v6.0.0 では 1 チャンネル = 1 リポジトリへ統一します。旧構造の利用者は更新前に v5.8.0 の export CLI で独立リポジトリへ戻してください。戻し方・更新手順と SessionStart 自動追従（自動 commit、push なし）の既定動作、無効化用 `YOUTUBE_AUTOMATION_DISABLE_SESSION_UPDATE=1` を公開アップグレードガイド `docs/upgrades/v6.0.0.md` にまとめました。

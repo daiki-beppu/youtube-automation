@@ -1,1 +1,0 @@
-- `yt-doctor` の workspace 共有 root に対する bootstrap 診断・修復と `oauth_client_sharing` 診断を削除しました。対象は `--target` → `CHANNEL_DIR` → cwd のチャンネル祖先（未設定なら cwd）で解決し、旧 `CHANNEL` / 共通 `--channel` による切り替えを行わず、診断・`--apply` は対象チャンネル内で実行します。
