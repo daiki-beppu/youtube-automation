@@ -40,7 +40,8 @@ from youtube_automation.domains.documents.operational_artifacts import lint_oper
 from youtube_automation.domains.skills.inventory import SkillInventory, SkillLintViolation, lint_skill_contract
 
 _SKILL_MD_MAX_LINES: Final[int] = 400
-_MAX_SKILL_COUNT: Final[int] = 19
+# HITL 訓練は AFK 自動化 skill の mode に畳めず、既存成果物とも重ならない。
+_MAX_SKILL_COUNT: Final[int] = 20
 _SKILL_MD_LINE_LIMIT_VIOLATION: Final[str] = "skill_md_line_limit_exceeded"
 _DELEGATION_DEPTH_VIOLATION: Final[str] = "delegation_depth_exceeded"
 

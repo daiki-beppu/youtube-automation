@@ -227,8 +227,8 @@ test("実リポジトリでは9カテゴリと配布対象skillだけを生成�
   );
   const skillDirectories = catalogMarkdown.match(/^\| \/[a-z0-9-]+ /gmu);
 
-  assert.equal(result.entries.length, 20);
-  assert.equal(skillDirectories?.length, 19);
+  assert.equal(result.entries.length, 21);
+  assert.equal(skillDirectories?.length, 20);
   for (const entry of result.entries) {
     assert.doesNotMatch(
       entry.body.text,
@@ -286,7 +286,7 @@ test("一覧は workflow 群の定義どおりに全 skill を1行ずつ掲載�
   }
 });
 
-test("production build は一覧と19個の個別ページを公開する", async () => {
+test("production build は一覧と20個の個別ページを公開する", async () => {
   const siteRoot = resolve(import.meta.dirname, "..");
   const index = await readFile(join(siteRoot, "dist/skills/index.html"), "utf8");
   const thumbnail = await readFile(
@@ -295,7 +295,7 @@ test("production build は一覧と19個の個別ページを公開する", asyn
   );
   const music = await readFile(join(siteRoot, "dist/skills/music/index.html"), "utf8");
 
-  assert.match(index, /19 個の skill/);
+  assert.match(index, /20 個の skill/);
   assert.match(index, /href="\/skills\/wf-new"/);
   assert.doesNotMatch(index, /href="\/skills\/masterup"/);
   assert.doesNotMatch(index, /href="\/skills\/flop-analysis"/);
