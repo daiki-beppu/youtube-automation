@@ -252,8 +252,8 @@ FIRST_IN_PROJECT=0
 if confirm "このプロジェクトで Branding / Audience を設定するのは初めてですか？"; then
   FIRST_IN_PROJECT=1
 else
-  TOTAL_STAGES=4
-  note "Branding / Audience の 2 stage を飛ばします。"
+  _STAGE_INDEX=3
+  note "Branding / Audience の Stage 2・3 を飛ばします。"
 fi
 pause
 
@@ -336,16 +336,27 @@ pause
 # ── Stage 6: doctor で確認 ────────────────────────────────────────────────
 stage "yt-doctor で確認"
 say "client_secrets check が ok になるか確認します。"
-_doctor_exit=0
-_doctor_json=$(cd "$CHANNEL_DIR" && uv run yt-doctor --json) || _doctor_exit=$?
-if (( _doctor_exit > 1 )); then
-  warn "yt-doctor を実行できませんでした (exit $_doctor_exit)"
-  exit 1
-fi
-_status=$(printf '%s' "$_doctor_json" | (cd "$CHANNEL_DIR" && uv run python -c 'import json,sys; d=json.load(sys.stdin); print(next(c["status"] for c in d["checks"] if c["id"]=="client_secrets"))'))
+# --json は check の失敗時も exit 0 なので JSON 内の状態で判定する。
+_doctor_json=$(cd "$CHANNEL_DIR" && uv run yt-doctor --json) || true
+_status=$(printf '%s' "$_doctor_json" | (cd "$CHANNEL_DIR" && uv run python -c '
+import json
+import sys
+
+try:
+    payload = json.load(sys.stdin)
+except ValueError:
+    sys.exit(1)
+checks = payload.get("checks") if isinstance(payload, dict) else None
+if not isinstance(checks, list):
+    sys.exit(1)
+print(next((c.get("status", "") for c in checks if isinstance(c, dict) and c.get("id") == "client_secrets"), ""))
+')) || _status=""
 
 if [[ "$_status" == "ok" ]]; then
   printf '  %s✓ client_secrets: ok%s\n' "$GREEN" "$RESET"
+elif [[ -z "$_status" ]]; then
+  warn "yt-doctor の JSON から client_secrets の状態を読み取れませんでした"
+  SKIPPED+=("client_secrets check を ok にする（uv run yt-doctor --json を直接実行してエラーを確認）")
 else
   warn "client_secrets: $_status"
   SKIPPED+=("client_secrets check を ok にする（uv run yt-doctor --json で詳細を確認）")

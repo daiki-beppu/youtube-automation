@@ -1405,11 +1405,12 @@ def test_public_setup_guide_owns_installation_and_oauth_completion() -> None:
     assert "Download JSON" not in onboarding_setup
 
 
-def test_oauth_module_docstring_documents_download_json_route() -> None:
+def test_oauth_module_docstring_points_to_existing_wizard() -> None:
     oauth_handler = _read("src/youtube_automation/infrastructure/auth/youtube.py")
     module_docstring = oauth_handler.split('"""', 2)[1]
-    for expected in ("Download JSON", "yt-doctor --fix-client-secrets"):
-        assert expected in module_docstring
+    wizard = ".claude/skills/setup/references/oauth-client-wizard.sh"
+    assert f"bash {wizard}" in module_docstring
+    assert (REPO_ROOT / wizard).is_file()
     assert "secret を発行して auth/client_secrets.json に配置" not in module_docstring
 
 

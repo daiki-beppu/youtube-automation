@@ -4,11 +4,9 @@ YouTube OAuth 2.0 認証ハンドラー
 YouTube Data API v3を使用した自動アップロードのための認証システム
 
 Required setup:
-1. Google Cloud Console でプロジェクト作成
-2. YouTube Data API v3 を有効化
-3. Google Auth Platform で Desktop app client を作成
-4. Client secrets > Add secret で発行後に Download JSON を実行し、
-   yt-doctor --fix-client-secrets で auth/client_secrets.json へ移動
+1. GCP 層は上流 infra/terraform/gcp/README.md に従って構築
+2. チャンネルルートで bash .claude/skills/setup/references/oauth-client-wizard.sh を実行し、
+   auth/client_secrets.json を配置（Console 手順の正本は wizard）
 """
 
 import json
@@ -274,16 +272,11 @@ class YouTubeOAuthHandler:
                 f"❌ client_secrets.json が見つかりません: {self.client_secrets_file}\n"
                 f"探索したパス:\n{searched}\n"
                 "設定手順:\n"
-                "1. Google Cloud Console で YouTube Data API v3 を有効化\n"
-                "2. Google Auth Platform > Branding でアプリ情報を保存\n"
-                "3. Google Auth Platform > Audience > Test users に OAuth 認証でログインする Google アカウントを追加\n"
-                "   (未追加だと初回認証が 403 access_denied で止まります)\n"
-                "4. Google Auth Platform > Clients > Create client で Application type Desktop app を作成\n"
-                "5. Clients > 対象 client > Client secrets > Add secret で secret を発行\n"
-                "6. Download JSON を実行して Downloads に保存し、"
-                "`uv run yt-doctor --fix-client-secrets` で "
-                "<channel_dir>/auth/client_secrets.json へ自動移動\n"
-                "   または CLIENT_SECRETS_DIR 環境変数を指定 / 1Password に CLIENT_SECRETS_JSON として登録"
+                "1. チャンネルルートで "
+                "`bash .claude/skills/setup/references/oauth-client-wizard.sh` を起動\n"
+                "   (Console 手順の正本は wizard。完了すると "
+                "<channel_dir>/auth/client_secrets.json が配置されます)\n"
+                "2. または CLIENT_SECRETS_DIR 環境変数を指定 / 1Password に CLIENT_SECRETS_JSON として登録"
             )
         try:
             data = json.loads(self.client_secrets_file.read_text(encoding="utf-8"))

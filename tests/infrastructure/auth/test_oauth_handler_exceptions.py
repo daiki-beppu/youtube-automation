@@ -446,19 +446,14 @@ class TestClientSecretsFallback:
 
         message = str(exc_info.value)
         for expected in (
-            "Google Auth Platform",
-            "Audience > Test users",
-            "403 access_denied",
-            "Clients > Create client",
-            "Desktop app",
-            "Add secret",
-            "Download JSON",
-            "yt-doctor --fix-client-secrets",
+            "bash .claude/skills/setup/references/oauth-client-wizard.sh",
             "<channel_dir>/auth/client_secrets.json",
             "CLIENT_SECRETS_DIR",
             "CLIENT_SECRETS_JSON",
         ):
             assert expected in message
+        for duplicated_step in ("Audience > Test users", "Clients > Create client", "Add secret", "Download JSON"):
+            assert duplicated_step not in message
         assert "OAuth 2.0 認証情報を作成" not in message
         assert "作成直後" not in message
         assert "auth/client_secrets.template.json" not in message
