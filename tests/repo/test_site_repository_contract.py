@@ -39,6 +39,7 @@ OPERATOR_DOC_SOURCES = (
     "docs/upgrades/v5.4.0.md",
     "docs/upgrades/v5.5.0.md",
     "docs/upgrades/v5.5.1.md",
+    "docs/upgrades/v6.0.0.md",
 )
 NONPUBLIC_DOC_PREFIXES = (
     "docs/adr/",

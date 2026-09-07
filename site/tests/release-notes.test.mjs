@@ -432,6 +432,7 @@ test(`operator docs の${generatedRouteCount} route は原本の先頭見出し�
     ["/releases/upgrades/v5.4.0", "v5.4.0 アップグレードガイド"],
     ["/releases/upgrades/v5.5.0", "v5.5.0 アップグレードガイド"],
     ["/releases/upgrades/v5.5.1", "v5.5.1 アップグレードガイド"],
+    ["/releases/upgrades/v6.0.0", "v6.0.0 アップグレードガイド"],
   ]);
 
   assert.equal(expectedTitles.size, generatedRouteCount);
