@@ -32,6 +32,8 @@
 
 公開ガイドの推奨ルートを完了すると、automation CLI、同期済み skill、API 認証、動画アップロード前提が揃う。その後、この onboarding の §3 に進み、新規チャンネルなら `/setup --channel` を実行する。GCP 層は上流の [`infra/terraform/gcp/README.md`](infra/terraform/gcp/README.md)、secret 解決順と OAuth のトラブルシューティングは公開ガイドを参照する。
 
+OAuth client の手動設定は [`OAuth client wizard`](docs/oauth-setup.md#google-auth-platform-手動設定) に従う。プロジェクト共通の In production 切替後は、VPS の streaming token を先回り再認証する。
+
 ### 2.4 初期設定後の GCP 課金確認
 
 Terraform で Billing を紐付けたあとの実際の利用料金は、リポジトリ内の推定値ではなく **Google Cloud Billing** を正として確認する。

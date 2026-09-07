@@ -1,0 +1,1 @@
+- OAuth client の Console 手動設定を setup wizard に統合し、固定アプリ名と In production への切替を案内する。

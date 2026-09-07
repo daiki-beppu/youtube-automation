@@ -1378,30 +1378,8 @@ def test_collection_localization_docs_use_root_localizations_contract() -> None:
     assert "`config/localizations.json`" in rules
 
 
-def test_setup_client_secrets_step_uses_download_and_automatic_move() -> None:
-    # check id ごとの手順は段階的開示で references/check-runbook.md へ分離済み
-    setup = _read(".claude/skills/setup/references/check-runbook.md")
-    step = setup.split("#### `client_secrets`", 1)[1].split("#### `oauth_token`", 1)[0]
-
-    for expected in (
-        "Client secrets",
-        "Add secret",
-        "Download JSON",
-        "done",
-        "uv run yt-doctor --fix-client-secrets",
-        "uv run yt-doctor --apply --json",
-        "client_secrets` が `ok`",
-    ):
-        assert expected in step
-    assert "client_secrets.template.json" not in step
-    assert "転記" not in step
-
-
 def test_public_setup_guide_owns_installation_and_oauth_completion() -> None:
     tool_setup = _read("docs/tool-setup.md")
-    oauth_setup = _read("docs/oauth-setup.md")
-    recommended = oauth_setup.split("## 推奨ルート", 1)[1].split("## 上級者向け", 1)[0]
-
     for expected in (
         "uv が入っているか確認",
         "公式手順",
@@ -1416,19 +1394,6 @@ def test_public_setup_guide_owns_installation_and_oauth_completion() -> None:
         assert expected in tool_setup
     assert tool_setup.index("yt-skills sync") < tool_setup.index("新しいセッション")
     assert tool_setup.index("新しいセッション") < tool_setup.index("/setup --tool")
-
-    for expected in (
-        "/setup --tool",
-        "[HUMAN STEP]",
-        "Download JSON",
-        "done",
-        "uv run yt-doctor --fix-client-secrets",
-        "uv run yt-doctor --apply --json",
-        "apply.stop_reason` が `completed",
-    ):
-        assert expected in recommended
-    assert "client_secrets.template.json" not in recommended
-    assert "転記" not in recommended
 
     onboarding = _read("ONBOARDING.md")
     onboarding_setup = onboarding.split("## 2. ツール導入と API セットアップ", 1)[1].split(

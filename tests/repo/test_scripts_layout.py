@@ -98,10 +98,11 @@ def test_root_scripts_dir_only_contains_common_scripts() -> None:
 
 @pytest.mark.parametrize(
     "path",
-    [_NEW_GENERATE_VIDEOS, _NEW_WORKTREE_SYNC],
+    [_NEW_GENERATE_VIDEOS, _NEW_WORKTREE_SYNC, _SKILLS_DIR / "setup/references/oauth-client-wizard.sh"],
     ids=[
         ".claude/skills/video/references/generate_videos.sh",
         ".claude/skills/music/references/worktree_sync.sh",
+        ".claude/skills/setup/references/oauth-client-wizard.sh",
     ],
 )
 def test_skill_reference_script_exists(path: Path) -> None:
@@ -114,10 +115,11 @@ def test_skill_reference_script_exists(path: Path) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    [_NEW_GENERATE_VIDEOS, _NEW_WORKTREE_SYNC],
+    [_NEW_GENERATE_VIDEOS, _NEW_WORKTREE_SYNC, _SKILLS_DIR / "setup/references/oauth-client-wizard.sh"],
     ids=[
         ".claude/skills/video/references/generate_videos.sh",
         ".claude/skills/music/references/worktree_sync.sh",
+        ".claude/skills/setup/references/oauth-client-wizard.sh",
     ],
 )
 def test_skill_reference_script_is_real_file_not_symlink(path: Path) -> None:
@@ -135,10 +137,11 @@ def test_skill_reference_script_is_real_file_not_symlink(path: Path) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    [_NEW_GENERATE_VIDEOS, _NEW_WORKTREE_SYNC],
+    [_NEW_GENERATE_VIDEOS, _NEW_WORKTREE_SYNC, _SKILLS_DIR / "setup/references/oauth-client-wizard.sh"],
     ids=[
         ".claude/skills/video/references/generate_videos.sh",
         ".claude/skills/music/references/worktree_sync.sh",
+        ".claude/skills/setup/references/oauth-client-wizard.sh",
     ],
 )
 def test_skill_reference_script_is_executable(path: Path) -> None:
@@ -159,10 +162,11 @@ def test_skill_reference_script_is_executable(path: Path) -> None:
 
 @pytest.mark.parametrize(
     "path",
-    [_NEW_GENERATE_VIDEOS, _NEW_WORKTREE_SYNC],
+    [_NEW_GENERATE_VIDEOS, _NEW_WORKTREE_SYNC, _SKILLS_DIR / "setup/references/oauth-client-wizard.sh"],
     ids=[
         ".claude/skills/video/references/generate_videos.sh",
         ".claude/skills/music/references/worktree_sync.sh",
+        ".claude/skills/setup/references/oauth-client-wizard.sh",
     ],
 )
 def test_skill_reference_script_passes_bash_syntax_check(path: Path) -> None:

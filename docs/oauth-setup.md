@@ -19,16 +19,7 @@ setup は GCP / ADC / OAuth / Reporting job を診断順に確認する。projec
 > [!IMPORTANT]
 > **[HUMAN STEP]** ブラウザが開いたら、利用者本人が Google ログイン、アカウント選択、OAuth 同意を完了する。password・認可コード・token・client secret をチャットへ貼らない。
 
-Google Auth Platform の GUI は API で自動化できないため、setup が Console URL を示したときだけ次を行う。
-
-> [!IMPORTANT]
-> **[HUMAN STEP]**
-> 1. **Branding** でアプリ名、ユーザーサポートメール、デベロッパー連絡先を保存する。
-> 2. **Audience** は External / Testing とし、OAuth に使う Google アカウントを Test users に追加する。
-> 3. **Clients** で Desktop app client を作成する。
-> 4. Client secrets で secret を追加し、**Download JSON** で保存してから setup に `done` と返す。
-
-`done` の後は setup が `uv run yt-doctor --fix-client-secrets` と `uv run yt-doctor --apply --json` を実行し、ダウンロード済み JSON を `auth/client_secrets.json` へ配置して再診断する。利用者がこのコマンドをターミナルへ入力する必要はない。
+Google Auth Platform の設定が必要なら、setup が対話 session で [OAuth client wizard](#google-auth-platform-手動設定) を起動する。利用者は wizard の入力とブラウザ操作を行い、完了後に setup が `uv run yt-doctor --apply --json` で再診断する。
 
 ### 6. 完了を確認する
 
@@ -52,26 +43,21 @@ external user は上流リポジトリを clone し、同じ README に従って
 
 ## Google Auth Platform 手動設定
 
-`gcloud` / Terraform いずれも Google Auth Platform の Branding / Audience / Clients 設定には対応していないため、ここは Console での手動作業が必要:
+Console 操作の正本は [OAuth client wizard](../.claude/skills/setup/references/oauth-client-wizard.sh)。チャンネルリポジトリのルートで起動する:
 
-1. `yt-doctor` の `next_action.url` / terraform 出力に表示された URL を開く
-   - 形式: `https://console.cloud.google.com/apis/credentials?project=<PROJECT_ID>`
-2. 左メニューで **Google Auth Platform** を開く
-3. **Branding** でアプリ名、ユーザーサポートメール、デベロッパー連絡先を入力して保存
-   - 推奨アプリ名: `<channel-name> YouTube Automation`
-4. **Audience** で User type は **External**、Publishing status は **Testing** のまま保存し、**Test users** に OAuth 認証でログインする Google アカウントを追加
-   - ここを忘れると、初回認証で `403 access_denied` になる
-5. **Clients** → **Create client** を開き、Application type **Desktop app** を選ぶ
-6. 名前を入力（推奨: `<channel-name> Desktop Client`）→ 作成
-7. 作成した client を開き、**Client secrets** → **Add secret** で新しい secret を発行
-8. チャンネルリポジトリの `auth/client_secrets.template.json` をコピーし、`client_id` / `project_id` / `client_secret` を転記して `client_secrets.json` として保存
-   - テンプレートは `yt-skills sync --asset auth-template` で配布される（canonical source は `src/youtube_automation/infrastructure/resources/auth/client_secrets.template.json`）
-9. `client_secrets.json` を **チャンネルリポジトリの `auth/` 配下**に配置
-   - 推奨パス: `<channel_dir>/auth/client_secrets.json`
+```bash
+bash .claude/skills/setup/references/oauth-client-wizard.sh
+```
 
-新 UI では client 作成後の secret 再表示に依存しない。secret が必要なときは、**Clients** → 対象 client → **Client secrets** → **Add secret** で新しい secret を発行し、テンプレートへ転記する。
+1. 前提確認: チャンネル名と project ID を解決し、配置済みなら終了する。
+2. Branding: プロジェクト共通の固定名 `YouTube Automation` を設定する（初回のみ）。
+3. Audience: External / **In production** に切り替え、unverified 警告は「詳細」からアプリへの移動を選んで続行する（初回のみ）。
+4. Clients: チャンネルごとの Desktop client を用意する。
+5. Secret: Download JSON の候補を確認し、doctor が `auth/client_secrets.json` に配置する。
+6. 再診断: `client_secrets: ok` を確認する。`oauth_token` 取得は wizard の範囲外。
 
-`yt-channel-status` などの初回認証で `403 access_denied` が出る場合は、**Audience > Test users** にログイン中の Google アカウントが登録されているか確認し、`<channel_dir>/auth/token.json` を削除してから再実行する。
+Branding / Audience が未完了の既存プロジェクトも「初めて」の経路を使う。すでに秘密ファイルが配置済みなら wizard は変更せず終了するため、既存プロジェクトの Audience 切替は wizard 内の該当 stage を参照する。
+切替直後に VPS の `token_streaming` 4 チャンネル分だけ先回り再認証し、その他は自然失効に任せる。再認証は本人操作であり wizard の範囲外。
 
 ---
 
@@ -161,7 +147,7 @@ Vertex AI で以下を利用する。`aiplatform.googleapis.com` が有効化さ
 Google Auth Platform の設定が不足している。**Branding** の連絡先、**Audience > Test users**、**Clients** の Desktop app client を確認する。
 
 #### `The OAuth client was not found`
-`client_secrets.json` の内容が壊れている。**Clients** で対象 client を開き、必要なら **Add secret** で新しい secret を発行して `client_secrets.json` を作り直す。
+`client_secrets.json` の内容を検査し、再発行が必要なら既存ファイルを安全に退避して [OAuth client wizard](#google-auth-platform-手動設定) を使う。
 
 #### ブラウザが開かない
 ファイアウォール設定 / ポート接続を確認。

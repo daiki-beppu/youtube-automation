@@ -1073,7 +1073,7 @@ def _load_client_secrets_data(channel_dir: Path) -> tuple[Path | str, object | N
 
 
 def check_client_secrets(channel_dir: Path) -> CheckResult:
-    path, data, error, fallback_error = _load_client_secrets_data(channel_dir)
+    path, data, error, _fallback_error = _load_client_secrets_data(channel_dir)
     if error:
         return CheckResult(
             id="client_secrets",
@@ -1082,10 +1082,6 @@ def check_client_secrets(channel_dir: Path) -> CheckResult:
         )
     if data is None:
         project_id = _project_id_for(channel_dir) or ""
-        fix_destination = channel_dir / "auth" / "client_secrets.json"
-        override_instructions = (
-            " `CLIENT_SECRETS_DIR` を解除してから fix と再診断を実行してください。" if path != fix_destination else ""
-        )
         return CheckResult(
             id="client_secrets",
             status="fail",
@@ -1098,16 +1094,8 @@ def check_client_secrets(channel_dir: Path) -> CheckResult:
                     else "https://console.cloud.google.com/apis/credentials"
                 ),
                 "instructions": (
-                    "Console の Google Auth Platform で Branding を保存し、"
-                    "Audience > Test users に OAuth 認証でログインする Google アカウントを追加してください "
-                    "(未追加だと初回認証が 403 access_denied で止まります)。"
-                    "その後 Clients > Create client で Application type Desktop app を選び、"
-                    "Clients > 対象 client > Client secrets > Add secret で secret を発行してください。"
-                    "続けて Download JSON を実行して Downloads に保存し、"
-                    "`uv run yt-doctor --fix-client-secrets` で "
-                    f"`{fix_destination}` へ自動移動してください。"
-                    + override_instructions
-                    + (f" fallback 状態: {fallback_error}" if fallback_error else "")
+                    "チャンネルルートで "
+                    "`bash .claude/skills/setup/references/oauth-client-wizard.sh` を起動してください。"
                 ),
             },
         )

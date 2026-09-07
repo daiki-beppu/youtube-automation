@@ -629,3 +629,63 @@ def test_release_shorts_rejects_empty_language_configuration(tmp_path: Path) -> 
     assert result.returncode != 0
     assert "shorts.release.languages" in result.stderr
     assert not calls.exists()
+
+
+def test_oauth_wizard_existing_secrets_exits_without_doctor_or_browser(tmp_path: Path) -> None:
+    channel = tmp_path / "channel"
+    (channel / "auth").mkdir(parents=True)
+    secret = channel / "auth/client_secrets.json"
+    secret.write_text('{"sentinel": true}', encoding="utf-8")
+    result = subprocess.run(
+        ["/bin/bash", str(SKILLS / "setup/references/oauth-client-wizard.sh")],
+        cwd=channel,
+        env={"PATH": "/usr/bin:/bin", "HOME": str(tmp_path), "CHANNEL_DIR": str(channel)},
+        input="\n",
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, result.stderr
+    assert secret.read_text() == '{"sentinel": true}'
+
+
+@pytest.mark.parametrize("status", ["ok", "fail"])
+def test_oauth_wizard_fixes_then_checks_client_secrets(tmp_path: Path, status: str) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_executable(bin_dir / "open", "#!/bin/bash\nexit 0\n")
+    _write_executable(bin_dir / "xdg-open", "#!/bin/bash\nexit 0\n")
+    _write_executable(
+        bin_dir / "uv",
+        f'''#!/bin/bash
+if [[ "$*" == "run yt-doctor --fix-client-secrets" ]]; then
+  mkdir -p auth
+  printf 'fixture' > auth/client_secrets.json
+elif [[ "$*" == "run yt-doctor --json" ]]; then
+  [[ -f auth/client_secrets.json ]] || exit 23
+  printf '%s' '{{"checks":[{{"id":"client_secrets","status":"{status}"}}]}}'
+  exit 1
+elif [[ "$1 $2" == "run python" ]]; then
+  shift 2
+  exec {sys.executable} "$@"
+else
+  exit 24
+fi
+''',
+    )
+    result = subprocess.run(
+        ["/bin/bash", str(SKILLS / "setup/references/oauth-client-wizard.sh")],
+        cwd=tmp_path,
+        env={
+            "PATH": f"{bin_dir}:/usr/bin:/bin",
+            "HOME": str(tmp_path),
+            "CHANNEL_DIR": str(tmp_path),
+            "GOOGLE_CLOUD_PROJECT": "test-project",
+        },
+        input="\nTest Channel\nn\n\n\n\n\ny\n\n\n",
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert (tmp_path / "auth/client_secrets.json").read_text() == "fixture"
+    assert result.returncode == (0 if status == "ok" else 1), result.stdout + result.stderr
