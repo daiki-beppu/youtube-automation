@@ -38,9 +38,7 @@ def _channel_context(channel: Path) -> Iterator[None]:
     from youtube_automation.configuration import reset as reset_config
 
     previous_dir = os.environ.get("CHANNEL_DIR")
-    previous_slug = os.environ.get("CHANNEL")
     os.environ["CHANNEL_DIR"] = str(channel)
-    os.environ.pop("CHANNEL", None)
     reset_config()
     try:
         yield
@@ -49,10 +47,6 @@ def _channel_context(channel: Path) -> Iterator[None]:
             os.environ.pop("CHANNEL_DIR", None)
         else:
             os.environ["CHANNEL_DIR"] = previous_dir
-        if previous_slug is None:
-            os.environ.pop("CHANNEL", None)
-        else:
-            os.environ["CHANNEL"] = previous_slug
         reset_config()
 
 

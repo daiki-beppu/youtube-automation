@@ -42,15 +42,14 @@ def _collection(tmp_path: Path) -> Path:
     return collection
 
 
-@pytest.mark.parametrize("nested_channel", (False, True), ids=("single-channel", "nested-channel"))
-def test_documented_invocation_resolves_script_from_channel_cwd(tmp_path: Path, nested_channel: bool) -> None:
-    """#3210: 配布コマンドは channel CWD を保って workspace 側 script を起動する。"""
-    workspace = tmp_path / "workspace with spaces"
-    subprocess.run(["git", "init", "-q", str(workspace)], check=True)
-    channel = workspace / "channels" / "focus" if nested_channel else workspace
+def test_documented_invocation_resolves_script_from_channel_cwd(tmp_path: Path) -> None:
+    """#3210: 配布コマンドは channel CWD を保って 同梱 script を起動する。"""
+    repository = tmp_path / "repository with spaces"
+    subprocess.run(["git", "init", "-q", str(repository)], check=True)
+    channel = repository
     collection = channel / "collections" / "planning" / "demo"
     collection.mkdir(parents=True)
-    distributed_script = workspace / ".claude" / "skills" / "music" / "references" / SCRIPT.name
+    distributed_script = repository / ".claude" / "skills" / "music" / "references" / SCRIPT.name
     distributed_script.parent.mkdir(parents=True)
     distributed_script.write_text(
         """from pathlib import Path
@@ -96,9 +95,9 @@ print(json.dumps({"cwd": str(Path.cwd()), "script": str(Path(__file__).resolve()
 
 def test_documented_invocation_reports_missing_script_as_startup_error(tmp_path: Path) -> None:
     """#3317: script 不在は逸脱 FAIL ではなく起動エラーとして exit 1 にする。"""
-    workspace = tmp_path / "workspace"
-    subprocess.run(["git", "init", "-q", str(workspace)], check=True)
-    collection = workspace / "collections" / "planning" / "demo"
+    repository = tmp_path / "repository"
+    subprocess.run(["git", "init", "-q", str(repository)], check=True)
+    collection = repository / "collections" / "planning" / "demo"
     collection.mkdir(parents=True)
     documented = next(
         line
@@ -111,7 +110,7 @@ def test_documented_invocation_reports_missing_script_as_startup_error(tmp_path:
         command,
         shell=True,
         executable="/bin/bash",
-        cwd=workspace,
+        cwd=repository,
         capture_output=True,
         text=True,
     )

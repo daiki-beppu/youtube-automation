@@ -171,22 +171,6 @@ def test_cmd_sync_never_overwrites_existing_channel_gitignore_even_with_force(
     assert "migrate-state-git" in capsys.readouterr().out
 
 
-def test_cmd_sync_should_not_create_channel_gitignore_at_workspace_root(
-    fake_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    workspace = tmp_path / "workspace"
-    (workspace / "channels" / "ambient" / "config" / "channel").mkdir(parents=True)
-    monkeypatch.chdir(workspace)
-
-    parser = build_parser()
-    args = parser.parse_args(["sync", "--asset", "channel-gitignore", "--force"])
-    skills_sync._resolve_default_target(args)
-    assert args.func(args) == 0
-
-    assert not (workspace / ".gitignore").exists()
-    assert "workspace レイアウトのため適用対象外" in capsys.readouterr().out
-
-
 def test_migrate_state_git_requires_explicit_channel_dir() -> None:
     parser = build_parser()
     with pytest.raises(SystemExit) as exc_info:
@@ -407,24 +391,6 @@ def test_cmd_sync_skills_without_orphan_config_emits_no_orphan_report(
     assert rc == 0
     warning_lines = [line for line in capsys.readouterr().out.splitlines() if "同梱されていません" in line]
     assert warning_lines == []
-
-
-def test_cmd_sync_skills_reports_orphan_configs_in_multi_channel_workspace(
-    fake_repo: Path,
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    workspace = tmp_path / "workspace"
-    target = workspace / ".claude" / "skills"
-    config = workspace / "channels" / "ambient" / "config" / "skills" / "missing.yaml"
-    config.parent.mkdir(parents=True)
-    config.write_text("{}\n", encoding="utf-8")
-
-    parser = build_parser()
-    args = parser.parse_args(["sync", "--asset", "skills", "--target", str(target), "--force"])
-    assert args.func(args) == 0
-
-    assert "対応する skill が同梱されていません: missing" in capsys.readouterr().out
 
 
 def test_cmd_sync_skills_reports_config_for_skill_without_default_config(
@@ -1024,28 +990,6 @@ def test_cmd_diff_claude_md_does_not_emit_prune_hint(
     assert rc == 0
     out = capsys.readouterr().out
     assert "--prune" not in out
-
-
-def test_cmd_diff_should_ignore_channel_gitignore_difference_at_workspace_root(
-    fake_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    workspace = tmp_path / "workspace"
-    (workspace / "channels" / "ambient" / "config" / "channel").mkdir(parents=True)
-    gitignore = workspace / ".gitignore"
-    gitignore.write_text(
-        ".claude/settings.local.json\nchannels/*/auth/client_secrets.json\nchannels/*/auth/token*.json\n",
-        encoding="utf-8",
-    )
-    monkeypatch.chdir(workspace)
-
-    parser = build_parser()
-    args = parser.parse_args(["diff", "--asset", "channel-gitignore"])
-    skills_sync._resolve_default_target(args)
-    assert args.func(args) == 0
-
-    output = capsys.readouterr().out
-    assert "workspace レイアウトのため適用対象外" in output
-    assert "内容が異なる" not in output
 
 
 # ---------- cmd_sync --prune ----------

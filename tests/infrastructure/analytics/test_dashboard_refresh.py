@@ -86,7 +86,7 @@ def test_collect_channel_restores_environment_and_configuration_after_success(
         assert days == 30
         assert depth == "standard"
         assert os.environ["CHANNEL_DIR"] == str(channel)
-        assert "CHANNEL" not in os.environ
+        assert os.environ.get("CHANNEL") == initial_slug
         (channel / "data").mkdir(parents=True)
         return {"success": True}
 
@@ -405,7 +405,7 @@ def test_collect_channel_restores_environment_and_raises_automation_error(
         assert days == 30
         assert depth == "standard"
         assert os.environ["CHANNEL_DIR"] == str(tmp_path / "selected")
-        assert "CHANNEL" not in os.environ
+        assert os.environ["CHANNEL"] == "previous-slug"
         return {
             "success": False,
             "error": "reporting collection failed",

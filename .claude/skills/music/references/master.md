@@ -368,7 +368,7 @@ cleanup の有効・無効にかかわらず、マスター結合前に次の単
 LOUDNESS_SCRIPT="$(git rev-parse --show-toplevel 2>/dev/null)/.claude/skills/music/references/check_loudness_deviation.py"; if [ ! -f "$LOUDNESS_SCRIPT" ]; then printf 'ERROR: loudness gate script not found: %s\n' "$LOUDNESS_SCRIPT" >&2; exit 1; fi; uv run python3 "$LOUDNESS_SCRIPT" <collection-path> --receipt <collection-path>/01-master/.loudness-receipt.json
 ```
 
-`git rev-parse` は同期済み skill が置かれた workspace root だけを解決し、実行 CWD は変更しない。したがって `channels/<channel>` を CWD にするマルチチャンネル workspace でも、そのチャンネルの `config/channel/` を読みながら同梱スクリプトを起動できる。
+`git rev-parse` は同期済み skill が置かれたリポジトリルートだけを解決し、実行 CWD は変更しない。
 
 - exit 0: PASS と全曲の実測 LUFS を表示し、atomic write 済み receipt とともに Step 5 本体へ進む
 - exit 1: スクリプト不在などの起動失敗、計測または設定エラー。表示された原因を解消して再実行し、Step 5 本体へ進まない

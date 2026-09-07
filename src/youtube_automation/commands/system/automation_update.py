@@ -260,11 +260,6 @@ def _run_command(cmd: list[str], cwd: Path) -> int:
 
 def _channel_roots(root: Path) -> list[Path]:
     candidates = [root] if (root / "config" / "channel").is_dir() else []
-    candidates.extend(
-        channel_root
-        for channel_root in sorted((root / "channels").glob("*"))
-        if channel_root.is_dir() and (channel_root / "config" / "channel").is_dir()
-    )
     return candidates or [root]
 
 
