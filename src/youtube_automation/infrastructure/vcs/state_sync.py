@@ -14,6 +14,7 @@ from typing import TypeVar
 
 from youtube_automation.core.errors import StateSyncError
 from youtube_automation.domains.notifications import NotificationEvent, NotificationEventKind
+from youtube_automation.infrastructure.vcs._git import run_git
 from youtube_automation.infrastructure.vcs.state_git import StateGitContext, build_context
 
 T = TypeVar("T")
@@ -23,18 +24,8 @@ EventSink = Callable[[NotificationEvent], None]
 ChangeValidator = Callable[[Path, set[str]], None]
 
 
-def _run_git(repository: Path, *args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", *args],
-        cwd=repository,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-
 def _require_clean(repository: Path) -> None:
-    status = _run_git(repository, "status", "--porcelain=v1", "--untracked-files=all")
+    status = run_git(repository, "status", "--porcelain=v1", "--untracked-files=all")
     if status.returncode != 0:
         raise StateSyncError("Git worktreeの状態を確認できません")
     if status.stdout:
@@ -42,13 +33,13 @@ def _require_clean(repository: Path) -> None:
 
 
 def _pull_fast_forward(repository: Path) -> None:
-    pulled = _run_git(repository, "pull", "--ff-only")
+    pulled = run_git(repository, "pull", "--ff-only")
     if pulled.returncode != 0:
         raise StateSyncError("stateを読む前のgit pull --ff-onlyに失敗しました")
 
 
 def _paths(repository: Path, *args: str) -> set[str]:
-    result = _run_git(repository, *args)
+    result = run_git(repository, *args)
     if result.returncode != 0:
         raise StateSyncError("Gitの変更pathを確認できません")
     return set(result.stdout.splitlines())
@@ -127,13 +118,13 @@ def pull_update_commit_push(
         return result
 
     paths = sorted(changed)
-    added = _run_git(context.repository, "add", "--", *paths)
+    added = run_git(context.repository, "add", "--", *paths)
     if added.returncode != 0:
         raise StateSyncError("Git制御面stateをstageできません")
-    committed = _run_git(context.repository, "commit", "-m", commit_message, "--", *paths)
+    committed = run_git(context.repository, "commit", "-m", commit_message, "--", *paths)
     if committed.returncode != 0:
         raise StateSyncError("Git制御面stateをcommitできません")
-    pushed = _run_git(context.repository, "push", "--porcelain")
+    pushed = run_git(context.repository, "push", "--porcelain")
     if pushed.returncode == 0:
         return result
     if _is_non_fast_forward(pushed):
