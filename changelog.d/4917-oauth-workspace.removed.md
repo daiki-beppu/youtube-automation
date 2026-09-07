@@ -1,0 +1,1 @@
+- OAuth client の探索候補から旧 workspace root の `auth/client_secrets.json` を削除しました。チャンネルの `auth/`、submodule 互換の `automation/auth/`、main worktree の `auth/` の順に探索します。明示 `CLIENT_SECRETS_DIR`、secret fallback、token / backups の扱いは維持します。
