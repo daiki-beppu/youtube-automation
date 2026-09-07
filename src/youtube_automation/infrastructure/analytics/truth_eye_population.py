@@ -92,7 +92,15 @@ def _benchmark_channels(repository: Path, *, required: bool = True) -> list[dict
         return []
     payload = _read_json(path)
     channels = payload.get("benchmark", {}).get("channels", [])
-    return channels if isinstance(channels, list) else []
+    if not isinstance(channels, list):
+        return []
+    for index, channel in enumerate(channels):
+        if not isinstance(channel, dict):
+            raise ConfigError(f"benchmark.channels[{index}] が object ではありません: {path}")
+        competitor_id = channel.get("id")
+        if not isinstance(competitor_id, str) or not competitor_id:
+            raise ConfigError(f"benchmark.channels[{index}].id が不正です: {path}")
+    return channels
 
 
 def _training_history(repository: Path) -> tuple[set[str], dict[str, int]]:

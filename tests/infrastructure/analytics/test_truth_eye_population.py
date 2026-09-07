@@ -171,6 +171,16 @@ def test_empty_benchmark_channels_stops(tmp_path, monkeypatch):
         load_truth_eye_population(own, freshness_days=3)
 
 
+@pytest.mark.parametrize("channel", [{"slug": "missing-id"}, {"id": "", "slug": "empty-id"}, "invalid"])
+def test_malformed_benchmark_channel_stops_with_config_error(tmp_path, monkeypatch, channel):
+    own = _repository(tmp_path, "self", [(SHARED_COMPETITOR, "shared")])
+    _write_json(own / "config" / "channel" / "analytics.json", {"benchmark": {"channels": [channel]}})
+    _without_registry(tmp_path, monkeypatch)
+
+    with pytest.raises(ConfigError, match=r"benchmark\.channels\[0\]"):
+        load_truth_eye_population(own, freshness_days=3)
+
+
 def test_broken_registry_is_not_degraded_into_a_sibling_less_run(tmp_path, monkeypatch):
     own = _repository(tmp_path, "self", [(SHARED_COMPETITOR, "shared")])
     registry = tmp_path / "channels.json"
