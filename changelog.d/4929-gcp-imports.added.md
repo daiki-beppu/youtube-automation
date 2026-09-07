@@ -1,1 +1,2 @@
-- 共有 GCP プロジェクト・API 6 件・Vertex AI IAM の宣言的 import と billing 管理、二重の削除保護を追加し、Terraform を唯一の変更経路とする ADR-0030 と取り込み検証手順を整備。
+- 共有 GCP プロジェクト・API 6 件・Vertex AI IAM を宣言的 import で Terraform 管理へ取り込み、`deletion_policy = "PREVENT"` と `prevent_destroy` による二重の削除保護を追加しました。
+- Terraform を GCP 構成の唯一の変更経路とする ADR-0030 と、取り込み・drift 確認の運用手順を整備しました。
