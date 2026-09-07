@@ -407,10 +407,69 @@ class TestCollectChannelWithPrefetchedItem:
             "latest_upload_at": "2026-07-10",
             "oldest_upload_at": "2026-01-02",
             "videos": [
-                {"published_at": "2026-07-10", "views": 3200},
-                {"published_at": "2026-01-02", "views": 20000},
+                {
+                    "video_id": "VID_LOW",
+                    "title": "Benchmark Video",
+                    "published_at": "2026-07-10",
+                    "views": 3200,
+                    "duration_iso": "PT1H30M",
+                    "thumbnail_url": "https://example.com/VID_LOW.jpg",
+                },
+                {
+                    "video_id": "VID_HIGH",
+                    "title": "Benchmark Video",
+                    "published_at": "2026-01-02",
+                    "views": 20000,
+                    "duration_iso": "PT1H30M",
+                    "thumbnail_url": "https://example.com/VID_HIGH.jpg",
+                },
             ],
         }
+
+    def test_download_thumbnails_includes_every_upload_scan_video(self, monkeypatch, tmp_path):
+        collector = _make_collector(MagicMock())
+        collector.benchmarks_dir = tmp_path
+        downloads = []
+        monkeypatch.setattr(
+            benchmark_collector.urllib.request,
+            "urlretrieve",
+            lambda url, dest: downloads.append((url, dest)),
+        )
+        data = {
+            "channels": [
+                {
+                    "slug": "reference",
+                    "videos": [{"video_id": "VID_HIGH", "title": "High"}],
+                    "upload_scan": {
+                        "videos": [
+                            {
+                                "video_id": "VID_LOW",
+                                "title": "Low",
+                                "thumbnail_url": "https://example.com/low.jpg",
+                            },
+                            {
+                                "video_id": "VID_SHORT",
+                                "title": "Short",
+                                "thumbnail_url": "https://example.com/short.jpg",
+                            },
+                            {
+                                "video_id": "VID_LIVE",
+                                "title": "Live",
+                                "thumbnail_url": "https://example.com/live.jpg",
+                            },
+                        ]
+                    },
+                }
+            ]
+        }
+
+        collector.download_thumbnails(data)
+
+        assert downloads == [
+            ("https://example.com/low.jpg", tmp_path / "thumbnails/reference_VID_LOW.jpg"),
+            ("https://example.com/short.jpg", tmp_path / "thumbnails/reference_VID_SHORT.jpg"),
+            ("https://example.com/live.jpg", tmp_path / "thumbnails/reference_VID_LIVE.jpg"),
+        ]
 
     def test_upload_scan_is_incomplete_when_scan_limit_stops_pagination(self):
         youtube = MagicMock()

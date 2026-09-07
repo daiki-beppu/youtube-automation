@@ -1,7 +1,7 @@
 ## Overview
 
-`benchmark_collector.py` で競合チャンネルの**直近投稿のうち再生数しきい値（既定 10,000）以上**の動画だけを収集し、収集 JSON から検証済み benchmark report JSON+HTML を更新する。
-チャンネル単位ではなく**動画単位**でベンチマーク対象を抽出する（伸びていない動画は分析から除外）。
+`benchmark_collector.py` で競合チャンネルの直近投稿を走査記録へ収集し、**再生数しきい値（既定 10,000）以上**の動画だけをベンチマーク対象として抽出して、収集 JSON から検証済み benchmark report JSON+HTML を更新する。
+チャンネル単位ではなく**動画単位**でベンチマーク対象を抽出する（しきい値未満の動画も走査記録とサムネイル画像には残すが、分析からは除外）。
 `/wf-new` 企画工程の Phase 1-2 から自動呼び出しされるが、単独実行も可能。
 
 ## 完了条件
@@ -80,7 +80,7 @@ uv run yt-benchmark-collect -v               # 詳細ログ
 2. 検証済み `docs/benchmarks/benchmark-report.json` + `.html` の古い方の更新日時で鮮度チェック（`freshness_days` 日以上前なら更新）
 3. YouTube Data API で**直近 `scan_recent` 本（既定 150）** を走査し、**`min_views` 以上（既定 10,000）** の動画だけを抽出
 4. 派生指標算出（日次再生数・ER%・投稿間隔トレンド）
-5. サムネイル画像を `docs/benchmarks/thumbnails/` にダウンロード
+5. 走査記録全件（しきい値未満・Shorts・ライブを含む）のサムネイル画像を `docs/benchmarks/thumbnails/` にダウンロード
 6. `data/benchmark_YYYYMMDD.json` に中間データ保存
 7. subagent が収集 JSON と画像分析から `channel-research-report.schema.json` 準拠の candidate を作り、`references/structured-report.md` の共通 workflow で `docs/benchmarks/benchmark-report.json` + `.html` を公開する
    - 競合比較、共通パターン、個別根拠を一つの構造化レポートへ統合する

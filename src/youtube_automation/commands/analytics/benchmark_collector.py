@@ -381,7 +381,20 @@ class BenchmarkCollector:
             "complete": upload_scan_complete,
             "latest_upload_at": max(upload_dates) if upload_dates else None,
             "oldest_upload_at": min(upload_dates) if upload_dates else None,
-            "videos": [{"published_at": video["published_at"], "views": video["views"]} for video in raw_videos],
+            "videos": [
+                {
+                    key: video[key]
+                    for key in (
+                        "video_id",
+                        "title",
+                        "published_at",
+                        "views",
+                        "duration_iso",
+                        "thumbnail_url",
+                    )
+                }
+                for video in raw_videos
+            ],
         }
 
         # 視聴数フィルタ（min_views 以上のみベンチマーク対象）
@@ -707,7 +720,7 @@ class BenchmarkCollector:
         skipped = 0
         for channel in data.get("channels", []):
             slug = channel["slug"]
-            for video in channel.get("videos", []):
+            for video in channel.get("upload_scan", {}).get("videos", []):
                 url = video.get("thumbnail_url")
                 if not url:
                     continue
