@@ -1157,64 +1157,6 @@ class TestSummarize:
         assert s["next_check_id"] is None
 
 
-class TestOAuthClientSharingRecommendation:
-    @staticmethod
-    def _make_channel(workspace: Path, slug: str, *, with_secret: bool = False) -> Path:
-        channel = workspace / "channels" / slug
-        (channel / "config" / "channel").mkdir(parents=True)
-        if with_secret:
-            secret = channel / "auth" / "client_secrets.json"
-            secret.parent.mkdir()
-            secret.write_text("{}", encoding="utf-8")
-        return channel
-
-    def test_info_when_multiple_workspace_channels_have_per_channel_secrets(self, tmp_path):
-        workspace = tmp_path / "workspace"
-        alpha = self._make_channel(workspace, "alpha", with_secret=True)
-        self._make_channel(workspace, "beta", with_secret=True)
-
-        result = doctor.check_oauth_client_sharing(alpha)
-
-        assert result.status == "info"
-        assert result.id == "oauth_client_sharing"
-        assert str(workspace / "auth" / "client_secrets.json") in result.message
-        assert "全チャンネルの再認証が必要" in result.message
-        assert result.data == {
-            "channels": ["alpha", "beta"],
-            "shared_path": str(workspace / "auth/client_secrets.json"),
-        }
-
-    def test_ok_when_only_one_workspace_channel_has_per_channel_secret(self, tmp_path):
-        workspace = tmp_path / "workspace"
-        alpha = self._make_channel(workspace, "alpha", with_secret=True)
-        self._make_channel(workspace, "beta")
-
-        result = doctor.check_oauth_client_sharing(alpha)
-
-        assert result.status == "ok"
-
-    def test_ok_outside_workspace(self, tmp_path):
-        channel = tmp_path / "standalone"
-        (channel / "auth").mkdir(parents=True)
-        (channel / "auth" / "client_secrets.json").write_text("{}", encoding="utf-8")
-
-        result = doctor.check_oauth_client_sharing(channel)
-
-        assert result.status == "ok"
-
-    def test_nested_standalone_repo_is_not_treated_as_workspace_channel(self, tmp_path):
-        workspace = tmp_path / "workspace"
-        alpha = self._make_channel(workspace, "alpha", with_secret=True)
-        self._make_channel(workspace, "beta", with_secret=True)
-        standalone = workspace / "standalone"
-        standalone.mkdir()
-
-        result = doctor.check_oauth_client_sharing(standalone)
-
-        assert alpha != standalone
-        assert result.status == "ok"
-
-
 class TestResolveChannelDir:
     @staticmethod
     def _workspace(tmp_path: Path) -> tuple[Path, Path]:
@@ -1243,23 +1185,22 @@ class TestResolveChannelDir:
         r = doctor.resolve_channel_dir(None)
         assert r == tmp_path.resolve()
 
-    def test_common_channel_selection_resolves_workspace_channel(self, tmp_path, monkeypatch):
+    def test_common_channel_selection_does_not_redirect_doctor(self, tmp_path, monkeypatch):
         from youtube_automation.configuration import select_channel
 
         self._clear_channel_env(monkeypatch)
-        workspace, channel = self._workspace(tmp_path)
+        workspace, _channel = self._workspace(tmp_path)
         monkeypatch.chdir(workspace)
         select_channel("alpha")
 
-        assert doctor.resolve_channel_dir(None) == channel.resolve()
+        assert doctor.resolve_channel_dir(None) == workspace.resolve()
 
-    def test_workspace_root_without_selection_is_rejected(self, tmp_path, monkeypatch):
+    def test_workspace_root_without_selection_uses_cwd(self, tmp_path, monkeypatch):
         self._clear_channel_env(monkeypatch)
         workspace, _channel = self._workspace(tmp_path)
         monkeypatch.chdir(workspace)
 
-        with pytest.raises(ConfigError, match=r"workspace ルート.*--channel"):
-            doctor.resolve_channel_dir(None)
+        assert doctor.resolve_channel_dir(None) == workspace.resolve()
 
     def test_target_remains_higher_priority_than_common_selection(self, tmp_path, monkeypatch):
         from youtube_automation.configuration import select_channel
@@ -1272,6 +1213,40 @@ class TestResolveChannelDir:
         select_channel("alpha")
 
         assert doctor.resolve_channel_dir(str(target)) == target.resolve()
+
+    @pytest.mark.parametrize("selection", ["environment", "explicit"])
+    def test_channel_dir_wins_over_legacy_selection(self, tmp_path, monkeypatch, selection):
+        from youtube_automation.configuration import select_channel
+
+        self._clear_channel_env(monkeypatch)
+        workspace, _channel = self._workspace(tmp_path)
+        target = tmp_path / "standalone"
+        target.mkdir()
+        monkeypatch.chdir(workspace)
+        monkeypatch.setenv("CHANNEL_DIR", str(target))
+        if selection == "environment":
+            monkeypatch.setenv("CHANNEL", "alpha")
+        else:
+            select_channel("alpha")
+
+        assert doctor.resolve_channel_dir(None) == target.resolve()
+
+    def test_legacy_channel_env_does_not_redirect_cwd(self, tmp_path, monkeypatch):
+        self._clear_channel_env(monkeypatch)
+        workspace, _channel = self._workspace(tmp_path)
+        monkeypatch.chdir(workspace)
+        monkeypatch.setenv("CHANNEL", "alpha")
+
+        assert doctor.resolve_channel_dir(None) == workspace.resolve()
+
+    def test_cwd_inside_channel_resolves_channel_ancestor(self, tmp_path, monkeypatch):
+        self._clear_channel_env(monkeypatch)
+        (tmp_path / "config/channel").mkdir(parents=True)
+        nested = tmp_path / "collections/live"
+        nested.mkdir(parents=True)
+        monkeypatch.chdir(nested)
+
+        assert doctor.resolve_channel_dir(None) == tmp_path.resolve()
 
     def test_unconfigured_setup_directory_still_uses_cwd(self, tmp_path, monkeypatch):
         self._clear_channel_env(monkeypatch)
@@ -1342,8 +1317,8 @@ class TestMain:
         payload = json.loads(out)
         assert payload["channel_dir"] == str(tmp_path)
         assert "summary" in payload
-        # 7 bootstrap + 14 api + 3 channel + 5 data + 1 upload = 30
-        assert len(payload["checks"]) == 30
+        # 7 bootstrap + 13 api + 3 channel + 5 data + 1 upload = 29
+        assert len(payload["checks"]) == 29
         for c in payload["checks"]:
             assert c["status"] in ("ok", "info", "warn", "fail", "unknown")
             # category フィールドが JSON に含まれていること
@@ -2232,16 +2207,6 @@ class TestBootstrapChecks:
         assert r.category == "bootstrap"
         assert "uv project" in r.message
 
-    def test_workspace_channel_uses_root_uv_project(self, monkeypatch, tmp_path):
-        workspace, channel = self._workspace_channel(tmp_path)
-        (workspace / "pyproject.toml").write_text('[project]\nname = "workspace"\n', encoding="utf-8")
-        monkeypatch.setattr(doctor, "_run", lambda *args, **kwargs: pytest.fail("uv tool list should not run"))
-
-        r = doctor.check_uv_project(channel)
-
-        assert r.status == "ok"
-        assert r.message == "uv project 初期化済み"
-
     def test_automation_package_missing_pyproject_is_fail_with_uv_init(self, monkeypatch, tmp_path):
         monkeypatch.setattr(doctor, "_run", lambda *args, **kwargs: (0, "", ""))
         r = doctor.check_automation_package(tmp_path)
@@ -2296,19 +2261,6 @@ class TestBootstrapChecks:
         assert r.status == "ok"
         assert r.category == "bootstrap"
         assert "uv project" in r.message
-
-    def test_workspace_channel_uses_root_automation_dependency(self, monkeypatch, tmp_path):
-        workspace, channel = self._workspace_channel(tmp_path)
-        (workspace / "pyproject.toml").write_text(
-            '[project]\nname = "workspace"\ndependencies = ["youtube-channels-automation"]\n',
-            encoding="utf-8",
-        )
-        monkeypatch.setattr(doctor, "_run", lambda *args, **kwargs: pytest.fail("uv tool list should not run"))
-
-        r = doctor.check_automation_package(channel)
-
-        assert r.status == "ok"
-        assert r.message == "uv project で automation パッケージ導入済み"
 
     def test_automation_package_similar_name_is_fail(self, monkeypatch, tmp_path):
         monkeypatch.setattr(
@@ -2397,31 +2349,6 @@ class TestBootstrapChecks:
         r = doctor.check_skills_synced(tmp_path)
         assert r.status == "ok"
         assert r.category == "bootstrap"
-
-    def test_workspace_channel_uses_root_shared_skills(self, tmp_path, monkeypatch):
-        workspace, channel = self._workspace_channel(tmp_path)
-        monkeypatch.setattr(doctor, "bundled_skill_names", lambda: ["channel-new", "setup"])
-        for skill_name in ["channel-new", "setup"]:
-            skill_dir = workspace / ".claude" / "skills" / skill_name
-            skill_dir.mkdir(parents=True)
-            (skill_dir / "SKILL.md").write_text(f"# {skill_name}", encoding="utf-8")
-        agents_dir = workspace / ".agents"
-        agents_dir.mkdir()
-        (agents_dir / "skills").symlink_to(Path("..") / ".claude" / "skills")
-
-        r = doctor.check_skills_synced(channel)
-
-        assert r.status == "ok"
-        assert r.category == "bootstrap"
-
-    def test_workspace_channel_scans_root_managed_directories(self, tmp_path):
-        workspace, channel = self._workspace_channel(tmp_path)
-        (workspace / ".claude" / "skills").mkdir(parents=True)
-
-        r = doctor.check_numbered_duplicates(channel)
-
-        assert r.status == "ok"
-        assert "走査できません" not in r.message
 
     def test_nested_standalone_channel_does_not_use_outer_workspace_bootstrap(self, tmp_path, monkeypatch):
         workspace, _channel = self._workspace_channel(tmp_path)
@@ -5773,20 +5700,20 @@ class TestStreamingVpsState:
 
 
 class TestRunAllChecksExtended:
-    def test_returns_30_checks(self, monkeypatch, tmp_path):
-        """7 bootstrap + 14 api + 3 channel + 5 data + 1 upload = 計 30 件."""
+    def test_returns_29_checks(self, monkeypatch, tmp_path):
+        """7 bootstrap + 13 api + 3 channel + 5 data + 1 upload = 計 29 件."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
-        assert len(results) == 30
+        assert len(results) == 29
 
-    def test_14_api_checks_present(self, monkeypatch, tmp_path):
-        """streaming VPS state 突合を含む 14 check が api カテゴリにある."""
+    def test_13_api_checks_present(self, monkeypatch, tmp_path):
+        """streaming VPS state 突合を含む 13 check が api カテゴリにある."""
         monkeypatch.setattr(doctor, "_run", lambda *a, **kw: (127, "", "missing"))
         results = doctor.run_all_checks(tmp_path)
         api_results = [r for r in results if r.category == "api"]
-        assert len(api_results) == 14
+        assert len(api_results) == 13
         assert api_results[-1].id == "streaming_vps_state"
-        assert any(r.id == "oauth_client_sharing" for r in api_results)
+        assert all(r.id != "oauth_client_sharing" for r in api_results)
         assert any(r.id == "oauth_token_readonly" for r in api_results)
 
     def test_new_check_ids_present(self, monkeypatch, tmp_path):

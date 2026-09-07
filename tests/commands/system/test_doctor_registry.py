@@ -23,7 +23,6 @@ EXPECTED_CHECK_IDS = (
     "adc_quota_project",
     "iam_aiplatform_user",
     "client_secrets",
-    "oauth_client_sharing",
     "oauth_token",
     "oauth_token_readonly",
     "reporting_job",
@@ -67,7 +66,7 @@ def test_registry_declares_apply_and_cwd_semantics() -> None:
     assert definitions["billing_linked"].apply_kind is doctor.ApplyKind.BILLING
     assert definitions["skills_synced"].apply_kind is doctor.ApplyKind.AI_EXEC
     assert definitions["channel_config"].apply_kind is doctor.ApplyKind.NONE
-    assert definitions["skills_synced"].cwd_semantics is doctor.CwdSemantics.BOOTSTRAP_ROOT
+    assert all(definition.cwd_semantics is doctor.CwdSemantics.CHANNEL for definition in doctor.CHECK_REGISTRY)
     assert definitions["apis_enabled"].cwd_semantics is doctor.CwdSemantics.CHANNEL
 
 
@@ -87,7 +86,7 @@ def test_new_registry_declaration_drives_run_render_and_apply(monkeypatch, tmp_p
         category="example",
         run=check_example,
         apply_kind=doctor.ApplyKind.AI_EXEC,
-        cwd_semantics=doctor.CwdSemantics.BOOTSTRAP_ROOT,
+        cwd_semantics=doctor.CwdSemantics.CHANNEL,
     )
     monkeypatch.setattr(doctor, "CHECK_REGISTRY", (definition,))
     commands: list[tuple[list[str], Path]] = []
@@ -100,6 +99,6 @@ def test_new_registry_declaration_drives_run_render_and_apply(monkeypatch, tmp_p
     outcome = doctor.run_apply(channel)
 
     assert [result.id for result in outcome.results] == ["example"]
-    assert commands == [(["example", "--fix"], workspace)]
+    assert commands == [(["example", "--fix"], channel)]
     assert "=== example ===" in doctor.render_table(outcome.results, doctor.summarize(outcome.results), channel)
     assert doctor._check_result_to_dict(outcome.results[0])["category"] == "example"
