@@ -6,12 +6,15 @@ import hashlib
 import re
 from collections import Counter
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from itertools import pairwise
 from pathlib import Path
+from statistics import median
 
 import yaml
 
 from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.domains.analytics.benchmark import is_live_benchmark_video, is_short_benchmark_video
 
 
 @dataclass(frozen=True)
@@ -37,6 +40,45 @@ VIEWPOINTS: tuple[Viewpoint, ...] = (
 )
 
 TRAINING_RECORD_SCHEMA_VERSION = 1
+
+
+@dataclass(frozen=True)
+class PairThresholds:
+    gap_days: tuple[int, int, int] = (5, 14, 30)
+    maturity_days: int = 14
+    min_ratio: float = 3
+    min_loser_views: int = 100
+    min_pool_size: int = 10
+    max_rejections: int = 3
+
+
+PAIR_THRESHOLDS = PairThresholds()
+
+_STAGE_POPULATION = "母集団"
+_STAGE_MIN_POOL = "最小プール通過"
+_STAGE_UNSEEN = "既出除外後"
+_STAGE_MISSING_IMAGE = "画像欠落除外後"
+_STAGE_REJECTED = "却下後"
+_GAP_STAGE_SUFFIX = " 日段"
+
+_POPULATION_ADVICE = "母集団がありません。channel-research --benchmark で benchmark を収集してください"
+_MIN_POOL_ADVICE = (
+    "走査プールが最小本数に届く競合がありません。channel-research --benchmark で走査本数を増やしてください"
+)
+_GAP_ADVICE = "日差の近いペアがありません。channel-research --benchmark で benchmark を更新するか競合を追加してください"
+_UNSEEN_ADVICE = (
+    "候補が過去の訓練記録と重複しています。benchmark に競合を追加するか、兄弟チャンネル連携を増やしてください"
+)
+_MISSING_IMAGE_ADVICE = (
+    "サムネイルが未取得です。対象リポジトリで uv run yt-benchmark-collect --force -y を実行してください"
+)
+_REJECTED_ADVICE = "却下で候補が尽きました。benchmark に競合を追加するか、次のセッションで再実行してください"
+_BOTTLENECK_ADVICE = {
+    _STAGE_MIN_POOL: _MIN_POOL_ADVICE,
+    _STAGE_UNSEEN: _UNSEEN_ADVICE,
+    _STAGE_MISSING_IMAGE: _MISSING_IMAGE_ADVICE,
+    _STAGE_REJECTED: _REJECTED_ADVICE,
+}
 
 _VIDEO_FIELDS = ("video_id", "title", "views", "published_at", "duration")
 _SAFE_STEM_PART = re.compile(r"^[A-Za-z0-9._-]+$")
@@ -206,6 +248,174 @@ def read_training_record(path: Path) -> TrainingRecord:
         raise ConfigError(f"未対応の訓練記録 schema_version です: {metadata.get('schema_version')}")
     phases = tuple(_section_body(text, f"Phase {number}") for number in range(6))
     return TrainingRecord(path, metadata, phases)
+
+
+def select_pair_candidates(
+    competitors: list[dict],
+    used_video_ids: set[str],
+    rejected_video_ids: tuple[str, ...],
+    today: date,
+) -> dict:
+    """走査済み競合群から固定閾値に従って訓練ペア候補を選ぶ。"""
+    eligible_competitors = _eligible_competitors(competitors)
+    pairs = [
+        pair
+        for competitor, pool, pool_median in eligible_competitors
+        for pair in _competitor_pairs(competitor, pool, pool_median, today)
+    ]
+    unseen_pairs = [pair for pair in pairs if _pair_is_unseen(pair, used_video_ids)]
+    selected_tier = _selected_gap_tier(unseen_pairs)
+    unseen = [pair for pair in unseen_pairs if pair["reason"]["gap_tier"] == selected_tier]
+    with_images = [pair for pair in unseen if _pair_images_exist(pair)]
+    final = _exclude_rejected(with_images, rejected_video_ids)
+    final.sort(key=lambda pair: (pair["reason"]["past_sessions"], -pair["reason"]["ratio"]))
+    funnel_tier = selected_tier if selected_tier is not None else _selected_gap_tier(pairs)
+    funnel = _pair_funnel(competitors, eligible_competitors, pairs, funnel_tier, unseen, with_images, final)
+    return {"candidates": final, "funnel": funnel, "bottleneck": _bottleneck(funnel), "warnings": []}
+
+
+def _eligible_competitors(competitors: list[dict]) -> list[tuple[dict, list[dict], float]]:
+    eligible_competitors: list[tuple[dict, list[dict], float]] = []
+    for competitor in competitors:
+        pool = [
+            video
+            for video in competitor["videos"]
+            if not is_live_benchmark_video(video) and not is_short_benchmark_video(video)
+        ]
+        if len(pool) >= PAIR_THRESHOLDS.min_pool_size:
+            eligible_competitors.append((competitor, pool, float(median(int(video["views"]) for video in pool))))
+    return eligible_competitors
+
+
+def _competitor_pairs(competitor: dict, pool: list[dict], pool_median: float, today: date) -> list[dict]:
+    per_winner: dict[str, dict] = {}
+    for first_index, first in enumerate(pool):
+        for second in pool[first_index + 1 :]:
+            candidate = _candidate_for_video_pair(competitor, first, second, pool_median, today)
+            if candidate is None:
+                continue
+            winner_id = str(candidate["winner"]["video_id"])
+            current = per_winner.get(winner_id)
+            candidate_rank = (candidate["reason"]["day_gap"], -candidate["reason"]["ratio"])
+            current_rank = None if current is None else (current["reason"]["day_gap"], -current["reason"]["ratio"])
+            if current_rank is None or candidate_rank < current_rank:
+                per_winner[winner_id] = candidate
+    return list(per_winner.values())
+
+
+def _candidate_for_video_pair(
+    competitor: dict, first: dict, second: dict, pool_median: float, today: date
+) -> dict | None:
+    winner, loser = sorted((first, second), key=lambda video: int(video["views"]), reverse=True)
+    if (today - max(_published_date(winner), _published_date(loser))).days < PAIR_THRESHOLDS.maturity_days:
+        return None
+    loser_views = int(loser["views"])
+    winner_views = int(winner["views"])
+    if loser_views < PAIR_THRESHOLDS.min_loser_views:
+        return None
+    ratio = winner_views / loser_views
+    if ratio < PAIR_THRESHOLDS.min_ratio or winner_views < pool_median or loser_views > pool_median:
+        return None
+    day_gap = abs((_published_date(winner) - _published_date(loser)).days)
+    tier = next((tier for tier in PAIR_THRESHOLDS.gap_days if day_gap <= tier), None)
+    return None if tier is None else _pair_payload(competitor, winner, loser, day_gap, tier, ratio, pool_median)
+
+
+def _selected_gap_tier(pairs: list[dict]) -> int | None:
+    return next(
+        (tier for tier in PAIR_THRESHOLDS.gap_days if any(pair["reason"]["gap_tier"] == tier for pair in pairs)),
+        None,
+    )
+
+
+def _pair_is_unseen(pair: dict, used_video_ids: set[str]) -> bool:
+    return pair["winner"]["video_id"] not in used_video_ids and pair["loser"]["video_id"] not in used_video_ids
+
+
+def _pair_images_exist(pair: dict) -> bool:
+    return Path(pair["winner"]["thumbnail_path"]).is_file() and Path(pair["loser"]["thumbnail_path"]).is_file()
+
+
+def _exclude_rejected(pairs: list[dict], rejected_video_ids: tuple[str, ...]) -> list[dict]:
+    if len(rejected_video_ids) >= PAIR_THRESHOLDS.max_rejections:
+        return []
+    rejected = set(rejected_video_ids)
+    return [pair for pair in pairs if pair["winner"]["video_id"] not in rejected]
+
+
+def _pair_funnel(
+    competitors: list[dict],
+    eligible_competitors: list[tuple[dict, list[dict], float]],
+    pairs: list[dict],
+    selected_tier: int | None,
+    unseen: list[dict],
+    with_images: list[dict],
+    final: list[dict],
+) -> list[dict]:
+    gap_funnel = [
+        {"stage": f"{tier}{_GAP_STAGE_SUFFIX}", "count": sum(pair["reason"]["gap_tier"] == tier for pair in pairs)}
+        for tier in PAIR_THRESHOLDS.gap_days
+        if selected_tier is None or tier <= selected_tier
+    ]
+    return [
+        {"stage": _STAGE_POPULATION, "count": len(competitors)},
+        {"stage": _STAGE_MIN_POOL, "count": len(eligible_competitors)},
+        *gap_funnel,
+        {"stage": _STAGE_UNSEEN, "count": len(unseen)},
+        {"stage": _STAGE_MISSING_IMAGE, "count": len(with_images)},
+        {"stage": _STAGE_REJECTED, "count": len(final)},
+    ]
+
+
+def _pair_payload(
+    competitor: dict,
+    winner: dict,
+    loser: dict,
+    day_gap: int,
+    tier: int,
+    ratio: float,
+    pool_median: float,
+) -> dict:
+    def video_payload(video: dict) -> dict:
+        return {
+            "video_id": video["video_id"],
+            "title": video["title"],
+            "views": int(video["views"]),
+            "published_at": video["published_at"],
+            "duration": video["duration_iso"],
+            "thumbnail_path": str(
+                (Path(competitor["thumbnails_dir"]) / f"{competitor['slug']}_{video['video_id']}.jpg").resolve()
+            ),
+        }
+
+    return {
+        "competitor": {key: competitor[key] for key in ("slug", "name", "id", "source")},
+        "winner": video_payload(winner),
+        "loser": video_payload(loser),
+        "reason": {
+            "day_gap": day_gap,
+            "gap_tier": tier,
+            "ratio": round(ratio, 1),
+            "pool_median": pool_median,
+            "past_sessions": int(competitor.get("past_sessions", 0)),
+        },
+    }
+
+
+def _published_date(video: dict) -> date:
+    return datetime.strptime(str(video["published_at"])[:10], "%Y-%m-%d").date()
+
+
+def _bottleneck(funnel: list[dict]) -> dict:
+    drops = [(before["count"] - after["count"], after["stage"]) for before, after in pairwise(funnel)]
+    stage = max(drops, key=lambda drop: drop[0], default=(0, _STAGE_POPULATION))[1]
+    return {"stage": stage, "advice": _bottleneck_advice(stage)}
+
+
+def _bottleneck_advice(stage: str) -> str:
+    if stage.endswith(_GAP_STAGE_SUFFIX):
+        return _GAP_ADVICE
+    return _BOTTLENECK_ADVICE.get(stage, _POPULATION_ADVICE)
 
 
 def _validate_pair(pair: dict) -> dict:

@@ -4,16 +4,20 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import date
 from pathlib import Path
 
 from youtube_automation.commands._shared.cli_harness import run_cli
+from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.analytics.truth_eye import (
     collect_training_status,
     seal_training_record,
+    select_pair_candidates,
     validate_sealed_draft,
     verify_training_record,
 )
+from youtube_automation.infrastructure.analytics.truth_eye_population import load_truth_eye_population
 from youtube_automation.infrastructure.vcs.training_commit import commit_training_files
 
 
@@ -28,6 +32,9 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("record", type=Path, help="検証する訓練記録 Markdown の path")
     status = subparsers.add_parser("status", help="未完了記録と成長トラッキングを表示")
     status.add_argument("--channel-dir", type=Path, default=Path.cwd(), help="チャンネルリポジトリの root")
+    pair = subparsers.add_parser("pair", help="benchmark 走査記録から承認用ペア候補を選定")
+    pair.add_argument("--channel-dir", type=Path, default=Path.cwd(), help="チャンネルリポジトリの root")
+    pair.add_argument("--rejected", action="append", default=[], help="却下済みの伸びた側 video_id（複数指定可）")
     return parser
 
 
@@ -71,6 +78,13 @@ def run(args: argparse.Namespace) -> int:
             result = verify_training_record(args.record)
             print(json.dumps({"ok": result.ok, "expected": result.expected, "actual": result.actual}))
             return 0 if result.ok else 1
+        if args.command == "pair":
+            freshness_days = int(load_skill_config("benchmark").get("freshness_days", 3))
+            competitors, used_ids, warnings = load_truth_eye_population(args.channel_dir, freshness_days=freshness_days)
+            result = select_pair_candidates(competitors, used_ids, tuple(args.rejected), date.today())
+            result["warnings"] = warnings
+            print(json.dumps(result, ensure_ascii=False))
+            return 0
         status = collect_training_status(args.channel_dir)
         print(
             json.dumps(
