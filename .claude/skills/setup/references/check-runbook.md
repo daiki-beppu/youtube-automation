@@ -123,27 +123,11 @@ uv run yt-doctor --apply --json --project-id <project-id>
 
 #### `billing_linked` — billing 未紐付け
 
-AI が利用可能な account を取得し、利用者に決定を依頼する:
-
-1. `gcloud beta billing accounts list --format=json` で利用可能 billing account を取得
-2. `open: true` のものだけを表で利用者に提示し、どれを使うか選ばせる
-3. 選択された ID を `apply_flags` へ仮追加し、必ず先に「GCP 変更 plan の承認」へ戻る。project / billing account と新たに実行可能になる全変更を再表示し、AskUserQuestion で実行が承認された後だけ次を再実行する。中止ならここで停止する:
-
-```bash
-uv run yt-doctor --apply --json --project-id <project-id> --billing-account <billing-id>
-```
-
-billing account が 1 つも無い利用者には、Console URL (`https://console.cloud.google.com/billing`) を提示して billing account 自体の作成を依頼。
+GCP 層は上流 `infra/terraform/gcp/` が管理する。fail なら `next_action.url` の README に従って上流で plan → apply を行い、完了後に `uv run yt-doctor --json` で再診断する。
 
 #### `apis_enabled` — 必須 API 未有効
 
-`--apply` が以下を自動実行:
-
-```bash
-gcloud services enable youtube.googleapis.com youtubeanalytics.googleapis.com youtubereporting.googleapis.com aiplatform.googleapis.com generativelanguage.googleapis.com --project=<project-id>
-```
-
-billing 未紐付けで失敗する場合は `billing_linked` に戻る。
+GCP 層は上流 `infra/terraform/gcp/` が管理する。fail なら `next_action.url` の README に従って上流で plan → apply を行い、完了後に `uv run yt-doctor --json` で再診断する。
 
 #### `adc` — Application Default Credentials 未設定
 
@@ -171,15 +155,7 @@ gcloud auth application-default set-quota-project <project-id>
 
 #### `iam_aiplatform_user` — Vertex AI 権限未付与
 
-`--apply` が以下を自動実行 (active アカウントは `gcloud auth list` で取得):
-
-```bash
-gcloud projects add-iam-policy-binding <project-id> \
-  --member=user:<active-account> \
-  --role=roles/aiplatform.user \
-  --condition=None \
-  --quiet
-```
+GCP 層は上流 `infra/terraform/gcp/` が管理する。fail なら `next_action.url` の README に従って上流で plan → apply を行い、完了後に `uv run yt-doctor --json` で再診断する。
 
 #### `client_secrets` — OAuth クライアント秘密ファイル未配置
 

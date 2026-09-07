@@ -361,9 +361,8 @@ def test_setup_skill_branches_on_all_apply_stop_reasons() -> None:
     assert "`apply.check_id`" in startup
     assert "`apply.cmd` / `apply.stderr`" in startup
     assert "--project-id <project-id>" in startup
-    assert "--billing-account <billing-id>" in startup
     assert "以後 `completed` まで全 flag を毎回付け" in startup
-    assert "uv run yt-doctor --apply --json --project-id <project-id> --billing-account <billing-id>" in startup
+    assert "uv run yt-doctor --apply --json --project-id <project-id>" in startup
 
 
 def test_setup_skill_requires_approval_before_apply_mutations() -> None:
@@ -383,7 +382,7 @@ def test_setup_skill_reapproves_project_scoped_plan_after_decisions() -> None:
     startup = text.split("## 起動時のチェック", 1)[1].split("## 認証コマンドと人間操作の責務", 1)[0]
     plan = startup.split("### GCP 変更 plan の承認", 1)[1]
 
-    assert "`--project-id` / `--billing-account` を追加・変更するたび" in plan
+    assert "`--project-id` を追加・変更するたび" in plan
     assert "正確な project ID" in plan
     assert "active account" in plan
     for mutation in ("Billing 紐付け", "API 有効化", "ADC quota project", "IAM 付与", "Reporting job 作成"):
@@ -449,13 +448,6 @@ def test_setup_skill_delegates_minimum_directory_generation_to_setup() -> None:
     assert "OAuth クライアント JSON の配置先 `auth/`" in text
 
 
-def test_setup_skill_enables_doctor_required_apis() -> None:
-    text = _setup_text()
-
-    for api_name in doctor.REQUIRED_APIS:
-        assert api_name in text
-
-
 def test_setup_skill_suggests_gcp_project_id_from_channel_name() -> None:
     text = _setup_text()
     assert "`config/channel/meta.json` の `channel.name`" in text
@@ -477,15 +469,12 @@ def test_setup_skill_requires_explicit_project_creation_approval() -> None:
     assert "作成が承認されるまで次のコマンドを実行しない" in section
 
 
-def test_setup_project_and_billing_sections_route_through_plan_approval() -> None:
+def test_setup_project_section_routes_through_plan_approval() -> None:
     text = _setup_text()
     project = text.split("#### `gcp_project`", 1)[1].split("#### `billing_linked`", 1)[0]
-    billing = text.split("#### `billing_linked`", 1)[1].split("#### `apis_enabled`", 1)[0]
-
-    for section in (project, billing):
-        assert "必ず先に「GCP 変更 plan の承認」へ戻る" in section
-        assert "AskUserQuestion で実行が承認された後だけ" in section
-        assert "中止ならここで停止する" in section
+    assert "必ず先に「GCP 変更 plan の承認」へ戻る" in project
+    assert "AskUserQuestion で実行が承認された後だけ" in project
+    assert "中止ならここで停止する" in project
 
 
 def test_setup_skill_suggests_oauth_app_and_client_names() -> None:

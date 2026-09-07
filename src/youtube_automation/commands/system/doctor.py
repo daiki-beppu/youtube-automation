@@ -31,7 +31,6 @@ from youtube_automation.application.channel_readiness.checks import (
     _ai_exec_action,
     _decision_action,
     _is_interactive_auth_command,
-    _parse_billing_account_id,
     _parse_project_id,
     _remediation_action,
     _without_channel_dir,
@@ -163,14 +162,14 @@ CHECK_REGISTRY = (
         "gcloud_account", API_CATEGORY, _without_channel_dir(check_gcloud_account), ApplyKind.NONE, CwdSemantics.CHANNEL
     ),
     CheckDefinition("gcp_project", API_CATEGORY, check_gcp_project, ApplyKind.PROJECT, CwdSemantics.CHANNEL),
-    CheckDefinition("billing_linked", API_CATEGORY, check_billing, ApplyKind.BILLING, CwdSemantics.CHANNEL),
-    CheckDefinition("apis_enabled", API_CATEGORY, check_apis_enabled, ApplyKind.AI_EXEC, CwdSemantics.CHANNEL),
+    CheckDefinition("billing_linked", API_CATEGORY, check_billing, ApplyKind.NONE, CwdSemantics.CHANNEL),
+    CheckDefinition("apis_enabled", API_CATEGORY, check_apis_enabled, ApplyKind.NONE, CwdSemantics.CHANNEL),
     CheckDefinition("adc", API_CATEGORY, _without_channel_dir(check_adc), ApplyKind.NONE, CwdSemantics.CHANNEL),
     CheckDefinition(
         "adc_quota_project", API_CATEGORY, check_adc_quota_project, ApplyKind.AI_EXEC, CwdSemantics.CHANNEL
     ),
     CheckDefinition(
-        "iam_aiplatform_user", API_CATEGORY, check_iam_aiplatform_user, ApplyKind.AI_EXEC, CwdSemantics.CHANNEL
+        "iam_aiplatform_user", API_CATEGORY, check_iam_aiplatform_user, ApplyKind.NONE, CwdSemantics.CHANNEL
     ),
     CheckDefinition("client_secrets", API_CATEGORY, check_client_secrets, ApplyKind.NONE, CwdSemantics.CHANNEL),
     CheckDefinition("oauth_token", API_CATEGORY, check_oauth_token, ApplyKind.NONE, CwdSemantics.CHANNEL),
@@ -342,7 +341,6 @@ def _forced_project_check(
 def _run_apply_loop(
     channel_dir: Path,
     project_id: str | None,
-    billing_account: str | None,
     executed: list[ExecutedStep],
 ) -> ApplyOutcome:
     attempted_steps = {(item.check_id, item.cmd) for item in executed}
@@ -366,41 +364,12 @@ def _run_apply_loop(
                 check=unresolved,
                 next_action=_decision_action("--project-id"),
             )
-        # remediation がある = billing 未紐付けが確定しているケースだけ --billing-account を要求する。
-        # describe 自体の失敗（権限不足など。next_action なし）は
-        # account を選んでも解決しないので human_required に落とす。
-        if apply_kind is ApplyKind.BILLING and billing_account is None and unresolved.next_action is not None:
-            return _apply_outcome(
-                results,
-                "decision_required",
-                executed,
-                check=unresolved,
-                next_action=_decision_action("--billing-account"),
-            )
         action = unresolved.next_action
-        if apply_kind is ApplyKind.PROJECT and project_id is not None:
+        # gcp_project の fail は human next_action を持つため、選択済み project が
+        # それでも解決しない（存在しない ID など）ケースでは machine 層の
+        # `gcloud config set project` を繰り返さず、check の human へ落とす。
+        if apply_kind is ApplyKind.PROJECT and project_id is not None and current_project_id != project_id:
             action = _ai_exec_action(["gcloud", "config", "set", "project", project_id])
-        elif apply_kind is ApplyKind.BILLING and billing_account is not None:
-            active_project_id = _project_id_for(channel_dir)
-            if not active_project_id:
-                return _apply_outcome(
-                    results,
-                    "decision_required",
-                    executed,
-                    check=CheckResult(id="gcp_project", status="fail", message="project ID が必要"),
-                    next_action=_decision_action("--project-id"),
-                )
-            action = _ai_exec_action(
-                [
-                    "gcloud",
-                    "beta",
-                    "billing",
-                    "projects",
-                    "link",
-                    active_project_id,
-                    f"--billing-account={billing_account}",
-                ]
-            )
         if (
             apply_kind is ApplyKind.NONE
             or not isinstance(action, AgentCommand)
@@ -452,14 +421,13 @@ def _run_apply_loop(
 def run_apply(
     channel_dir: Path,
     project_id: str | None = None,
-    billing_account: str | None = None,
 ) -> ApplyOutcome:
     """診断と ai-exec を human / 決定待ち / 完了まで連続実行する。"""
     executed: list[ExecutedStep] = []
     previous_project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
     project_id_token = _APPLY_PROJECT_ID.set(None)
     try:
-        return _run_apply_loop(channel_dir, project_id, billing_account, executed)
+        return _run_apply_loop(channel_dir, project_id, executed)
     finally:
         _APPLY_PROJECT_ID.reset(project_id_token)
         if previous_project_id is None:
@@ -842,11 +810,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         help="--apply の gcp_project step で使う project ID",
     )
     parser.add_argument(
-        "--billing-account",
-        type=_parse_billing_account_id,
-        help="--apply の billing_linked step で使う billing account ID",
-    )
-    parser.add_argument(
         "--fix-client-secrets",
         action="store_true",
         help="Downloads の OAuth client secret を auth/client_secrets.json へ移動",
@@ -878,7 +841,6 @@ def main(argv: Optional[list[str]] = None) -> int:
         outcome = run_apply(
             channel_dir,
             project_id=args.project_id,
-            billing_account=args.billing_account,
         )
         results = outcome.results
         apply_summary = outcome.summary

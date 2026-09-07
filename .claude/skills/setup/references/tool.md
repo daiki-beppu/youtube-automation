@@ -74,14 +74,14 @@
 8. 承認後、収集済み決定 flag を保持する `apply_flags` を空で初期化し、`uv run yt-doctor --apply --json <apply_flags>` を 1 回実行して JSON の `apply.stop_reason` を読む。初回は flag 無しの `uv run yt-doctor --apply --json` となる
 9. `completed`: 冒頭の「完了条件」を確認し、「運用設定インタビュー」後に「完了時」を報告する
 10. `human_required`: `apply.check_id` の §Steps を参照する。`apply.next_action.reason == "authentication"` なら `apply.next_action.cmd` を AI が対話 session で起動してから、ブラウザ認証だけを `[HUMAN STEP]` として依頼する。その他は対応する `[HUMAN STEP]` を 1 つだけ依頼して停止する。認証コマンドまたは人間操作の完了後、必要な後処理と現在の `apply_flags` をすべて付けた手順 8 の再診断は AI が行う。`analytics_report` stale の例外は「完了条件」に従う
-11. `decision_required`: `apply.check_id` が `gcp_project` なら project ID、`billing_linked` なら billing account ID を利用者に 1 問で確認する。値を `apply_flags` へ仮追加または同名 flag の値を仮置換し、後述の「GCP 変更 plan の承認」で、その flag により新たに実行可能になる全コマンドと正確な project / account を再表示する。AskUserQuestion の「表示した GCP 変更を実行」/「中止」の 2 択で承認された後だけ flag を確定して再実行する。以後 `completed` まで全 flag を毎回付け、値を変更するたびに plan を再表示・再承認する。project と billing が両方決定済みなら `uv run yt-doctor --apply --json --project-id <project-id> --billing-account <billing-id>` となる
+11. `decision_required`: `apply.check_id` が `gcp_project` なら project ID を利用者に 1 問で確認する。値を `apply_flags` へ仮追加または同名 flag の値を仮置換し、後述の「GCP 変更 plan の承認」で、その flag により新たに実行可能になる全コマンドと正確な project / account を再表示する。AskUserQuestion の「表示した GCP 変更を実行」/「中止」の 2 択で承認された後だけ flag を確定して再実行する。以後 `completed` まで全 flag を毎回付け、値を変更するたびに plan を再表示・再承認する。project が決定済みなら `uv run yt-doctor --apply --json --project-id <project-id>` となる
 12. `command_failed`: `apply.check_id` / `apply.cmd` / `apply.stderr` を利用者に示し、AI が §Steps に沿って原因を診断・解消してから、現在の `apply_flags` をすべて付けて手順 8 を再実行する。認証・承認入力以外のコマンドを利用者へ委ねない
 
 `--apply` は `ai-exec` を診断順に連続実行し、各コマンド後に再診断する。AI は `apply.executed` を実行済み履歴として読み、§Steps に残る同じ `ai-exec` コマンドを重複実行してはならない。`stop_reason` が上記 4 値以外、または JSON が読めない場合は安全側に停止し、CLI 出力を示す。
 
 ### GCP 変更 plan の承認
 
-project ID が解決済み、または `apply_flags` へ `--project-id` / `--billing-account` を追加・変更するたびに、次回 `--apply` が連続診断で到達し得る変更 plan を承認前に再作成する。`gcloud auth list` で active account を読み取り、正確な project ID、billing account ID（決定済みの場合）、active account と、§Steps に記載した project 選択・Billing 紐付け・API 有効化・ADC quota project・IAM 付与・Reporting job 作成のうち未解決の全コマンドを展開して表示する。
+project ID が解決済み、または `apply_flags` へ `--project-id` を追加・変更するたびに、次回 `--apply` が連続診断で到達し得る変更 plan を承認前に再作成する。`gcloud auth list` で active account を読み取り、正確な project ID、active account と、§Steps に記載した project 選択・ADC quota project・Reporting job 作成のうち未解決の全コマンドを展開して表示する。Billing 紐付け・API 有効化・IAM 付与は上流 Terraform の担当であり、この plan と doctor の実行対象に含めない。
 
 表示後、「これらは project `<project-id>` の外部 GCP 状態を変更する」と警告し、AskUserQuestion で「表示した GCP 変更を実行」/「中止」の 2 択を提示する。承認されるまで flag 付き `--apply` を実行しない。値の追加・変更は前回の承認を無効にし、必ず plan を再表示して承認を取り直す。
 

@@ -321,6 +321,17 @@ class TestCheckGcloudAccount:
         assert r.status == "unknown"
 
 
+def _assert_terraform_gcp_action(next_action) -> None:
+    """#4933: GCP 層 check の fail は判定 fail も probe 失敗も上流 Terraform への human 誘導になる。"""
+    assert next_action is not None
+    assert next_action["kind"] == "human"
+    assert "infra/terraform/gcp/" in next_action["instructions"]
+    assert (
+        next_action["url"]
+        == f"https://github.com/{doctor.readiness_checks.UPSTREAM_REPO}/blob/main/infra/terraform/gcp/README.md"
+    )
+
+
 class TestCheckGcpProject:
     def test_success(self, tmp_path, monkeypatch):
         monkeypatch.setattr(doctor, "_project_id_for", lambda channel_dir: "test-project")
@@ -339,7 +350,17 @@ class TestCheckGcpProject:
 
         assert result.id == "gcp_project"
         assert result.status == "fail"
-        assert result.next_action is None
+        _assert_terraform_gcp_action(result.next_action)
+
+    def test_describe_failure_is_fail_with_human_action(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "_project_id_for", lambda channel_dir: "test-project")
+        monkeypatch.setattr(doctor, "_run", lambda cmd, **kwargs: (1, "", "PERMISSION_DENIED"))
+
+        result = doctor.check_gcp_project(tmp_path)
+
+        assert result.id == "gcp_project"
+        assert result.status == "fail"
+        _assert_terraform_gcp_action(result.next_action)
 
 
 class TestCheckBilling:
@@ -361,8 +382,17 @@ class TestCheckBilling:
 
         assert result.id == "billing_linked"
         assert result.status == "fail"
-        assert result.next_action is not None
-        assert result.next_action["kind"] == "ai-exec"
+        _assert_terraform_gcp_action(result.next_action)
+
+    def test_probe_failure_is_fail_with_human_action(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "_project_id_for", lambda channel_dir: "test-project")
+        monkeypatch.setattr(doctor, "_run", lambda cmd, **kwargs: (1, "", "PERMISSION_DENIED"))
+
+        result = doctor.check_billing(tmp_path)
+
+        assert result.id == "billing_linked"
+        assert result.status == "fail"
+        _assert_terraform_gcp_action(result.next_action)
 
 
 class TestCheckApisEnabled:
@@ -388,8 +418,17 @@ class TestCheckApisEnabled:
 
         assert result.id == "apis_enabled"
         assert result.status == "fail"
-        assert result.next_action is not None
-        assert result.next_action["kind"] == "ai-exec"
+        _assert_terraform_gcp_action(result.next_action)
+
+    def test_services_list_failure_is_fail_with_human_action(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "_project_id_for", lambda channel_dir: "test-project")
+        monkeypatch.setattr(doctor, "_run", lambda cmd, **kwargs: (1, "", "PERMISSION_DENIED"))
+
+        result = doctor.check_apis_enabled(tmp_path)
+
+        assert result.id == "apis_enabled"
+        assert result.status == "fail"
+        _assert_terraform_gcp_action(result.next_action)
 
 
 class TestCheckAdcQuotaProject:
@@ -453,8 +492,23 @@ class TestCheckIamAiPlatformUser:
 
         assert result.id == "iam_aiplatform_user"
         assert result.status == "fail"
-        assert result.next_action is not None
-        assert result.next_action["kind"] == "ai-exec"
+        _assert_terraform_gcp_action(result.next_action)
+
+    def test_policy_probe_failure_is_fail_with_human_action(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(doctor, "_project_id_for", lambda channel_dir: "test-project")
+        responses = iter(
+            [
+                (0, "user@example.com\n", ""),
+                (1, "", "PERMISSION_DENIED"),
+            ]
+        )
+        monkeypatch.setattr(doctor, "_run", lambda cmd, **kwargs: next(responses))
+
+        result = doctor.check_iam_aiplatform_user(tmp_path)
+
+        assert result.id == "iam_aiplatform_user"
+        assert result.status == "fail"
+        _assert_terraform_gcp_action(result.next_action)
 
 
 class TestCheckADC:

@@ -63,7 +63,6 @@ def test_registry_declares_apply_and_cwd_semantics() -> None:
     definitions = {definition.id: definition for definition in doctor.CHECK_REGISTRY}
 
     assert definitions["gcp_project"].apply_kind is doctor.ApplyKind.PROJECT
-    assert definitions["billing_linked"].apply_kind is doctor.ApplyKind.BILLING
     assert definitions["skills_synced"].apply_kind is doctor.ApplyKind.AI_EXEC
     assert definitions["channel_config"].apply_kind is doctor.ApplyKind.NONE
     assert all(definition.cwd_semantics is doctor.CwdSemantics.CHANNEL for definition in doctor.CHECK_REGISTRY)
