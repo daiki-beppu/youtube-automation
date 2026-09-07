@@ -16,17 +16,19 @@ GCP_ASSET_NAMES = {
 }
 
 
+def _is_gcp_asset(path: Path) -> bool:
+    """`.claude/skills/*/references/` に infra の複製を置かない規則の検出条件（docs/architecture.md）。"""
+    return path.is_file() and (
+        path.name.startswith("gcp-") or path.suffix == ".tf" or path.name.startswith("terraform")
+    )
+
+
 def test_setup_owns_the_complete_distributed_gcp_asset_inventory() -> None:
-    actual = {
-        path.relative_to(REFERENCES).as_posix()
-        for path in REFERENCES.rglob("*")
-        if path.is_file()
-        and (path.name.startswith("gcp-") or path.suffix == ".tf" or path.name.startswith("terraform"))
-    }
+    actual = {path.relative_to(REFERENCES).as_posix() for path in REFERENCES.rglob("*") if _is_gcp_asset(path)}
     owners = {
         path.relative_to(ROOT / ".claude" / "skills").parts[0]
         for path in (ROOT / ".claude" / "skills").rglob("*")
-        if path.is_file() and path.name.startswith("gcp-")
+        if _is_gcp_asset(path)
     }
 
     assert actual == GCP_ASSET_NAMES

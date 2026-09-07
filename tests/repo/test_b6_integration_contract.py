@@ -115,6 +115,10 @@ EXPECTED_GROUPS = {
 }
 MERGE_SOURCE_EXISTS = {"legacy-26", "legacy-27"}
 
+# receipt は B6 統合時点の履歴として凍結するため、その後に恒久削除した owner だけを明示的に除外する。
+# terraform-gcp/ は上流 infra/terraform/gcp/ 専属になり配布を廃止した（#4928）。
+RETIRED_OWNERS = {".claude/skills/setup/references/terraform-gcp/README.md"}
+
 
 def _read_receipt() -> dict[str, object]:
     loaded = json.loads(RECEIPT_PATH.read_text(encoding="utf-8"))
@@ -225,6 +229,72 @@ def test_b6_receipt_merge_and_retain_groups_match_post_cleanup_state() -> None:
         else:
             assert not source_exists, group["id"]
         assert (ROOT / group["received_by"]).exists()
+
+
+def test_b6_receipt_points_every_mapping_to_an_existing_owner() -> None:
+    mappings = _read_receipt().get("mappings")
+    assert isinstance(mappings, list)
+
+    legacy = ".claude/skills/channel-new/references/"
+    setup = ".claude/skills/setup/references/"
+    research = ".claude/skills/channel-research/references/"
+    strategy = ".claude/skills/channel-strategy/references/"
+    moved_owner_aliases = {
+        ".claude/skills/channel-new/SKILL.md": ".claude/skills/channel-strategy/SKILL.md",
+        f"{legacy}analysis-mode.md": f"{research}market.md",
+        f"{legacy}claude-md-template.md": f"{setup}claude-md-template.md",
+        f"{legacy}config-generation-rules.md": f"{setup}config-generation-rules.md",
+        f"{legacy}derive_ttp_duration": f"{setup}derive_ttp_duration.py",
+        f"{legacy}desire-vocabulary.md": f"{strategy}desire-vocabulary.md",
+        f"{legacy}direction-mode.md": f"{strategy}direction.md",
+        f"{legacy}directory-structure.md": f"{setup}directory-structure.md",
+        f"{legacy}fetch_branding_snapshot": f"{setup}fetch_branding_snapshot.py",
+        f"{legacy}fetch_branding_snapshot.py": f"{setup}fetch_branding_snapshot.py",
+        f"{legacy}benchmark_collector.py": f"{research}benchmark_collector.py",
+        f"{legacy}fetch_benchmark_comments.py": f"{research}fetch_benchmark_comments.py",
+        f"{legacy}generate_image.py": f"{setup}generate_image.py",
+        f"{legacy}gcp-bootstrap.md": f"{setup}gcp-bootstrap.md",
+        f"{legacy}import-mode.md": f"{setup}import-mode.md",
+        f"{legacy}regeneration-mode.md": f"{setup}regeneration-mode.md",
+        f"{legacy}verification.md": f"{setup}verification.md",
+        ".claude/skills/setup/references/import-mode.md": ".claude/skills/setup/references/import-mode.md",
+        ".claude/skills/setup/references/regeneration-mode.md": (
+            ".claude/skills/setup/references/regeneration-mode.md"
+        ),
+        ".claude/skills/benchmark/SKILL.md": ".claude/skills/channel-research/references/benchmark.md",
+        ".claude/skills/discover-competitors/SKILL.md": (".claude/skills/channel-research/references/discover.md"),
+        ".claude/skills/setup/references/analysis-mode.md": (".claude/skills/channel-research/references/market.md"),
+        ".claude/skills/market-research/SKILL.md": ".claude/skills/channel-research/references/market.md",
+        ".claude/skills/market-research/references/report-contract.md": (
+            ".claude/skills/channel-research/references/report-contract.md"
+        ),
+        ".claude/skills/viewer-voice/SKILL.md": ".claude/skills/channel-research/references/voice.md",
+        ".claude/skills/viewer-voice/references/fetch_benchmark_comments.py": (
+            ".claude/skills/channel-research/references/fetch_benchmark_comments.py"
+        ),
+        ".claude/skills/setup/references/fetch_benchmark_comments.py": (
+            ".claude/skills/channel-research/references/fetch_benchmark_comments.py"
+        ),
+        ".claude/skills/thumbnail-research/SKILL.md": ".claude/skills/channel-research/references/thumbnail.md",
+        ".claude/skills/audience-persona-design/SKILL.md": ".claude/skills/channel-strategy/references/persona.md",
+        ".claude/skills/viewing-scene/SKILL.md": ".claude/skills/channel-strategy/references/scene.md",
+        ".claude/skills/creative-constraints/SKILL.md": (".claude/skills/channel-strategy/references/constraints.md"),
+        ".claude/skills/short-release/SKILL.md": ".claude/skills/short/SKILL.md",
+        ".claude/skills/short-thumbnail/SKILL.md": ".claude/skills/short/references/thumbnail.md",
+        ".claude/skills/short-thumbnail/references/prompt-template.md": (
+            ".claude/skills/short/references/prompt-template.md"
+        ),
+    }
+    for mapping in mappings:
+        if not isinstance(mapping, dict):
+            continue
+        owner = mapping["exact_new_owner"]
+        if owner in RETIRED_OWNERS:
+            # 除外は削除済みの間だけ有効。復活したら除外エントリ側を消させる
+            assert not (ROOT / owner).exists(), owner
+            continue
+        resolved = moved_owner_aliases.get(owner, owner)
+        assert (ROOT / resolved).exists(), f"{mapping['old_owner']} -> {resolved}"
 
 
 def test_b6_current_cli_contract_uses_yt_entrypoints() -> None:
