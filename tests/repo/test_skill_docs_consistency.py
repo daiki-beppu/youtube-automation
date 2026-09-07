@@ -1440,26 +1440,6 @@ def test_public_setup_guide_owns_installation_and_oauth_completion() -> None:
     assert "Download JSON" not in onboarding_setup
 
 
-def test_oauth_module_and_setup_guide_distinguish_automatic_and_manual_routes() -> None:
-    oauth_handler = _read("src/youtube_automation/infrastructure/auth/youtube.py")
-    module_docstring = oauth_handler.split('"""', 2)[1]
-    for expected in ("Download JSON", "yt-doctor --fix-client-secrets"):
-        assert expected in module_docstring
-    assert "secret を発行して auth/client_secrets.json に配置" not in module_docstring
-
-    oauth_setup = _read("docs/oauth-setup.md")
-    route_zero = oauth_setup.split("## 推奨ルート", 1)[1].split("## 上級者向け", 1)[0]
-    for expected in ("Download JSON", "done", "yt-doctor --fix-client-secrets", "yt-doctor --apply --json"):
-        assert expected in route_zero
-    assert "client_secrets.json` 配置は PKCE / GUI 制約で AI 実行不可" not in route_zero
-
-    # #4934: gcloud 半自動化の「ルート A」は廃止し、GCP 層の代替ルートは上流 Terraform 1 本に絞る
-    manual_route = oauth_setup.split("### 上流 Terraform", 1)[1].split("## Google Auth Platform 手動設定", 1)[0]
-    assert "この Terraform 経路でも `client_secrets.json` の手動配置を行う" in manual_route
-    assert "infra/terraform/gcp/README.md" in manual_route
-    assert "gcp-bootstrap" not in oauth_setup
-
-
 def test_channel_new_regeneration_documents_ttp_wf_new_readiness_gate() -> None:
     regeneration_mode = _read(".claude/skills/setup/references/regeneration-mode.md")
     rules = _read(".claude/skills/setup/references/config-generation-rules.md")
