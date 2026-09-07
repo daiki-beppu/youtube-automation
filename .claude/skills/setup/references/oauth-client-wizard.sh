@@ -232,7 +232,10 @@ if [[ -n "${CLIENT_SECRETS_DIR:-}" ]]; then
   exit 1
 fi
 if [[ -f "$CHANNEL_DIR/config/channel/meta.json" ]]; then
-  CHANNEL_NAME=$(cd "$CHANNEL_DIR" && uv run python -c 'from youtube_automation.configuration import load_config; print(load_config().meta.channel_name)')
+  if ! CHANNEL_NAME=$(cd "$CHANNEL_DIR" && uv run python -c 'from youtube_automation.configuration import load_config; print(load_config().meta.channel_name)' 2>/dev/null); then
+    warn "チャンネル設定を読み取れませんでした。設定は uv run yt-doctor --json で確認してください。"
+    CHANNEL_NAME=""
+  fi
 fi
 if [[ -z "$CHANNEL_NAME" ]]; then
   ask CHANNEL_NAME "チャンネル名（設定前のため手入力。推奨名に使います）:"

@@ -650,7 +650,12 @@ def test_oauth_wizard_existing_secrets_exits_without_doctor_or_browser(tmp_path:
 
 
 @pytest.mark.parametrize("status", ["ok", "fail"])
-def test_oauth_wizard_fixes_then_checks_client_secrets(tmp_path: Path, status: str) -> None:
+@pytest.mark.parametrize("config_broken", [False, True])
+def test_oauth_wizard_fixes_then_checks_client_secrets(tmp_path: Path, status: str, config_broken: bool) -> None:
+    if config_broken:
+        meta = tmp_path / "config/channel/meta.json"
+        meta.parent.mkdir(parents=True)
+        meta.write_text("{}", encoding="utf-8")
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _write_executable(bin_dir / "open", "#!/bin/bash\nexit 0\n")
@@ -665,6 +670,9 @@ elif [[ "$*" == "run yt-doctor --json" ]]; then
   [[ -f auth/client_secrets.json ]] || exit 23
   printf '%s' '{{"checks":[{{"id":"client_secrets","status":"{status}"}}]}}'
   exit 1
+elif [[ "$*" == *"load_config"* ]]; then
+  echo "configuration error" >&2
+  exit 2
 elif [[ "$1 $2" == "run python" ]]; then
   shift 2
   exec {sys.executable} "$@"
@@ -689,6 +697,10 @@ fi
     )
     assert (tmp_path / "auth/client_secrets.json").read_text() == "fixture"
     assert result.returncode == (0 if status == "ok" else 1), result.stdout + result.stderr
+
+    if config_broken:
+        assert "チャンネル設定を読み取れませんでした" in result.stdout
+        assert "configuration error" not in result.stderr
 
 
 @pytest.mark.parametrize("payload", ["", "invalid", "[]", '{"checks": [null]}', '{"checks": []}'])

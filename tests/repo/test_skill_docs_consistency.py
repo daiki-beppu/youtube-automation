@@ -1815,3 +1815,10 @@ def test_setup_channel_points_scheduled_automation_to_wf_new_schedule() -> None:
     setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     assert "`scheduled_automation`" in setup_channel
     assert "/wf-new --schedule" in setup_channel
+
+
+def test_oauth_document_entrypoints_reference_existing_wizard() -> None:
+    wizard = ".claude/skills/setup/references/oauth-client-wizard.sh"
+    for guide in (".claude/skills/setup/references/check-runbook.md", "docs/oauth-setup.md"):
+        assert f"bash {wizard}" in _read(guide)
+    assert (ROOT / wizard).is_file()
