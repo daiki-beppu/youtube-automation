@@ -1,7 +1,7 @@
 # GCP / Vertex AI ブートストラップ
 
 新チャンネル用の GCP プロジェクト + API + 認証情報を用意するためのリファレンス。
-`/setup --tool` の doctor wizard が正規入口であり、この文書は手動 script / Terraform ルートを選ぶ場合の補助資料とする。
+`/setup --tool` の doctor wizard が正規入口であり、この文書は手動 script ルートを選ぶ場合の補助資料とする。
 
 通常の OAuth 手順は同じ setup owner の [`tool.md`](tool.md) が正本。このリファレンスは **上級者向け代替ルートを明示的に選ぶときの判断材料** に絞ってある。
 
@@ -9,20 +9,16 @@
 
 ```
 ┌─ 既存 GCP プロジェクトをそのまま流用したい?
-│  ├─ Yes → ルート A (bootstrap.sh、--create なし)
-│  └─ No
-│     ├─ tfstate で構成管理したい or Organization 統制必須?
-│     │  ├─ Yes → ルート B (terraform)
-│     │  └─ No → ルート A (bootstrap.sh、--create 付き)
+│  ├─ Yes → bootstrap.sh、--create なし
+│  └─ No → bootstrap.sh、--create 付き
 ```
 
 - **正規ルート** (`/setup --tool`): doctor wizard が診断、承認、GCP / OAuth / ADC bootstrap を一貫して所有する。
-- **ルート A** (`.claude/skills/setup/references/gcp-bootstrap.sh`): 最速。gcloud を順次叩くだけの冪等シェル。
-- **ルート B** (`infra/terraform/gcp/`): 宣言的 IaC。複数環境・多人数運用向け。
+- **手動 script** (`.claude/skills/setup/references/gcp-bootstrap.sh`): 最速。gcloud を順次叩くだけの冪等シェル。
 
 ## 実行コマンド
 
-### ルート A: bootstrap.sh
+### bootstrap.sh
 
 チャンネルリポジトリから実行する場合（yt-skills sync 配布後のパスを使う）:
 
@@ -41,27 +37,9 @@ bash "$SKILL_REF/gcp-bootstrap.sh" <PROJECT_ID>
 
 冪等なので何度再実行しても安全。ドライランは `--dry-run`。
 
-### ルート B: terraform
-
-```bash
-SKILL_REF="$(git rev-parse --show-toplevel)/.claude/skills/setup/references"
-
-# tfvars を用意 (初回のみ)
-cp "$SKILL_REF/terraform-gcp/terraform.tfvars.example" \
-   "$SKILL_REF/terraform-gcp/terraform.tfvars"
-# → project_id, adc_email, billing_account を編集
-
-bash "$SKILL_REF/gcp-terraform-apply.sh" \
-  --tf-dir "$SKILL_REF/terraform-gcp"
-```
-
-Terraform は `terraform init && apply` で GCP resource を構成する。project ID は apply 後に ADC quota project として設定する。
-
-automation リポジトリ側では `infra/terraform/gcp/` を canonical ディレクトリとして利用できる。
-
 ## 残る手動ステップ: OAuth クライアント ID
 
-いずれのルートでも **Google Auth Platform での Branding / Audience / Clients 設定は Console での手動作業として残る**（gcloud / Terraform 双方未サポート）。
+スクリプト実行後も **Google Auth Platform での Branding / Audience / Clients 設定は Console での手動作業として残る**（gcloud 未サポート）。
 
 スクリプト実行後に出力される URL を開き:
 1. 左メニューで **Google Auth Platform** を開く
@@ -86,11 +64,6 @@ client secret を見失った場合は、**Clients** → 対象 client → **Cli
 - [ ] 新規作成する場合: Billing Account に対する `roles/billing.user` 以上
 - [ ] 新規作成する場合: Organization or 個人アカウントでのプロジェクト作成権限
 
-terraform ルートの場合は追加で:
-- [ ] `terraform` >= 1.5
-- [ ] `jq`
-- [ ] `gcloud auth application-default login` で ADC も取得済み
-
 ## 失敗時のリカバリ
 
 | 症状 | 対処 |
@@ -99,6 +72,5 @@ terraform ルートの場合は追加で:
 | `Permission denied` / IAM 付与で 403 | 別アカウントでログインしているケース。`gcloud auth list` で ACTIVE を確認 |
 | プロジェクト作成上限エラー | 不要 project を削除、または緩和申請 |
 | ADC の quota project がズレている | `gcloud auth application-default set-quota-project <id>` |
-| tfstate が壊れた | `terraform.tfstate*` を削除して `terraform import` からやり直すか、bootstrap.sh ルートに切替 |
 
 OAuth の正規 wizard と失敗時の再診断は [`tool.md`](tool.md) を参照。

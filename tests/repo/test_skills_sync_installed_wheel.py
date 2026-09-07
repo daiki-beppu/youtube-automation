@@ -458,14 +458,9 @@ assert "wheel-identity-check" not in legacy._cache
     ]
     assert local_links
     assert all((distributed_references / link).is_file() for link in local_links)
-    for relative in (
-        "gcp-bootstrap.sh",
-        "gcp-terraform-apply.sh",
-        "terraform-gcp/terraform.tfvars.example",
-        "terraform-gcp/variables.tf",
-    ):
+    for relative in ("gcp-bootstrap.sh",):
         assert (distributed_references / relative).is_file()
-    for script_name in ("gcp-bootstrap.sh", "gcp-terraform-apply.sh"):
+    for script_name in ("gcp-bootstrap.sh",):
         script = distributed_references / script_name
         assert script.is_file()
         references = re.findall(

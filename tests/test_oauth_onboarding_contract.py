@@ -82,47 +82,6 @@ esac
     assert not env_path.exists()
 
 
-def test_gcp_terraform_apply_stdout_follows_google_auth_platform_contract(tmp_path: Path) -> None:
-    bin_dir = tmp_path / "bin"
-    tf_dir = tmp_path / "tf"
-    bin_dir.mkdir()
-    tf_dir.mkdir()
-    _write_executable(
-        bin_dir / "terraform",
-        """#!/usr/bin/env bash
-case "$*" in
-  "output -raw oauth_console_url"*)
-    echo "https://console.cloud.google.com/apis/credentials?project=test-proj"
-    exit 0
-    ;;
-  "output -raw project_id"*) echo "test-proj"; exit 0 ;;
-  *) exit 0 ;;
-esac
-""",
-    )
-    _write_executable(
-        bin_dir / "gcloud",
-        """#!/usr/bin/env bash
-exit 0
-""",
-    )
-    env = os.environ | {"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
-    script = REPO_ROOT / ".claude/skills/setup/references/gcp-terraform-apply.sh"
-    env_path = tmp_path / ".env"
-
-    result = subprocess.run(
-        ["bash", str(script), "--tf-dir", str(tf_dir), "--auto-approve"],
-        check=True,
-        capture_output=True,
-        env=env,
-        text=True,
-    )
-
-    _assert_oauth_guidance_contract(result.stdout, "gcp-terraform-apply.sh stdout")
-    assert "Google Auth Platform の手動設定" in result.stdout
-    assert not env_path.exists()
-
-
 def test_setup_entrypoints_do_not_keep_stale_oauth_contract() -> None:
     stale_phrases = (
         "OAuth クライアント ID 作成まで",

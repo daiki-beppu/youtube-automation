@@ -1,0 +1,1 @@
+- setup skill から GCP Terraform 資産の下流配布を廃止し、共有インフラの構成管理を上流 `infra/terraform/gcp/` に集約しました。

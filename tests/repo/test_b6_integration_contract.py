@@ -115,6 +115,10 @@ EXPECTED_GROUPS = {
 }
 MERGE_SOURCE_EXISTS = {"legacy-26", "legacy-27"}
 
+# receipt は B6 統合時点の履歴として凍結するため、その後に恒久削除した owner だけを明示的に除外する。
+# terraform-gcp/ は上流 infra/terraform/gcp/ 専属になり配布を廃止した（#4928）。
+RETIRED_OWNERS = {".claude/skills/setup/references/terraform-gcp/README.md"}
+
 
 def _read_receipt() -> dict[str, object]:
     loaded = json.loads(RECEIPT_PATH.read_text(encoding="utf-8"))
@@ -252,7 +256,6 @@ def test_b6_receipt_points_every_mapping_to_an_existing_owner() -> None:
         f"{legacy}gcp-bootstrap.md": f"{setup}gcp-bootstrap.md",
         f"{legacy}import-mode.md": f"{setup}import-mode.md",
         f"{legacy}regeneration-mode.md": f"{setup}regeneration-mode.md",
-        f"{legacy}terraform-gcp/README.md": f"{setup}terraform-gcp/README.md",
         f"{legacy}verification.md": f"{setup}verification.md",
         ".claude/skills/setup/references/import-mode.md": ".claude/skills/setup/references/import-mode.md",
         ".claude/skills/setup/references/regeneration-mode.md": (
@@ -282,11 +285,16 @@ def test_b6_receipt_points_every_mapping_to_an_existing_owner() -> None:
             ".claude/skills/short/references/prompt-template.md"
         ),
     }
-    assert all(
-        (ROOT / moved_owner_aliases.get(mapping["exact_new_owner"], mapping["exact_new_owner"])).exists()
-        for mapping in mappings
-        if isinstance(mapping, dict)
-    )
+    for mapping in mappings:
+        if not isinstance(mapping, dict):
+            continue
+        owner = mapping["exact_new_owner"]
+        if owner in RETIRED_OWNERS:
+            # 除外は削除済みの間だけ有効。復活したら除外エントリ側を消させる
+            assert not (ROOT / owner).exists(), owner
+            continue
+        resolved = moved_owner_aliases.get(owner, owner)
+        assert (ROOT / resolved).exists(), f"{mapping['old_owner']} -> {resolved}"
 
 
 def test_b6_current_cli_contract_uses_yt_entrypoints() -> None:
@@ -389,9 +397,6 @@ def test_built_sdist_contains_only_approved_members(tmp_path: Path) -> None:
     setup_gcp_assets = {
         ".claude/skills/setup/references/gcp-bootstrap.md",
         ".claude/skills/setup/references/gcp-bootstrap.sh",
-        ".claude/skills/setup/references/gcp-terraform-apply.sh",
-        ".claude/skills/setup/references/terraform-gcp/README.md",
-        ".claude/skills/setup/references/terraform-gcp/terraform.tfvars.example",
     }
     assert setup_gcp_assets <= members
     forbidden_prefixes = (
