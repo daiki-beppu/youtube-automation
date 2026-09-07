@@ -104,7 +104,7 @@ def test_sibling_joins_population_only_when_a_competitor_id_is_shared(tmp_path, 
     assert warnings == []
 
 
-def test_population_works_alone_without_registry_and_workspace(tmp_path, monkeypatch):
+def test_population_uses_only_own_repository_without_registry(tmp_path, monkeypatch):
     own = _repository(tmp_path, "self", [(SHARED_COMPETITOR, "shared")])
     _without_registry(tmp_path, monkeypatch)
 

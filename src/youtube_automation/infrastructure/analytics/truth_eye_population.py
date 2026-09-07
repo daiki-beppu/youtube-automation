@@ -7,7 +7,6 @@ import re
 from datetime import date, datetime
 from pathlib import Path
 
-from youtube_automation.configuration.loader import find_workspace_root, workspace_channels
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.analytics.benchmark import find_latest_benchmark_json
 from youtube_automation.domains.analytics.truth_eye import read_training_record
@@ -78,8 +77,7 @@ def load_truth_eye_population(channel_dir: Path, *, freshness_days: int = 3) -> 
 def _first_party_repositories(channel_dir: Path) -> list[Path]:
     if DEFAULT_CHANNEL_REGISTRY.is_file():
         return [path.resolve() for path in load_channel_registry(DEFAULT_CHANNEL_REGISTRY)]
-    workspace = find_workspace_root(channel_dir)
-    return [path.resolve() for path in workspace_channels(workspace).values()] if workspace else []
+    return [channel_dir.resolve()]
 
 
 def _benchmark_channels(repository: Path, *, required: bool = True) -> list[dict]:
