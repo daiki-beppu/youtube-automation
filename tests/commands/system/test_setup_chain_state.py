@@ -496,7 +496,7 @@ def test_unrelated_informational_doctor_check_does_not_change_tool_decision(tmp_
     manifest = state.load_manifest(MANIFEST)
     _write_file_artifacts(tmp_path, manifest["steps"][0]["outputArtifacts"])
     checks = _checks(state)
-    checks.append(doctor.CheckResult(id="oauth_client_sharing", status="info", message="shared client available"))
+    checks.append(doctor.CheckResult(id="streaming_vps_state", status="info", message="streaming module absent"))
 
     code, result = state.evaluate(tmp_path, checks, manifest, "tool")
 

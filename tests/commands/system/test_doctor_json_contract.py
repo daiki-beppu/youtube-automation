@@ -26,7 +26,6 @@ EXPECTED_CHECK_IDS = (
     "adc_quota_project",
     "iam_aiplatform_user",
     "client_secrets",
-    "oauth_client_sharing",
     "oauth_token",
     "oauth_token_readonly",
     "reporting_job",

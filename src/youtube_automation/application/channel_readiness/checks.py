@@ -29,10 +29,6 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from httplib2 import HttpLib2Error
 
-from youtube_automation.configuration import (
-    find_workspace_root,
-    workspace_channels,
-)
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import (
     AutomationError,
@@ -129,7 +125,6 @@ class CwdSemantics(Enum):
     """apply command を実行する基準ディレクトリ。"""
 
     CHANNEL = "channel"
-    BOOTSTRAP_ROOT = "bootstrap-root"
 
 
 class _ActionMapping(Mapping):
@@ -255,7 +250,7 @@ class CheckDefinition:
     cwd_semantics: CwdSemantics
 
     def command_cwd(self, channel_dir: Path) -> Path:
-        return _bootstrap_root(channel_dir) if self.cwd_semantics is CwdSemantics.BOOTSTRAP_ROOT else channel_dir
+        return channel_dir
 
 
 def _ai_exec_action(
@@ -559,21 +554,6 @@ def _agents_skills_link_is_valid(channel_dir: Path, skills_dir: Path) -> bool:
         return False
 
 
-def _workspace_root_for_channel(channel_dir: Path) -> Path | None:
-    """登録済み workspace channel の共有 root だけを返す."""
-    resolved_channel = channel_dir.resolve()
-    workspace_root = find_workspace_root(resolved_channel)
-    if workspace_root is None:
-        return None
-    registered_channels = {path.resolve() for path in workspace_channels(workspace_root).values()}
-    return workspace_root if resolved_channel in registered_channels else None
-
-
-def _bootstrap_root(channel_dir: Path) -> Path:
-    """共有 tool / skill を検査・更新する repository root を返す."""
-    return _workspace_root_for_channel(channel_dir) or channel_dir
-
-
 # --- checks ---
 
 
@@ -637,7 +617,7 @@ def check_uv() -> CheckResult:
 
 
 def check_uv_project(channel_dir: Path) -> CheckResult:
-    pyproject_path = _bootstrap_root(channel_dir) / PYPROJECT_FILENAME
+    pyproject_path = channel_dir / PYPROJECT_FILENAME
     if not pyproject_path.exists():
         installation_mode = _running_global_installation_mode()
         if installation_mode is not None:
@@ -665,7 +645,7 @@ def check_uv_project(channel_dir: Path) -> CheckResult:
 
 
 def check_automation_package(channel_dir: Path) -> CheckResult:
-    pyproject_path = _bootstrap_root(channel_dir) / PYPROJECT_FILENAME
+    pyproject_path = channel_dir / PYPROJECT_FILENAME
     if not pyproject_path.exists():
         installation_mode = _running_global_installation_mode()
         if installation_mode is not None:
@@ -735,8 +715,7 @@ def check_automation_package(channel_dir: Path) -> CheckResult:
 
 
 def check_skills_synced(channel_dir: Path) -> CheckResult:
-    bootstrap_root = _bootstrap_root(channel_dir)
-    skills_dir = bootstrap_root / CLAUDE_SKILLS_DIR
+    skills_dir = channel_dir / CLAUDE_SKILLS_DIR
     bundled_skills = bundled_skill_names()
     for legacy_skill in LEGACY_BUNDLED_SKILLS:
         if (skills_dir / legacy_skill / SKILL_FILENAME).exists():
@@ -751,7 +730,7 @@ def check_skills_synced(channel_dir: Path) -> CheckResult:
     if missing_skill_files:
         sample = ", ".join(str(CLAUDE_SKILLS_DIR / path) for path in missing_skill_files[:5])
         return _skills_sync_failure(f"同梱 skill が未展開: {sample}")
-    if not _agents_skills_link_is_valid(bootstrap_root, skills_dir):
+    if not _agents_skills_link_is_valid(channel_dir, skills_dir):
         return _skills_sync_warning(f"{AGENTS_SKILLS_LINK} が {CLAUDE_SKILLS_DIR} を指す symlink になっていない")
     return CheckResult(
         id="skills_synced",
@@ -768,14 +747,13 @@ def check_numbered_duplicates(channel_dir: Path) -> CheckResult:
     yt-skills sync が同名上書きで管理する領域のため、`<名前> <数字>` 形式が
     現れたら外部要因 (同期サービス) による汚染とみなす (#1409 / #1410)。
     """
-    bootstrap_root = _bootstrap_root(channel_dir)
     findings: list[str] = []
     scan_targets = (
-        (".venv/bin", bootstrap_root / ".venv" / "bin", False),
-        (str(CLAUDE_SKILLS_DIR), bootstrap_root / CLAUDE_SKILLS_DIR, True),
+        (".venv/bin", channel_dir / ".venv" / "bin", False),
+        (str(CLAUDE_SKILLS_DIR), channel_dir / CLAUDE_SKILLS_DIR, True),
     )
     for label, directory, recursive in scan_targets:
-        result = scan_numbered_duplicates(directory, recursive=recursive, root_boundary=bootstrap_root)
+        result = scan_numbered_duplicates(directory, recursive=recursive, root_boundary=channel_dir)
         if result.duplicates:
             sample = ", ".join(format_duplicate_name(path) for path in result.duplicates[:3])
             findings.append(f"{label} に {len(result.duplicates)} 件 (例: {sample})")
@@ -1166,34 +1144,6 @@ def check_client_secrets(channel_dir: Path) -> CheckResult:
     return CheckResult(id="client_secrets", status="ok", message="client_secrets.json 構造妥当")
 
 
-def check_oauth_client_sharing(channel_dir: Path) -> CheckResult:
-    """per-channel OAuth client を workspace ルートで共有できる場合に案内する。"""
-    workspace_root = find_workspace_root(channel_dir)
-    channels = workspace_channels(workspace_root) if workspace_root is not None else {}
-    if workspace_root is None or channel_dir.resolve() not in {path.resolve() for path in channels.values()}:
-        return CheckResult(
-            id="oauth_client_sharing",
-            status="ok",
-            message="単一チャンネル構成のため OAuth クライアント共有診断は対象外",
-        )
-
-    per_channel_secrets = [slug for slug, path in channels.items() if (path / "auth" / "client_secrets.json").is_file()]
-    if len(per_channel_secrets) < 2:
-        return CheckResult(
-            id="oauth_client_sharing",
-            status="ok",
-            message="個別 OAuth クライアントを持つ workspace チャンネルは複数ありません",
-        )
-
-    shared_path = workspace_root / "auth" / "client_secrets.json"
-    return CheckResult(
-        id="oauth_client_sharing",
-        status="info",
-        message=(f"OAuth クライアントをルート共有（{shared_path}）へ統合可能。統合には全チャンネルの再認証が必要"),
-        data={"channels": per_channel_secrets, "shared_path": str(shared_path)},
-    )
-
-
 def _oauth_failure_action(state: OAuthCredentialState) -> dict | None:
     if not state.reauthentication_required:
         return None
@@ -1308,7 +1258,7 @@ def check_reporting_job(channel_dir: Path) -> CheckResult:
 
 def check_streaming_vps_state(channel_dir: Path) -> CheckResult:
     """Vultr 上の streaming VPS と全 GCS workspace state を突合する。"""
-    terraform_dir = _bootstrap_root(channel_dir) / "infra" / "terraform" / "streaming"
+    terraform_dir = channel_dir / "infra" / "terraform" / "streaming"
     if not terraform_dir.is_dir():
         return CheckResult(
             id="streaming_vps_state",

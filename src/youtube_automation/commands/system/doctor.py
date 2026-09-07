@@ -40,12 +40,6 @@ from youtube_automation.application.channel_readiness.checks import (
     _subprocess_run as _run,
 )
 from youtube_automation.commands.system.skills_sync import bundled_skill_names
-from youtube_automation.configuration import (
-    channel_dir,
-    explicit_channel_selection,
-    find_workspace_root,
-)
-from youtube_automation.core.errors import ConfigError
 
 # Public compatibility exports. Check implementations live in the readiness application module,
 # while existing callers can continue importing the result/action vocabulary here.
@@ -105,7 +99,6 @@ check_gcp_project = _domain_check("check_gcp_project")
 check_iam_aiplatform_user = _domain_check("check_iam_aiplatform_user")
 check_initial_setup_readiness = _domain_check("check_initial_setup_readiness")
 check_numbered_duplicates = _domain_check("check_numbered_duplicates")
-check_oauth_client_sharing = _domain_check("check_oauth_client_sharing")
 check_oauth_token = _domain_check("check_oauth_token")
 check_oauth_token_readonly = _domain_check("check_oauth_token_readonly")
 check_playlist_config = _domain_check("check_playlist_config")
@@ -137,35 +130,33 @@ LEGACY_BUNDLED_SKILLS = (
 
 CHECK_REGISTRY = (
     CheckDefinition(
-        "ffmpeg", BOOTSTRAP_CATEGORY, _without_channel_dir(check_ffmpeg), ApplyKind.NONE, CwdSemantics.BOOTSTRAP_ROOT
+        "ffmpeg", BOOTSTRAP_CATEGORY, _without_channel_dir(check_ffmpeg), ApplyKind.NONE, CwdSemantics.CHANNEL
     ),
     CheckDefinition(
-        "ffprobe", BOOTSTRAP_CATEGORY, _without_channel_dir(check_ffprobe), ApplyKind.NONE, CwdSemantics.BOOTSTRAP_ROOT
+        "ffprobe", BOOTSTRAP_CATEGORY, _without_channel_dir(check_ffprobe), ApplyKind.NONE, CwdSemantics.CHANNEL
     ),
-    CheckDefinition(
-        "uv", BOOTSTRAP_CATEGORY, _without_channel_dir(check_uv), ApplyKind.NONE, CwdSemantics.BOOTSTRAP_ROOT
-    ),
-    CheckDefinition("uv_project", BOOTSTRAP_CATEGORY, check_uv_project, ApplyKind.NONE, CwdSemantics.BOOTSTRAP_ROOT),
+    CheckDefinition("uv", BOOTSTRAP_CATEGORY, _without_channel_dir(check_uv), ApplyKind.NONE, CwdSemantics.CHANNEL),
+    CheckDefinition("uv_project", BOOTSTRAP_CATEGORY, check_uv_project, ApplyKind.NONE, CwdSemantics.CHANNEL),
     CheckDefinition(
         "automation_package",
         BOOTSTRAP_CATEGORY,
         check_automation_package,
         ApplyKind.NONE,
-        CwdSemantics.BOOTSTRAP_ROOT,
+        CwdSemantics.CHANNEL,
     ),
     CheckDefinition(
         "skills_synced",
         BOOTSTRAP_CATEGORY,
         check_skills_synced,
         ApplyKind.AI_EXEC,
-        CwdSemantics.BOOTSTRAP_ROOT,
+        CwdSemantics.CHANNEL,
     ),
     CheckDefinition(
         "numbered_duplicates",
         BOOTSTRAP_CATEGORY,
         check_numbered_duplicates,
         ApplyKind.NONE,
-        CwdSemantics.BOOTSTRAP_ROOT,
+        CwdSemantics.CHANNEL,
     ),
     CheckDefinition("gcloud", API_CATEGORY, _without_channel_dir(check_gcloud), ApplyKind.NONE, CwdSemantics.CHANNEL),
     CheckDefinition(
@@ -182,9 +173,6 @@ CHECK_REGISTRY = (
         "iam_aiplatform_user", API_CATEGORY, check_iam_aiplatform_user, ApplyKind.AI_EXEC, CwdSemantics.CHANNEL
     ),
     CheckDefinition("client_secrets", API_CATEGORY, check_client_secrets, ApplyKind.NONE, CwdSemantics.CHANNEL),
-    CheckDefinition(
-        "oauth_client_sharing", API_CATEGORY, check_oauth_client_sharing, ApplyKind.NONE, CwdSemantics.CHANNEL
-    ),
     CheckDefinition("oauth_token", API_CATEGORY, check_oauth_token, ApplyKind.NONE, CwdSemantics.CHANNEL),
     CheckDefinition(
         "oauth_token_readonly", API_CATEGORY, check_oauth_token_readonly, ApplyKind.NONE, CwdSemantics.CHANNEL
@@ -483,19 +471,14 @@ def run_apply(
 def resolve_channel_dir(target: Optional[str]) -> Path:
     if target:
         return Path(target).resolve()
+    env_dir = os.environ.get("CHANNEL_DIR")
+    if env_dir:
+        return Path(env_dir).expanduser().resolve()
     cwd = Path.cwd().resolve()
-    try:
-        return channel_dir().resolve()
-    except ConfigError:
-        selection_requested = (
-            explicit_channel_selection() is not None
-            or bool(os.environ.get("CHANNEL"))
-            or bool(os.environ.get("CHANNEL_DIR"))
-            or find_workspace_root(cwd) is not None
-        )
-        if selection_requested:
-            raise
-        return cwd
+    for parent in (cwd, *cwd.parents):
+        if (parent / "config" / "channel").is_dir():
+            return parent
+    return cwd
 
 
 @dataclass(frozen=True)

@@ -92,7 +92,7 @@ def test_apply_executes_ai_step_and_rediagnoses(monkeypatch, tmp_path: Path, cap
     }
 
 
-def test_apply_executes_workspace_bootstrap_step_from_root(monkeypatch, tmp_path: Path, capsys) -> None:
+def test_apply_executes_bootstrap_step_in_channel_even_under_workspace(monkeypatch, tmp_path: Path, capsys) -> None:
     workspace = tmp_path / "workspace"
     channel = workspace / "channels" / "alpha"
     (channel / "config" / "channel").mkdir(parents=True)
@@ -121,7 +121,7 @@ def test_apply_executes_workspace_bootstrap_step_from_root(monkeypatch, tmp_path
     code = doctor.main(["--apply", "--json", "--target", str(channel)])
 
     assert code == 0
-    assert commands == [(["uv", "run", "yt-skills", "sync"], workspace)]
+    assert commands == [(["uv", "run", "yt-skills", "sync"], channel)]
     assert json.loads(capsys.readouterr().out)["apply"]["stop_reason"] == "completed"
 
 
