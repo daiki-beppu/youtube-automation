@@ -41,6 +41,7 @@ VIEWPOINTS: tuple[Viewpoint, ...] = (
 
 TRAINING_RECORD_SCHEMA_VERSION = 1
 
+
 @dataclass(frozen=True)
 class PairThresholds:
     gap_days: tuple[int, int, int] = (5, 14, 30)
@@ -61,10 +62,16 @@ _STAGE_REJECTED = "却下後"
 _GAP_STAGE_SUFFIX = " 日段"
 
 _POPULATION_ADVICE = "母集団がありません。channel-research --benchmark で benchmark を収集してください"
-_MIN_POOL_ADVICE = "走査プールが最小本数に届く競合がありません。channel-research --benchmark で走査本数を増やしてください"
+_MIN_POOL_ADVICE = (
+    "走査プールが最小本数に届く競合がありません。channel-research --benchmark で走査本数を増やしてください"
+)
 _GAP_ADVICE = "日差の近いペアがありません。channel-research --benchmark で benchmark を更新するか競合を追加してください"
-_UNSEEN_ADVICE = "候補が過去の訓練記録と重複しています。benchmark に競合を追加するか、兄弟チャンネル連携を増やしてください"
-_MISSING_IMAGE_ADVICE = "サムネイルが未取得です。対象リポジトリで uv run yt-benchmark-collect --force -y を実行してください"
+_UNSEEN_ADVICE = (
+    "候補が過去の訓練記録と重複しています。benchmark に競合を追加するか、兄弟チャンネル連携を増やしてください"
+)
+_MISSING_IMAGE_ADVICE = (
+    "サムネイルが未取得です。対象リポジトリで uv run yt-benchmark-collect --force -y を実行してください"
+)
 _REJECTED_ADVICE = "却下で候補が尽きました。benchmark に競合を追加するか、次のセッションで再実行してください"
 _BOTTLENECK_ADVICE = {
     _STAGE_MIN_POOL: _MIN_POOL_ADVICE,

@@ -9,8 +9,8 @@ import yaml
 
 from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.analytics.truth_eye import (
-    TRAINING_RECORD_SCHEMA_VERSION,
     PAIR_THRESHOLDS,
+    TRAINING_RECORD_SCHEMA_VERSION,
     VIEWPOINTS,
     collect_training_status,
     read_training_record,
