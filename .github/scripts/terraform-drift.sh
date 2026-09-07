@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+#
+# GCP stack の drift を読み取り専用 plan で検知し、Discord へ通知する。
+#
+# 通知は plan 本文を含めない（機密値の公開境界: run URL と分類だけを送る）。
+# terraform plan の -detailed-exitcode は 0=無差分 / 1=失敗 / 2=差分あり を返す。
+# job の exit code は 0=無差分と drift 検知（drift は通知で扱い CI は落とさない）、
+# 1=plan 失敗、curl 失敗時は curl の exit code をそのまま伝播する。
+
 set -euo pipefail
 
 : "${TFSTATE_BUCKET:?}"

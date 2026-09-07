@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
 import yaml
@@ -11,12 +12,18 @@ from tests.helpers.hcl import extract_block, read_file, strip_hcl_comments
 from tests.helpers.paths import REPO_ROOT
 
 _WORKFLOW = REPO_ROOT / ".github/workflows/terraform-static.yml"
+_DRIFT_WORKFLOW = REPO_ROOT / ".github/workflows/terraform-drift.yml"
+_DRIFT_SCRIPT = REPO_ROOT / ".github/scripts/terraform-drift.sh"
 _STACKS = ("bootstrap", "gcp", "r2", "streaming")
+
+
+def _load_workflow(path: Path) -> dict[str, object]:
+    return yaml.load(read_file(path), Loader=yaml.BaseLoader)
 
 
 @pytest.mark.parametrize("stack", _STACKS)
 def test_workflow_terraform_versions_satisfy_stack_requirement(stack: str) -> None:
-    document = yaml.load(read_file(_WORKFLOW), Loader=yaml.BaseLoader)
+    document = _load_workflow(_WORKFLOW)
     versions = [
         step["with"]["terraform_version"]
         for job in document["jobs"].values()
@@ -39,7 +46,7 @@ def test_workflow_terraform_versions_satisfy_stack_requirement(stack: str) -> No
 
 
 def test_static_workflow_requires_no_credentials() -> None:
-    document = yaml.load(read_file(_WORKFLOW), Loader=yaml.BaseLoader)
+    document = _load_workflow(_WORKFLOW)
     assert document["permissions"] == {"contents": "read"}
     for job in document["jobs"].values():
         if "permissions" in job:
@@ -51,8 +58,7 @@ def test_static_workflow_requires_no_credentials() -> None:
 
 
 def test_drift_runs_only_on_main_without_write_permissions() -> None:
-    workflow = read_file(REPO_ROOT / ".github/workflows/terraform-drift.yml")
-    document = yaml.load(workflow, Loader=yaml.BaseLoader)
+    document = _load_workflow(_DRIFT_WORKFLOW)
     assert set(document["on"]) == {"schedule", "workflow_dispatch", "push"}
     assert document["on"]["push"]["branches"] == ["main"]
     assert "infra/terraform/gcp/**" in document["on"]["push"]["paths"]
@@ -65,13 +71,11 @@ def test_drift_runs_only_on_main_without_write_permissions() -> None:
         assert "permissions" not in job
         for step in job["steps"]:
             assert not re.search(r"\bterraform\s+apply\b", step.get("run", ""))
-    script = read_file(REPO_ROOT / ".github/scripts/terraform-drift.sh")
-    assert not re.search(r"\bterraform\s+apply\b", script)
+    assert not re.search(r"\bterraform\s+apply\b", read_file(_DRIFT_SCRIPT))
 
 
 def test_drift_credentials_are_injected_from_secrets() -> None:
-    document = yaml.load(read_file(REPO_ROOT / ".github/workflows/terraform-drift.yml"), Loader=yaml.BaseLoader)
-    job = document["jobs"]["drift"]
+    job = _load_workflow(_DRIFT_WORKFLOW)["jobs"]["drift"]
     variables = read_file(REPO_ROOT / "infra/terraform/gcp/variables.tf")
     for name in re.findall(r'variable "([^"]+)"', variables):
         block = extract_block(variables, rf'variable "{name}"')

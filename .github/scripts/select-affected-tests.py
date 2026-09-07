@@ -82,10 +82,6 @@ PATH_TEST_MAP: Final = (
     ),
     (
         ".github/workflows/terraform-drift.yml",
-        ("tests/repo/test_terraform_workflows.py", "tests/repo/test_terraform_drift_script.py"),
-    ),
-    (
-        ".github/scripts/terraform-drift.sh",
         ("tests/repo/test_terraform_drift_script.py", "tests/repo/test_terraform_workflows.py"),
     ),
     (".github/workflows/terraform-static.yml", ("tests/repo/test_terraform_workflows.py",)),
@@ -98,6 +94,10 @@ PATH_TEST_MAP: Final = (
     (".github/scripts/classify-ci-paths.sh", ("tests/repo/test_actions_parallel_workflows.py",)),
     (".github/scripts/pyscn-diff-gate.py", ("tests/repo/test_pyscn_diff_gate_contract.py",)),
     (".github/scripts/run-affected-tests.py", ("tests/repo/test_pytest_lane_contract.py",)),
+    (
+        ".github/scripts/terraform-drift.sh",
+        ("tests/repo/test_terraform_drift_script.py", "tests/repo/test_terraform_workflows.py"),
+    ),
     (
         ".github/scripts/validate-changelog-fragments.py",
         ("tests/repo/test_changelog_ci_contract.py",),

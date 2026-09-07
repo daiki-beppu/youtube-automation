@@ -2,9 +2,7 @@
 
 ## Status
 
-accepted (2026-09-05)。Wayfinder map [#4714](https://github.com/daiki-beppu/youtube-automation/issues/4714)、起草 [#4929](https://github.com/daiki-beppu/youtube-automation/issues/4929)。決定の正本は #4719（ADR 番号の訂正を含む）、#4720 §12、#4721 §11。
-
-amended (2026-09-05, #4932): `.github/workflows/terraform-drift.yml` と読み取り専用 SA `terraform-drift` で drift を検知する。解消原則・secrets 登録・実証手順は `infra/terraform/gcp/README.md`「drift の解消」に実装。実環境の検知→解消 evidence は HUMAN STEP として別途記録する。
+accepted (2026-09-05)、amended (2026-09-05, #4932)。Wayfinder map [#4714](https://github.com/daiki-beppu/youtube-automation/issues/4714)、起草 [#4929](https://github.com/daiki-beppu/youtube-automation/issues/4929)。決定の正本は #4719（ADR 番号の訂正を含む）、#4720 §12、#4721 §11。
 
 ## Context
 
@@ -29,3 +27,9 @@ ADR-0010 の単一共有プロジェクトには既存リソースがあるが�
 Terraform を構成の正本とし、drift はローカル apply で実体を宣言に戻して解消する。意図した変更であれば先に Terraform 定義を PR で変更する。初回の合格条件は **8 to import, 0 to add, 0 to change, 0 to destroy** とし、異なる差分があれば apply を止めて #4929 で議論する。
 
 doctor / setup と CI の帰結は実装 epic [#4939](https://github.com/daiki-beppu/youtube-automation/issues/4939) の各段で反映する。この ADR の accepted は決定の採用を表し、HUMAN STEP の import 完了証拠は #4929 の plan / apply / No changes コメントで確認する。Google Auth Platform の provider 未対応設定は引き続き手動設定の境界にあり、この import の管理対象へ追加しない。
+
+## Amendment: drift 検知 workflow の追加（2026-09-05, #4932）
+
+§Decision 3 の「読み取り専用 drift 検知」を `.github/workflows/terraform-drift.yml` と読み取り専用 SA `terraform-drift` で実装する。解消原則・secrets 登録・実証手順は `infra/terraform/gcp/README.md`「drift の解消」を正本とする。実環境の検知→解消 evidence は HUMAN STEP として別途記録する。
+
+SA の plan には project 読み取りのため `cloudresourcemanager.googleapis.com` の有効化が要る。これは §Decision 4 の import 対象 8 件に含まれない新規の有効化なので、`var.apis`（既存 6 API の取り込み集合）へ足さず `infra/terraform/gcp/drift.tf` の独立した `google_project_service` として宣言する。取り込み済みの集合と drift 検知の前提とを resource 単位で区別しておくためであり、#4932 で **1 added / 0 changed / 0 destroyed** として適用済み。Console や drift job から有効化しない。
