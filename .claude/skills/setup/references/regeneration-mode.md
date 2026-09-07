@@ -146,11 +146,11 @@ Fail Fast 原則）。再生成モード側で空欄を残さないことで、�
 
 ## Step R6: GCP / Vertex AI ブートストラップ
 
-**`/setup` を実行してください**。GCP プロジェクト作成・API 有効化・IAM・ADC quota project 設定を AI 主導で進め、Google Auth Platform の Branding / Audience Test users / Clients 設定と `client_secrets.json` 配置を `[HUMAN STEP]` として案内する。
+**`/setup` を実行してください**。上流 Terraform が管理する GCP 層を検証し、マシン層の認証・ADC quota project 設定を AI 主導で進め、Google Auth Platform の Branding / Audience Test users / Clients 設定と `client_secrets.json` 配置を `[HUMAN STEP]` として案内する。
 
 事前に `uv run yt-doctor --json` を叩き、`checks[]` のうち `category == "api"` の全 check が `ok` なら `/setup` は完了済みのため本 step を skip して **Step R7 へ進む**（`channel` / `upload` カテゴリは config 生成後フェーズで満たす）。
 
-bootstrap.sh / terraform を手動で叩く上級者向け手順は `.claude/skills/setup/references/gcp-bootstrap.md` に集約し、通常ルートは `/setup --tool` に統一する。
+GCP 層の診断が fail なら `/setup --tool` の案内に従い上流で修正してから再診断する。
 
 ## Step R7: 検証
 

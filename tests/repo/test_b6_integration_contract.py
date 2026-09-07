@@ -394,11 +394,6 @@ def test_built_sdist_contains_only_approved_members(tmp_path: Path) -> None:
         "infra/terraform/gcp/README.md",
     }
     assert oauth_entrypoints <= members
-    setup_gcp_assets = {
-        ".claude/skills/setup/references/gcp-bootstrap.md",
-        ".claude/skills/setup/references/gcp-bootstrap.sh",
-    }
-    assert setup_gcp_assets <= members
     forbidden_prefixes = (
         ".github/",
         ".takt/",

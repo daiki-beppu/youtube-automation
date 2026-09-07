@@ -1,0 +1,1 @@
+- setup を GCP・マシン・チャンネルの 3 層責務に整理し、GCP 変更を上流 Terraform へ誘導する。旧 bootstrap 資産と GCP 変更の追加承認ループを削除する。

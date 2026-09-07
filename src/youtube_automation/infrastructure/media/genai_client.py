@@ -1,8 +1,8 @@
 """google-genai Client 生成の抽象化ヘルパー (Vertex AI 専用)。
 
 認証は ADC (Application Default Credentials) を前提とする。
-事前に `/setup --tool`（手動ルートは `.claude/skills/setup/references/gcp-bootstrap.md`）で
-GCP プロジェクト / API 有効化 / ADC を整えたうえで使用する。
+上流 Terraform で GCP プロジェクト / API を整備し、
+`/setup --tool` で ADC の認証・設定を完了してから使用する。
 
 環境変数:
 - `GOOGLE_CLOUD_PROJECT` (任意) — 未設定なら ADC quota project から自動解決
