@@ -6,7 +6,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from youtube_automation.infrastructure.vcs._git import run_git
+from youtube_automation.infrastructure.vcs._git import parse_status_paths, run_git
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,17 +53,21 @@ def commit_training_files(repository: Path, paths: tuple[Path, Path], message: s
 
 
 def _tracked_changes(repository: Path) -> tuple[str, ...]:
-    status = run_git(repository, "status", "--porcelain=v1", "--untracked-files=no")
-    return tuple(sorted(line[3:] for line in status.stdout.splitlines() if len(line) > 3))
+    status = run_git(repository, "status", "--porcelain=v1", "-z", "--untracked-files=no")
+    return parse_status_paths(status.stdout)
 
 
 def _identity_missing(repository: Path) -> bool:
-    """`user.name` / `user.email` を先頭から確認し、欠落を見つけた時点で打ち切る。"""
-    for key in ("user.name", "user.email"):
-        result = run_git(repository, "config", "--get", key)
-        if result.returncode != 0 or not result.stdout.strip():
-            return True
-    return False
+    """`user.name` / `user.email` を 1 回の `git config` で確認する。"""
+    result = run_git(repository, "config", "--get-regexp", r"^user\.(name|email)$")
+    if result.returncode != 0:
+        return True
+    # system → global → local の順に出力されるため、後勝ちで実効値を決める。
+    values: dict[str, str] = {}
+    for line in result.stdout.splitlines():
+        key, _, value = line.partition(" ")
+        values[key] = value.strip()
+    return not all(values.get(key) for key in ("user.name", "user.email"))
 
 
 def _git_error(result: subprocess.CompletedProcess[str]) -> str:

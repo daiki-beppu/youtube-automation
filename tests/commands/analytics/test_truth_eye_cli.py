@@ -112,6 +112,44 @@ def test_seal_skips_commit_when_other_tracked_file_is_dirty(tmp_path, capsys, st
     assert _git(tmp_path, "rev-parse", "HEAD") == before
 
 
+def test_seal_reports_both_sides_of_a_renamed_tracked_file(tmp_path, capsys):
+    _init_git_repo(tmp_path)
+    before = _git(tmp_path, "rev-parse", "HEAD")
+    _git(tmp_path, "mv", "tracked.txt", "renamed.txt")
+    pair = tmp_path / "pair.json"
+    _write_pair(pair)
+    draft = tmp_path / "draft.md"
+    draft.write_text(_draft(), encoding="utf-8")
+
+    exit_code = main(["seal", "--pair", str(pair), "--sealed-draft", str(draft), "--channel-dir", str(tmp_path)])
+
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert output["committed"] is False
+    assert output["changed_files"] == ["renamed.txt", "tracked.txt"]
+    assert _git(tmp_path, "rev-parse", "HEAD") == before
+
+
+def test_seal_reports_non_ascii_dirty_path_verbatim(tmp_path, capsys):
+    _init_git_repo(tmp_path)
+    tracked = tmp_path / "日本語 ノート.md"
+    tracked.write_text("clean\n", encoding="utf-8")
+    _git(tmp_path, "add", "--", "日本語 ノート.md")
+    _git(tmp_path, "commit", "-m", "add note")
+    tracked.write_text("dirty\n", encoding="utf-8")
+    pair = tmp_path / "pair.json"
+    _write_pair(pair)
+    draft = tmp_path / "draft.md"
+    draft.write_text(_draft(), encoding="utf-8")
+
+    exit_code = main(["seal", "--pair", str(pair), "--sealed-draft", str(draft), "--channel-dir", str(tmp_path)])
+
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert output["committed"] is False
+    assert output["changed_files"] == ["日本語 ノート.md"]
+
+
 def test_seal_succeeds_outside_git_repository(tmp_path, capsys):
     pair = tmp_path / "pair.json"
     _write_pair(pair)
