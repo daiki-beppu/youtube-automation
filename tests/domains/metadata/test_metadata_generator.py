@@ -254,6 +254,13 @@ class TestCleanTrackTitle:
     def test_no_modification_needed(self, gen):
         assert gen._clean_track_title("Crystal Cavern") == "Crystal Cavern"
 
+    @pytest.mark.parametrize("separator", ["—", "–"])
+    @pytest.mark.parametrize("article", ["The", "A"])
+    def test_capitalizes_small_word_at_start_of_dash_separated_segment(self, gen, separator, article):
+        filename = f"03a-タブを閉じる {separator} {article} Tabs Go Away"
+
+        assert gen._clean_track_title(filename) == f"タブを閉じる {separator} {article} Tabs Go Away"
+
 
 # ===========================================================================
 # 3. _extract_collection_name のテスト
