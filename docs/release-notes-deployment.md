@@ -18,7 +18,7 @@
 | pnpm | `11.15.1`（`site/package.json::packageManager` と `PNPM_VERSION`） |
 | Production deploy | `main` への push で自動実行 |
 | Preview deploy | repository 内の production 以外の全 branch / pull request |
-| Build watch paths | `site/**`, `docs/release-notes/**`, `ONBOARDING.md`, `docs/oauth-setup.md`, `docs/features.md`, `docs/workflow-cheatsheet.md`, `docs/chrome-extension-install-guide.md`, `docs/dashboard.md`, `docs/migration/workspace-to-single-repo.md` |
+| Build watch paths | 下記「repository workflow と Build watch paths」の 29 項目 |
 
 Cloudflare Pages の GitHub integration が commit を取得し、production branch では
 `https://youtube-automation-release-notes.pages.dev/`、それ以外では commit 固有 URL と
@@ -30,12 +30,12 @@ branch alias を生成する。fork から作成された pull request には pr
 
 ### onboarding の直接配信
 
-`/onboarding`、`/onboarding/`、`/onboarding.md`、`/onboarding.mdx` は Production / Preview とも
-Cloudflare Pages の静的 asset として直接配信する。クエリパラメータ、Pages Function、環境 binding、
+`/getting-started/onboarding` とその末尾 `/`・`.md`・`.mdx` 付き URL は Production / Preview とも
+Cloudflare Pages の静的 asset として直接配信する。旧 `/onboarding` 系 URL は対応する新 URL に転送する。クエリパラメータ、Pages Function、環境 binding、
 secret によるアクセス制御は行わない。
 
 公開導線は従来どおり限定する。onboarding は `robots` の `noindex` を維持し、sidebar、トップページ、
-検索、AI 出力、sitemap には掲載しない。運営者は通常の `/onboarding/` URL を直接開く。
+検索、AI 出力、sitemap には掲載しない。運営者は通常の `/getting-started/onboarding/` URL を直接開く。
 
 Repository 変更の deploy 後、Cloudflare Dashboard に旧 gate 用の変数や secret が残っている場合は削除する。
 静的配信に runtime binding は不要である。
@@ -49,18 +49,38 @@ Cloudflare Pages Git integration の **Build watch paths** は Pages build の�
 
 ```text
 site/**
+.claude/skills/**
 docs/release-notes/**
 ONBOARDING.md
+docs/tool-setup.md
 docs/oauth-setup.md
+docs/oauth-scopes.md
 docs/features.md
 docs/workflow-cheatsheet.md
 docs/chrome-extension-install-guide.md
 docs/dashboard.md
-docs/migration/workspace-to-single-repo.md
+docs/cloud-execution.md
+docs/live-streaming.md
+docs/streaming-healthcheck.md
+docs/live-chat-reply.md
+docs/ambient-layers.md
+docs/scheduled-publish.md
+docs/localizations.md
+docs/distrokid.md
+docs/audio-studio.md
+docs/review-viewers.md
+docs/migration/high-cpm-locales.md
+docs/upgrades/v5.4.0.md
+docs/upgrades/v5.5.0.md
+docs/upgrades/v5.5.1.md
+docs/upgrades/v6.0.0.md
+.github/workflows/site.yml
+flake.nix
+flake.lock
 ```
 
 Cloudflare Dashboard で既存の `youtube-automation-release-notes` project を開き、Git integration の
-Build watch paths を上記9項目へ更新して保存する。保存後は設定画面を再表示し、各項目が完全一致すること、
+Build watch paths を上記29項目へ更新して保存する。保存後は設定画面を再表示し、各項目が完全一致すること、
 `docs/**` のように公開対象外まで含む広い pattern がないことを確認する。
 
 ## Preview 受け入れ確認
@@ -68,12 +88,13 @@ Build watch paths を上記9項目へ更新して保存する。保存後は設�
 site を変更した pull request では、Cloudflare Pages の commit 固有 preview build が成功してから次を確認する。
 fork からの pull request には preview URL が作られないため、同一 repository の branch で確認する。
 
-- トップページと sidebar / tabs に「はじめる」「使う」「リリースノート」の3区分が表示される。
-- 公開 navigation とトップページの主要導線には次の5ページが表示される: `/oauth-setup/`、`/chrome-extension-install-guide/`、`/features/`、`/workflow-cheatsheet/`、`/dashboard/`。逆移行ガイドはアップデート tab の `/releases/workspace-to-single-repo/` から到達できる。
-- `/onboarding/` は直接 URL で表示でき、robots noindex を持つ一方、sidebar、トップページ、検索、AI 出力、sitemap には現れない。
-- Production / Preview の `/onboarding/` はクエリパラメータなしの直接 URL で表示できる。
-- `/features/` から `/workflow-cheatsheet/`、`/onboarding/` と `/oauth-setup/` の相互リンクは preview 内の route を指す。
-- `/onboarding/` の Python 版から `tayk` への移行リンクは、GitHub の `docs/migration/python-to-tayk.md` 原本へ fallback する。
+- sidebar / tabs に「はじめる」「ガイド」「スキル」「アップデート」の4区分が表示され、それぞれの主要ページへ移動できる。
+- `/getting-started/tool-setup/`、`/getting-started/oauth-setup/`、`/getting-started/chrome-extension-install-guide/`、`/skills/features/`、`/guides/workflow-cheatsheet/`、`/guides/dashboard/` が公開 navigation から開ける。
+- アップデート tab のバージョン別アップグレードから `/releases/upgrades/v6.0.0/` を開ける。
+- `/getting-started/onboarding/` は直接 URL で表示でき、robots noindex を持つ一方、sidebar、トップページ、検索、AI 出力、sitemap には現れない。旧 `/onboarding/` URL も同ページへ転送される。
+- Production / Preview の onboarding はクエリパラメータなしで表示できる。
+- `/skills/features/` から `/guides/workflow-cheatsheet/`、ツール導入・OAuth・onboarding の相互リンクは preview 内の route を指す。
+- onboarding の Python 版から `tayk` への移行リンクは、GitHub の `docs/migration/python-to-tayk.md` 原本へ fallback する。
 - `/audits/` route が生成されず、navigation と検索結果にも内部 audit が現れない。
 
 この checklist は local build の代替ではない。pull request の commit と preview URL を記録し、上記を確認した後に

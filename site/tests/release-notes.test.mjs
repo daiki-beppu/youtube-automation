@@ -48,7 +48,6 @@ const operatorSections = [
     routes: [
       "/skills/features",
       "/guides/workflow-cheatsheet",
-      "/releases/workspace-to-single-repo",
       "/guides/dashboard",
       "/guides/cloud-execution",
       "/guides/live-chat-reply",
@@ -287,7 +286,6 @@ test("読者タスク別4タブは route prefix ごとに sidebar を切り替�
       sidebarRoutes: [
         "/releases/v5.6.0",
         "/releases/ext-v0.3.0",
-        "/releases/workspace-to-single-repo",
         ...updateRoutes,
       ],
     },
@@ -414,10 +412,6 @@ test(`operator docs の${generatedRouteCount} route は原本の先頭見出し�
     ["/guides/workflow-cheatsheet", "workflow チートシート"],
     ["/getting-started/chrome-extension-install-guide", "Chrome 拡張インストールガイド"],
     ["/guides/dashboard", "Analytics dashboard"],
-    [
-      "/releases/workspace-to-single-repo",
-      "workspace から 1 チャンネル = 1 リポジトリへ戻す（逆移行ガイド）",
-    ],
     ["/guides/cloud-execution", "クラウドでの実行"],
     ["/guides/live-streaming", "24時間ライブ配信を始める"],
     ["/guides/streaming-healthcheck", "ライブ配信の稼働状態を確認する"],
