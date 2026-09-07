@@ -282,7 +282,7 @@ test("読者タスク別4タブは route prefix ごとに sidebar を切り替�
     {
       label: "アップデート",
       route: "/releases/v5.6.0",
-      tabHref: "/releases/v5.7.0",
+      tabHref: firstReleaseRoute(releaseSidebarGroups(releaseNotesDirectory)),
       sidebarRoutes: [
         "/releases/v5.6.0",
         "/releases/ext-v0.3.0",
