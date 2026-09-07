@@ -7,8 +7,9 @@ import json
 from pathlib import Path
 
 from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.core.errors import ValidationError
+from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.analytics.truth_eye import (
+    collect_training_status,
     seal_training_record,
     validate_sealed_draft,
     verify_training_record,
@@ -25,6 +26,8 @@ def build_parser() -> argparse.ArgumentParser:
     seal.add_argument("--channel-dir", type=Path, default=Path.cwd(), help="チャンネルリポジトリの root")
     verify = subparsers.add_parser("verify", help="封印分析の sha256 を訓練記録と照合")
     verify.add_argument("record", type=Path, help="検証する訓練記録 Markdown の path")
+    status = subparsers.add_parser("status", help="未完了記録と成長トラッキングを表示")
+    status.add_argument("--channel-dir", type=Path, default=Path.cwd(), help="チャンネルリポジトリの root")
     return parser
 
 
@@ -64,10 +67,32 @@ def run(args: argparse.Namespace) -> int:
                 )
             )
             return 0
-        result = verify_training_record(args.record)
-        print(json.dumps({"ok": result.ok, "expected": result.expected, "actual": result.actual}))
-        return 0 if result.ok else 1
-    except (OSError, json.JSONDecodeError, ValidationError) as error:
+        if args.command == "verify":
+            result = verify_training_record(args.record)
+            print(json.dumps({"ok": result.ok, "expected": result.expected, "actual": result.actual}))
+            return 0 if result.ok else 1
+        status = collect_training_status(args.channel_dir)
+        print(
+            json.dumps(
+                {
+                    "incomplete": [
+                        {
+                            "record": str(item.record),
+                            "resume_phase": item.resume_phase,
+                            "phase2_turns": item.phase2_turns,
+                        }
+                        for item in status.incomplete
+                    ],
+                    "last_next_try": status.last_next_try,
+                    "recurring_ai_only_viewpoints": list(status.recurring_ai_only_viewpoints),
+                    "completed_count": status.completed_count,
+                    "incomplete_count": status.incomplete_count,
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 0
+    except (OSError, json.JSONDecodeError, ConfigError, ValidationError) as error:
         print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False))
         return 1
 

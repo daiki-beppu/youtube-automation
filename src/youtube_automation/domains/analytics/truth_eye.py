@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import re
+from collections import Counter
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
 
-from youtube_automation.core.errors import ValidationError
+from youtube_automation.core.errors import ConfigError, ValidationError
 
 
 @dataclass(frozen=True)
@@ -35,8 +36,11 @@ VIEWPOINTS: tuple[Viewpoint, ...] = (
     Viewpoint("V12", "刺激している欲求", False),
 )
 
+TRAINING_RECORD_SCHEMA_VERSION = 1
+
 _VIDEO_FIELDS = ("video_id", "title", "views", "published_at", "duration")
 _SAFE_STEM_PART = re.compile(r"^[A-Za-z0-9._-]+$")
+_VIEWPOINT_ID = re.compile(r"V(?:0[1-9]|1[0-2])")
 
 
 @dataclass(frozen=True)
@@ -54,16 +58,38 @@ class VerificationResult:
     actual: str
 
 
+@dataclass(frozen=True)
+class IncompleteTrainingRecord:
+    record: Path
+    resume_phase: int
+    phase2_turns: int
+
+
+@dataclass(frozen=True)
+class TrainingStatus:
+    incomplete: tuple[IncompleteTrainingRecord, ...]
+    last_next_try: dict | None
+    recurring_ai_only_viewpoints: tuple[dict, ...]
+    completed_count: int
+    incomplete_count: int
+
+
+@dataclass(frozen=True)
+class TrainingRecord:
+    path: Path
+    metadata: dict
+    phases: tuple[str, ...]
+
+
 def validate_sealed_draft(text: str) -> list[str]:
     """封印分析の固定フォーマットについて欠落項目を返す。"""
     missing: list[str] = []
-    lines = text.splitlines()
+    rows = _viewpoint_rows(text)
     for viewpoint in VIEWPOINTS:
-        matching = [line for line in lines if re.match(rf"^\|\s*{viewpoint.id}\s*\|", line)]
-        if not matching:
+        cells = next((row for row in rows if row[0] == viewpoint.id), None)
+        if cells is None:
             missing.append(viewpoint.id)
             continue
-        cells = [cell.strip() for cell in matching[0].strip().strip("|").split("|")]
         if len(cells) < 3 or not cells[1]:
             missing.append(f"{viewpoint.id}:winner")
         if len(cells) < 3 or not cells[2]:
@@ -109,7 +135,7 @@ def seal_training_record(
     digest = hashlib.sha256(sealed_draft.read_bytes()).hexdigest()
     sealed_at = timestamp.isoformat().replace("+00:00", "Z")
     metadata = {
-        "schema_version": 1,
+        "schema_version": TRAINING_RECORD_SCHEMA_VERSION,
         "menu": "thumbnail",
         "channel": channel,
         "pair": {side: pair_metadata[side] for side in ("winner", "loser")},
@@ -138,6 +164,50 @@ def verify_training_record(record: Path) -> VerificationResult:
     return VerificationResult(expected == actual, expected, actual)
 
 
+def collect_training_status(channel_dir: Path) -> TrainingStatus:
+    """チャンネル内の訓練記録から再開状態と成長トラッキングを集計する。"""
+    training_dir = channel_dir / "docs" / "benchmarks" / "training"
+    paths = (
+        sorted(path for path in training_dir.glob("*.md") if not path.name.endswith(".sealed.md"))
+        if training_dir.is_dir()
+        else []
+    )
+    records = [read_training_record(path) for path in paths]
+    completed = [record for record in records if record.metadata.get("next_try") is not None]
+    incomplete_records = [record for record in records if record.metadata.get("next_try") is None]
+    incomplete = tuple(
+        IncompleteTrainingRecord(
+            record=record.path,
+            resume_phase=_resume_phase(record.phases),
+            phase2_turns=_phase_two_turns(record.phases[2]),
+        )
+        for record in incomplete_records
+    )
+
+    latest = completed[-1] if completed else None
+    last_next_try = latest.metadata["next_try"] if latest is not None else None
+    counts: Counter[str] = Counter()
+    for record in completed[-5:]:
+        counts.update(set(_ai_only_viewpoint_ids(record.phases[4])))
+    names = {viewpoint.id: viewpoint.name for viewpoint in VIEWPOINTS}
+    recurring = tuple(
+        {"viewpoint_id": viewpoint_id, "name": names[viewpoint_id], "count": counts[viewpoint_id]}
+        for viewpoint_id in (viewpoint.id for viewpoint in VIEWPOINTS)
+        if counts[viewpoint_id] >= 2
+    )
+    return TrainingStatus(incomplete, last_next_try, recurring, len(completed), len(incomplete))
+
+
+def read_training_record(path: Path) -> TrainingRecord:
+    """訓練記録の frontmatter と Phase 0〜5 を読み戻す。"""
+    text = path.read_text(encoding="utf-8")
+    metadata = _parse_frontmatter(text)
+    if metadata.get("schema_version") != TRAINING_RECORD_SCHEMA_VERSION:
+        raise ConfigError(f"未対応の訓練記録 schema_version です: {metadata.get('schema_version')}")
+    phases = tuple(_section_body(text, f"Phase {number}") for number in range(6))
+    return TrainingRecord(path, metadata, phases)
+
+
 def _validate_pair(pair: dict) -> dict:
     if not isinstance(pair, dict):
         raise ValidationError("pair JSON は object で指定してください")
@@ -164,6 +234,50 @@ def _section_body(text: str, heading: str) -> str:
     return match.group(1).strip() if match else ""
 
 
+def _viewpoint_rows(text: str) -> list[list[str]]:
+    """先頭セルが観点 ID の Markdown テーブル行を、セル配列にして返す。"""
+    return [
+        cells
+        for cells in (
+            [cell.strip() for cell in line.strip().strip("|").split("|")]
+            for line in text.splitlines()
+            if line.lstrip().startswith("|")
+        )
+        if _VIEWPOINT_ID.fullmatch(cells[0])
+    ]
+
+
+def _resume_phase(phases: tuple[str, ...]) -> int:
+    for number, body in enumerate(phases):
+        if not _phase_has_content(number, body):
+            return number
+    return 5
+
+
+def _phase_has_content(number: int, body: str) -> bool:
+    """Phase 1 は空欄のままの照合表を未記入として扱い、他の Phase は本文の有無で判定する。"""
+    if number != 1:
+        return bool(body.strip())
+    rows = _viewpoint_rows(body)
+    if not rows:
+        return bool(body.strip())
+    # Phase 1 の列は 観点 ID | 観点名 | 伸びた側 | 伸びなかった側。
+    return any(len(cells) >= 4 and (cells[2] or cells[3]) for cells in rows)
+
+
+def _phase_two_turns(body: str) -> int:
+    """Phase 2 の回答見出し（`A:` / `A1:` / `回答:`）を数え、往復数とする。
+
+    見出しの書式は skill 側テンプレート（#4990）が正本なので、テンプレート確定時に一致を確認する。
+    """
+    return len(re.findall(r"^(?:[-*]\s*)?(?:\*\*)?(?:A\d*|回答)(?:\*\*)?\s*[:：]", body, re.MULTILINE))
+
+
+def _ai_only_viewpoint_ids(body: str) -> tuple[str, ...]:
+    """Phase 4 照合表（観点 ID | 区分 | 人間の記述 | AI の記述）から「AI だけ」の観点 ID を返す。"""
+    return tuple(cells[0] for cells in _viewpoint_rows(body) if len(cells) >= 4 and cells[1] == "AI だけ")
+
+
 def _render_record(metadata: dict) -> str:
     frontmatter = yaml.safe_dump(metadata, allow_unicode=True, sort_keys=False).rstrip()
     rows = ["| 観点 ID | 観点名 | 伸びた側 | 伸びなかった側 |", "|---|---|---|---|"]
@@ -175,6 +289,10 @@ def _render_record(metadata: dict) -> str:
 
 def _read_frontmatter(path: Path) -> dict:
     text = path.read_text(encoding="utf-8")
+    return _parse_frontmatter(text)
+
+
+def _parse_frontmatter(text: str) -> dict:
     if not text.startswith("---\n"):
         raise ValidationError("訓練記録に YAML frontmatter がありません")
     parts = text.split("---", 2)

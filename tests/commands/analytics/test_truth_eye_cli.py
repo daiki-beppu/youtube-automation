@@ -4,9 +4,10 @@ import json
 import subprocess
 
 import pytest
+import yaml
 
 from youtube_automation.commands.analytics.truth_eye import main
-from youtube_automation.domains.analytics.truth_eye import VIEWPOINTS
+from youtube_automation.domains.analytics.truth_eye import TRAINING_RECORD_SCHEMA_VERSION, VIEWPOINTS
 
 
 def _draft() -> str:
@@ -215,3 +216,44 @@ def test_verify_cli_returns_nonzero_and_hashes_after_tamper(tmp_path, capsys):
     assert output["ok"] is False
     assert output["expected"] == "deadbeef"
     assert len(output["actual"]) == 64
+
+
+def _write_training_record(tmp_path, schema_version=TRAINING_RECORD_SCHEMA_VERSION):
+    training = tmp_path / "docs/benchmarks/training"
+    training.mkdir(parents=True, exist_ok=True)
+    metadata = {
+        "schema_version": schema_version,
+        "menu": "thumbnail",
+        "channel": "reference",
+        "pair": {},
+        "sealed": {},
+        "next_try": None,
+    }
+    (training / "20260901-thumbnail-reference-win.md").write_text(
+        f"---\n{yaml.safe_dump(metadata, sort_keys=False)}---\n\n"
+        "## Phase 0\n\nprepared\n\n## Phase 1\n\n\n## Phase 2\n\n\n## Phase 3\n\n\n"
+        "## Phase 4\n\n\n## Phase 5\n",
+        encoding="utf-8",
+    )
+
+
+def test_status_cli_returns_training_summary(tmp_path, capsys):
+    _write_training_record(tmp_path)
+
+    exit_code = main(["status", "--channel-dir", str(tmp_path)])
+
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert output["incomplete_count"] == 1
+    assert output["incomplete"][0]["resume_phase"] == 1
+
+
+def test_status_cli_reports_unknown_schema_version_as_error(tmp_path, capsys):
+    _write_training_record(tmp_path, schema_version=TRAINING_RECORD_SCHEMA_VERSION + 1)
+
+    exit_code = main(["status", "--channel-dir", str(tmp_path)])
+
+    output = json.loads(capsys.readouterr().out)
+    assert exit_code != 0
+    assert output["ok"] is False
+    assert "schema_version" in output["error"]
