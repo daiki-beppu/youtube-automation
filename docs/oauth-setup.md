@@ -208,7 +208,7 @@ Billing account が紐付いていない。`--billing-account` を渡して再�
 ### terraform 固有
 
 #### `already exists but is not managed by this terraform configuration`
-プロジェクト ID がグローバルで衝突している。`project_id` を別名に変えるか、`create_project = false` で既存流用。
+`project_id` が既存の共有プロジェクトを指し、`imports.tf` が読み込まれていることを確認する。プロジェクトを新規作成して回避せず、[`infra/terraform/gcp/README.md`](../infra/terraform/gcp/README.md) の import 手順に戻る。
 
 #### `Error 400: ... not enabled for billing`
 `aiplatform.googleapis.com` には Billing が必須。`billing_account` を正しく指定。

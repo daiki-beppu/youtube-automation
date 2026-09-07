@@ -5,7 +5,6 @@
 #   terraform plan
 
 project_id      = "my-youtube-channel-prod"
-create_project  = true
 billing_account = "012345-6789AB-CDEF01"
 adc_email       = "you@example.com"
 
@@ -16,6 +15,7 @@ adc_email       = "you@example.com"
 # apis = [
 #   "youtube.googleapis.com",
 #   "youtubeanalytics.googleapis.com",
+#   "youtubereporting.googleapis.com",
 #   "aiplatform.googleapis.com",
 #   "generativelanguage.googleapis.com",
 #   "storage.googleapis.com",

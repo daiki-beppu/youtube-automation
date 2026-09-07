@@ -8,6 +8,8 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 `CONTEXT.md` から移管した、本プロジェクト固有の用語と決定の正本。実装詳細ではなく、設計・運用・移行時に使う語彙を定義する。
 
+**唯一の変更経路**: 取り込み完了後の共有 GCP プロジェクトへの変更を Terraform に集約する運用原則（[ADR-0030](adr/0030-terraform-sole-change-path-for-gcp.md)）。
+
 ### 配布・移行
 
 > [!NOTE]
