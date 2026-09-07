@@ -138,47 +138,13 @@ GCP 層は上流 `infra/terraform/gcp/` が管理する。fail なら `next_acti
 
 #### `client_secrets` — OAuth クライアント秘密ファイル未配置
 
-**[HUMAN STEP]** で依頼 (`yt-doctor` の `next_action.url` をそのまま使う):
-
-HUMAN STEP を出す前に、`config/channel/meta.json` の `channel.name` を使い、未設定なら `<channel_dir>` のベースネームを title case 化してチャンネル名を解決し、以下の推奨名をメッセージに含める:
-
-- Google Auth Platform > Branding のアプリ名: `{チャンネル名} YouTube Automation` (例: `Lo-Fi Beats YouTube Automation`)
-- OAuth クライアント ID 名: `{チャンネル名} Desktop Client` (例: `Lo-Fi Beats Desktop Client`)
-
-```
-> [HUMAN STEP]
-> OAuth クライアント ID は Google Cloud Console でしか作成できません。
->
-> 以下の URL を開いてください:
->   https://console.cloud.google.com/apis/credentials?project=<project-id>
->
-> 推奨入力値:
->   - Google Auth Platform > Branding のアプリ名: <channel-name> YouTube Automation
->   - OAuth クライアント ID 名: <channel-name> Desktop Client
->
-> 手順:
->   1. 左メニューで「Google Auth Platform」を開く
->   2. 「Branding」でアプリ名に上記の推奨アプリ名を入力し、ユーザーサポートメールと
->      デベロッパー連絡先には自分の Google アカウントを入れて保存
->   3. 「Audience」で User type は「External」、Publishing status は「Testing」のまま、
->      「Test users」に OAuth 認証でログインする Google アカウントを追加
->      （未追加だと初回認証が 403 access_denied で止まります）
->   4. 「Clients」→「Create client」で Application type「Desktop app」を選び、
->      名前には上記の推奨 OAuth クライアント ID 名を入力
->   5. 作成した client を開き、「Client secrets」→「Add secret」で新しい secret を発行
->   6. 「Download JSON」を押して Downloads に保存
->
-> 完了したら "done" と返してください。
-```
-
-利用者が "done" と返したら、AI が次を順に Bash で実行する:
+**[HUMAN STEP]** としてチャンネルルートで対話 session を起動し、利用者に wizard の入力とブラウザ操作を依頼する:
 
 ```bash
-uv run yt-doctor --fix-client-secrets
-uv run yt-doctor --apply --json <apply_flags>
+bash .claude/skills/setup/references/oauth-client-wizard.sh
 ```
 
-`client_secrets` が `ok` になるか確認する。fix または再診断が失敗した場合はエラー詳細を見せてリトライする。
+Console 手順の正本はこの wizard。完了後に `uv run yt-doctor --apply --json <apply_flags>` で再診断し、`client_secrets` が `ok` であることを確認する。失敗なら wizard のエラーに従って再実行する。
 
 #### `oauth_token` — OAuth トークン未取得
 

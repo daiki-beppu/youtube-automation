@@ -1378,30 +1378,8 @@ def test_collection_localization_docs_use_root_localizations_contract() -> None:
     assert "`config/localizations.json`" in rules
 
 
-def test_setup_client_secrets_step_uses_download_and_automatic_move() -> None:
-    # check id ごとの手順は段階的開示で references/check-runbook.md へ分離済み
-    setup = _read(".claude/skills/setup/references/check-runbook.md")
-    step = setup.split("#### `client_secrets`", 1)[1].split("#### `oauth_token`", 1)[0]
-
-    for expected in (
-        "Client secrets",
-        "Add secret",
-        "Download JSON",
-        "done",
-        "uv run yt-doctor --fix-client-secrets",
-        "uv run yt-doctor --apply --json",
-        "client_secrets` が `ok`",
-    ):
-        assert expected in step
-    assert "client_secrets.template.json" not in step
-    assert "転記" not in step
-
-
 def test_public_setup_guide_owns_installation_and_oauth_completion() -> None:
     tool_setup = _read("docs/tool-setup.md")
-    oauth_setup = _read("docs/oauth-setup.md")
-    recommended = oauth_setup.split("## 推奨ルート", 1)[1].split("## 上級者向け", 1)[0]
-
     for expected in (
         "uv が入っているか確認",
         "公式手順",
@@ -1417,19 +1395,6 @@ def test_public_setup_guide_owns_installation_and_oauth_completion() -> None:
     assert tool_setup.index("yt-skills sync") < tool_setup.index("新しいセッション")
     assert tool_setup.index("新しいセッション") < tool_setup.index("/setup --tool")
 
-    for expected in (
-        "/setup --tool",
-        "[HUMAN STEP]",
-        "Download JSON",
-        "done",
-        "uv run yt-doctor --fix-client-secrets",
-        "uv run yt-doctor --apply --json",
-        "apply.stop_reason` が `completed",
-    ):
-        assert expected in recommended
-    assert "client_secrets.template.json" not in recommended
-    assert "転記" not in recommended
-
     onboarding = _read("ONBOARDING.md")
     onboarding_setup = onboarding.split("## 2. ツール導入と API セットアップ", 1)[1].split(
         "### 2.4 初期設定後の GCP 課金確認", 1
@@ -1440,11 +1405,12 @@ def test_public_setup_guide_owns_installation_and_oauth_completion() -> None:
     assert "Download JSON" not in onboarding_setup
 
 
-def test_oauth_module_docstring_documents_download_json_route() -> None:
+def test_oauth_module_docstring_points_to_existing_wizard() -> None:
     oauth_handler = _read("src/youtube_automation/infrastructure/auth/youtube.py")
     module_docstring = oauth_handler.split('"""', 2)[1]
-    for expected in ("Download JSON", "yt-doctor --fix-client-secrets"):
-        assert expected in module_docstring
+    wizard = ".claude/skills/setup/references/oauth-client-wizard.sh"
+    assert f"bash {wizard}" in module_docstring
+    assert (REPO_ROOT / wizard).is_file()
     assert "secret を発行して auth/client_secrets.json に配置" not in module_docstring
 
 
@@ -1849,3 +1815,10 @@ def test_setup_channel_points_scheduled_automation_to_wf_new_schedule() -> None:
     setup_channel = _read(".claude/skills/setup/references/channel-mode.md")
     assert "`scheduled_automation`" in setup_channel
     assert "/wf-new --schedule" in setup_channel
+
+
+def test_oauth_document_entrypoints_reference_existing_wizard() -> None:
+    wizard = ".claude/skills/setup/references/oauth-client-wizard.sh"
+    for guide in (".claude/skills/setup/references/check-runbook.md", "docs/oauth-setup.md"):
+        assert f"bash {wizard}" in _read(guide)
+    assert (ROOT / wizard).is_file()

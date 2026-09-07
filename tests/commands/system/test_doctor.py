@@ -6,6 +6,7 @@ import importlib.metadata
 import json
 import os
 import re
+import shlex
 import shutil
 import site
 import sys
@@ -20,6 +21,7 @@ from httplib2 import ServerNotFoundError
 from PIL import Image as PILImage
 
 import youtube_automation.infrastructure.secrets as secrets_module
+from tests.helpers.paths import REPO_ROOT
 from tests.helpers.video_description import write_video_description_pair
 from youtube_automation.commands.system import doctor
 from youtube_automation.core.errors import ConfigError
@@ -624,10 +626,8 @@ class TestClientSecrets:
         assert str(secrets_dir / "client_secrets.json") in r.message
         assert r.next_action is not None
         instructions = r.next_action["instructions"]
+        assert "bash .claude/skills/setup/references/oauth-client-wizard.sh" in instructions
         assert "fallback 状態" not in instructions
-        assert str(tmp_path / "auth" / "client_secrets.json") in instructions
-        assert str(secrets_dir / "client_secrets.json") not in instructions
-        assert "`CLIENT_SECRETS_DIR` を解除" in instructions
 
     def test_uses_submodule_fallback_path(self, tmp_path):
         self._write_valid_client_secrets(tmp_path / "automation" / "auth" / "client_secrets.json")
@@ -693,22 +693,12 @@ class TestClientSecrets:
 
         assert r.next_action is not None
         instructions = r.next_action["instructions"]
-        for expected in (
-            "Google Auth Platform",
-            "Audience > Test users",
-            "403 access_denied",
-            "Clients > Create client",
-            "Desktop app",
-            "Add secret",
-            "Download JSON",
-            "uv run yt-doctor --fix-client-secrets",
-        ):
-            assert expected in instructions
+        command = instructions.split("`")[1]
+        executable, script = shlex.split(command)
+        assert executable == "bash"
+        assert (REPO_ROOT / script).is_file()
+        # wizard では解けない fallback 取得失敗は誘導へ潰さず原因として残す
         assert "fallback 状態: 1Password / CLIENT_SECRETS_JSON fallback 取得失敗: op read failed" in instructions
-        assert "認証情報を作成 → OAuth クライアント ID" not in instructions
-        assert "作成直後" not in instructions
-        assert "auth/client_secrets.template.json" not in instructions
-        assert "転記" not in instructions
 
     def test_valid(self, tmp_path):
         self._write_valid_client_secrets(tmp_path / "auth" / "client_secrets.json")

@@ -1,4 +1,4 @@
-"""OAuth onboarding text contract tests."""
+"""OAuth onboarding text / credential resolution contracts."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ from pathlib import Path
 
 from tests.helpers.paths import REPO_ROOT
 
-REPO_ROOT = REPO_ROOT
 SETUP_SKILL = REPO_ROOT / ".claude" / "skills" / "setup" / "SKILL.md"
 REGENERATION_MODE_MD = REPO_ROOT / ".claude" / "skills" / "setup" / "references" / "regeneration-mode.md"
 
@@ -51,8 +50,8 @@ def _make_workspace_channel_worktree(tmp_path: Path) -> Path:
     return channel
 
 
-def test_client_secrets_resolution_order_matches_oauth_setup(tmp_path: Path, monkeypatch) -> None:
-    """docs の解決順が実装の候補列と一致する。"""
+def test_client_secrets_resolution_order(tmp_path: Path, monkeypatch) -> None:
+    """チャンネル固有候補を共有候補より先に解決する。"""
     from youtube_automation.infrastructure.auth.youtube import client_secrets_file_candidates
 
     monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)

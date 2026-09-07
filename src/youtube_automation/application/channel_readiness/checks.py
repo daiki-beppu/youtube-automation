@@ -1082,10 +1082,6 @@ def check_client_secrets(channel_dir: Path) -> CheckResult:
         )
     if data is None:
         project_id = _project_id_for(channel_dir) or ""
-        fix_destination = channel_dir / "auth" / "client_secrets.json"
-        override_instructions = (
-            " `CLIENT_SECRETS_DIR` を解除してから fix と再診断を実行してください。" if path != fix_destination else ""
-        )
         return CheckResult(
             id="client_secrets",
             status="fail",
@@ -1097,16 +1093,11 @@ def check_client_secrets(channel_dir: Path) -> CheckResult:
                     if project_id
                     else "https://console.cloud.google.com/apis/credentials"
                 ),
+                # Console 手順の正本は wizard 側にあるため誘導だけを返す。
+                # fallback 取得失敗は wizard では解けない別種の実行時エラーなので付記する。
                 "instructions": (
-                    "Console の Google Auth Platform で Branding を保存し、"
-                    "Audience > Test users に OAuth 認証でログインする Google アカウントを追加してください "
-                    "(未追加だと初回認証が 403 access_denied で止まります)。"
-                    "その後 Clients > Create client で Application type Desktop app を選び、"
-                    "Clients > 対象 client > Client secrets > Add secret で secret を発行してください。"
-                    "続けて Download JSON を実行して Downloads に保存し、"
-                    "`uv run yt-doctor --fix-client-secrets` で "
-                    f"`{fix_destination}` へ自動移動してください。"
-                    + override_instructions
+                    "チャンネルルートで "
+                    "`bash .claude/skills/setup/references/oauth-client-wizard.sh` を起動してください。"
                     + (f" fallback 状態: {fallback_error}" if fallback_error else "")
                 ),
             },
