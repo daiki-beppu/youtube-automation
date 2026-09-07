@@ -339,7 +339,11 @@ class TestCheckGcpProject:
 
         assert result.id == "gcp_project"
         assert result.status == "fail"
-        assert result.next_action is None
+        assert result.next_action["kind"] == "human"
+        assert (
+            result.next_action["url"]
+            == f"https://github.com/{doctor.readiness_checks.UPSTREAM_REPO}/blob/main/infra/terraform/gcp/README.md"
+        )
 
 
 class TestCheckBilling:
@@ -362,7 +366,11 @@ class TestCheckBilling:
         assert result.id == "billing_linked"
         assert result.status == "fail"
         assert result.next_action is not None
-        assert result.next_action["kind"] == "ai-exec"
+        assert result.next_action["kind"] == "human"
+        assert (
+            result.next_action["url"]
+            == f"https://github.com/{doctor.readiness_checks.UPSTREAM_REPO}/blob/main/infra/terraform/gcp/README.md"
+        )
 
 
 class TestCheckApisEnabled:
@@ -389,7 +397,11 @@ class TestCheckApisEnabled:
         assert result.id == "apis_enabled"
         assert result.status == "fail"
         assert result.next_action is not None
-        assert result.next_action["kind"] == "ai-exec"
+        assert result.next_action["kind"] == "human"
+        assert (
+            result.next_action["url"]
+            == f"https://github.com/{doctor.readiness_checks.UPSTREAM_REPO}/blob/main/infra/terraform/gcp/README.md"
+        )
 
 
 class TestCheckAdcQuotaProject:
@@ -454,7 +466,11 @@ class TestCheckIamAiPlatformUser:
         assert result.id == "iam_aiplatform_user"
         assert result.status == "fail"
         assert result.next_action is not None
-        assert result.next_action["kind"] == "ai-exec"
+        assert result.next_action["kind"] == "human"
+        assert (
+            result.next_action["url"]
+            == f"https://github.com/{doctor.readiness_checks.UPSTREAM_REPO}/blob/main/infra/terraform/gcp/README.md"
+        )
 
 
 class TestCheckADC:

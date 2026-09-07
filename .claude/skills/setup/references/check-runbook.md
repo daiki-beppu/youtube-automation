@@ -130,7 +130,7 @@ AI が利用可能な account を取得し、利用者に決定を依頼する:
 3. 選択された ID を `apply_flags` へ仮追加し、必ず先に「GCP 変更 plan の承認」へ戻る。project / billing account と新たに実行可能になる全変更を再表示し、AskUserQuestion で実行が承認された後だけ次を再実行する。中止ならここで停止する:
 
 ```bash
-uv run yt-doctor --apply --json --project-id <project-id> --billing-account <billing-id>
+uv run yt-doctor --json
 ```
 
 billing account が 1 つも無い利用者には、Console URL (`https://console.cloud.google.com/billing`) を提示して billing account 自体の作成を依頼。

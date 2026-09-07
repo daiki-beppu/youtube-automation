@@ -179,8 +179,8 @@ def test_remediation_action_union_owns_public_serialization(
 def test_manual_remediation_fallback_should_drop_internal_action_fields() -> None:
     """ai-exec/human のどちらにも該当しない dict でも argv / auto_apply を公開しない。"""
     action = doctor._remediation_action(
-        {"kind": "decision", "flag": "--billing-account", "argv": ["gcloud", "beta"], "auto_apply": False}
+        {"kind": "decision", "flag": "--project-id", "argv": ["gcloud", "beta"], "auto_apply": False}
     )
 
     assert isinstance(action, doctor.ManualRemediation)
-    assert action.to_public_dict() == {"kind": "decision", "flag": "--billing-account"}
+    assert action.to_public_dict() == {"kind": "decision", "flag": "--project-id"}

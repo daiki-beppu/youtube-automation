@@ -98,6 +98,7 @@ CHANNEL_CATEGORY = "channel"
 DATA_CATEGORY = "data"
 UPLOAD_CATEGORY = "upload"
 
+# storage は上流 tfstate 用で下流に不要。
 REQUIRED_APIS = [
     "youtube.googleapis.com",
     "youtubeanalytics.googleapis.com",
@@ -108,7 +109,6 @@ REQUIRED_APIS = [
 
 MAX_DISPLAY_VALUE_LEN = 120
 GCP_PROJECT_ID_RE = re.compile(r"[a-z][a-z0-9-]{4,28}[a-z0-9]\Z")
-BILLING_ACCOUNT_ID_RE = re.compile(r"[A-Za-z0-9]{6}-[A-Za-z0-9]{6}-[A-Za-z0-9]{6}\Z")
 _APPLY_PROJECT_ID: ContextVar[str | None] = ContextVar("doctor_apply_project_id", default=None)
 
 
@@ -118,7 +118,6 @@ class ApplyKind(Enum):
     NONE = "none"
     AI_EXEC = "ai-exec"
     PROJECT = "project"
-    BILLING = "billing"
 
 
 class CwdSemantics(Enum):
@@ -383,12 +382,6 @@ def _active_run_probe() -> Callable[..., tuple[int, str, str]]:
 def _parse_project_id(value: str) -> str:
     if not GCP_PROJECT_ID_RE.fullmatch(value):
         raise argparse.ArgumentTypeError("project ID は GCP の 6-30 文字形式で指定してください")
-    return value
-
-
-def _parse_billing_account_id(value: str) -> str:
-    if not BILLING_ACCOUNT_ID_RE.fullmatch(value):
-        raise argparse.ArgumentTypeError("billing account ID は XXXXXX-XXXXXX-XXXXXX 形式で指定してください")
     return value
 
 
@@ -836,6 +829,15 @@ def check_gcloud_account() -> CheckResult:
     )
 
 
+def _terraform_gcp_action() -> dict:
+    return {
+        "kind": "human",
+        "instructions": "GCP 層は上流 Terraform が管理する。infra/terraform/gcp/ で "
+        "terraform plan → apply してから再診断してください。",
+        "url": f"https://github.com/{UPSTREAM_REPO}/blob/main/infra/terraform/gcp/README.md",
+    }
+
+
 def check_gcp_project(channel_dir: Path) -> CheckResult:
     project_id = _project_id_for(channel_dir)
     if not project_id:
@@ -843,6 +845,7 @@ def check_gcp_project(channel_dir: Path) -> CheckResult:
             id="gcp_project",
             status="fail",
             message="project_id が環境変数 / ADC quota project のいずれにも無い",
+            next_action=_terraform_gcp_action(),
         )
     code, _, err = _run(["gcloud", "projects", "describe", project_id, "--format=value(projectId)"])
     if code != 0:
@@ -850,6 +853,7 @@ def check_gcp_project(channel_dir: Path) -> CheckResult:
             id="gcp_project",
             status="fail",
             message=f"プロジェクト {project_id} が見つからない: {err.strip()}",
+            next_action=_terraform_gcp_action(),
         )
     return CheckResult(id="gcp_project", status="ok", message=f"プロジェクト {project_id} 存在")
 
@@ -878,19 +882,14 @@ def check_billing(channel_dir: Path) -> CheckResult:
             id="billing_linked",
             status="fail",
             message=f"billing 情報取得失敗: {err.strip()}",
+            next_action=_terraform_gcp_action(),
         )
     if out.strip().lower() != "true":
         return CheckResult(
             id="billing_linked",
             status="fail",
             message=f"プロジェクト {project_id} に billing 未紐付け",
-            next_action={
-                "kind": "ai-exec",
-                "cmd": (
-                    "gcloud beta billing accounts list --format=json で候補確認 → "
-                    f"gcloud beta billing projects link {project_id} --billing-account=<ID>"
-                ),
-            },
+            next_action=_terraform_gcp_action(),
         )
     return CheckResult(id="billing_linked", status="ok", message="billing 紐付け済み")
 
@@ -918,6 +917,7 @@ def check_apis_enabled(channel_dir: Path) -> CheckResult:
             id="apis_enabled",
             status="fail",
             message=f"services list 失敗: {err.strip()}",
+            next_action=_terraform_gcp_action(),
         )
     enabled = set(out.strip().splitlines())
     missing = [a for a in REQUIRED_APIS if a not in enabled]
@@ -926,7 +926,7 @@ def check_apis_enabled(channel_dir: Path) -> CheckResult:
             id="apis_enabled",
             status="fail",
             message=f"未有効 API: {', '.join(missing)}",
-            next_action=_ai_exec_action(["gcloud", "services", "enable", *missing, f"--project={project_id}"]),
+            next_action=_terraform_gcp_action(),
         )
     return CheckResult(
         id="apis_enabled",
@@ -1024,24 +1024,14 @@ def check_iam_aiplatform_user(channel_dir: Path) -> CheckResult:
             id="iam_aiplatform_user",
             status="fail",
             message=f"IAM policy 取得失敗: {err.strip()}",
+            next_action=_terraform_gcp_action(),
         )
     if not out.strip():
         return CheckResult(
             id="iam_aiplatform_user",
             status="fail",
             message=f"user:{account} に roles/aiplatform.user 未付与",
-            next_action=_ai_exec_action(
-                [
-                    "gcloud",
-                    "projects",
-                    "add-iam-policy-binding",
-                    project_id,
-                    f"--member=user:{account}",
-                    "--role=roles/aiplatform.user",
-                    "--condition=None",
-                    "--quiet",
-                ]
-            ),
+            next_action=_terraform_gcp_action(),
         )
     return CheckResult(
         id="iam_aiplatform_user",

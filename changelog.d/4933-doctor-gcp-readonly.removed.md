@@ -1,0 +1,1 @@
+- yt-doctor の GCP 診断を読み取り専用にし、未設定時は上流 Terraform での修復を案内する。--billing-account と GCP 変更の自動実行を削除し、--project-id によるマシン側の project 選択と ADC quota project 設定は維持する。

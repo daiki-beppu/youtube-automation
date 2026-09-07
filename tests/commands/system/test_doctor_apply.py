@@ -152,10 +152,10 @@ def test_apply_refuses_interactive_auth_labelled_as_ai_exec_on_an_executable_che
     """#4447: apply_kind が AI_EXEC の check でも、対話 auth の argv は実行しない。
 
     `adc` / `gcloud_account` は ApplyKind.NONE で早期に止まるため、この経路は
-    実行可能な check（`apis_enabled`）でしか通らない。
+    実行可能な check（`adc_quota_project`）でしか通らない。
     """
     action = _ai_action("gcloud", "auth", "application-default", "login")
-    monkeypatch.setattr(doctor, "run_all_checks", lambda _channel_dir: [_result("apis_enabled", "fail", action)])
+    monkeypatch.setattr(doctor, "run_all_checks", lambda _channel_dir: [_result("adc_quota_project", "fail", action)])
     monkeypatch.setattr(
         doctor,
         "_run_apply_command",
@@ -167,7 +167,7 @@ def test_apply_refuses_interactive_auth_labelled_as_ai_exec_on_an_executable_che
     assert code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["apply"]["stop_reason"] == "human_required"
-    assert payload["apply"]["check_id"] == "apis_enabled"
+    assert payload["apply"]["check_id"] == "adc_quota_project"
 
 
 def test_apply_stops_for_project_decision_without_project_id(monkeypatch, tmp_path: Path, capsys) -> None:
@@ -286,115 +286,48 @@ def test_project_id_does_not_mutate_when_project_check_is_already_ok(monkeypatch
     assert payload["apply"]["executed"] == []
 
 
-def test_apply_stops_for_billing_decision_without_account(monkeypatch, tmp_path: Path, capsys) -> None:
+@pytest.mark.parametrize("check_id", ["billing_linked", "apis_enabled", "iam_aiplatform_user"])
+def test_apply_stops_at_gcp_human_before_oauth(monkeypatch, tmp_path: Path, capsys, check_id: str) -> None:
     action = {
-        "kind": "ai-exec",
-        "cmd": "gcloud beta billing projects link yt-example --billing-account=<ID>",
+        "kind": "human",
+        "instructions": "Terraform plan → apply",
+        "url": "https://example.com/infra/terraform/gcp/README.md",
     }
     monkeypatch.setattr(
         doctor,
         "run_all_checks",
-        lambda _channel_dir: [_result("billing_linked", "fail", action)],
+        lambda _: [
+            _result(check_id, "fail", action),
+            _result("client_secrets", "fail", {"kind": "human", "instructions": "OAuth setup"}),
+        ],
     )
-    monkeypatch.setattr(
-        doctor,
-        "_run_apply_command",
-        lambda _argv, _cwd: (_ for _ in ()).throw(AssertionError("billing decision must not run")),
-    )
-
-    code = doctor.main(["--apply", "--json", "--target", str(tmp_path)])
-
-    assert code == 0
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["apply"]["stop_reason"] == "decision_required"
-    assert payload["apply"]["check_id"] == "billing_linked"
-    assert payload["apply"]["next_action"] == {
-        "kind": "decision",
-        "flag": "--billing-account",
-    }
-
-
-def test_apply_requires_human_when_billing_probe_failed(monkeypatch, tmp_path: Path, capsys) -> None:
-    """describe 失敗（next_action なし）は --billing-account では解決しないため human_required に落とす。"""
-    monkeypatch.setattr(
-        doctor,
-        "run_all_checks",
-        lambda _channel_dir: [_result("billing_linked", "fail")],
-    )
-    monkeypatch.setattr(
-        doctor,
-        "_run_apply_command",
-        lambda _argv, _cwd: (_ for _ in ()).throw(AssertionError("billing probe failure must not run")),
-    )
+    commands = []
+    monkeypatch.setattr(doctor, "_run_apply_command", lambda argv, cwd: commands.append(argv) or (0, "", ""))
 
     code = doctor.main(["--apply", "--json", "--target", str(tmp_path)])
 
     assert code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["apply"]["stop_reason"] == "human_required"
-    assert payload["apply"]["check_id"] == "billing_linked"
-    assert payload["apply"]["next_action"] is None
+    assert payload["apply"]["check_id"] == check_id
+    assert payload["apply"]["next_action"] == action
+    assert payload["apply"]["executed"] == []
+    assert commands == []
 
 
-def test_apply_uses_billing_account_then_continues(monkeypatch, tmp_path: Path, capsys) -> None:
-    action = {
-        "kind": "ai-exec",
-        "cmd": "gcloud beta billing projects link yt-example --billing-account=<ID>",
-    }
-    diagnoses = iter(
-        [
-            [_result("billing_linked", "fail", action)],
-            [_result("billing_linked")],
-        ]
-    )
-    commands: list[tuple[list[str], Path]] = []
-    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "yt-example")
-    monkeypatch.setattr(doctor, "run_all_checks", lambda _channel_dir: next(diagnoses))
-    monkeypatch.setattr(
-        doctor,
-        "_run_apply_command",
-        lambda argv, cwd: commands.append((argv, cwd)) or (0, "", ""),
-    )
-
-    code = doctor.main(
-        [
-            "--apply",
-            "--json",
-            "--billing-account",
-            "ABCDEF-123456-ABCDEF",
-            "--target",
-            str(tmp_path),
-        ]
-    )
-
-    assert code == 0
-    assert commands == [
-        (
-            [
-                "gcloud",
-                "beta",
-                "billing",
-                "projects",
-                "link",
-                "yt-example",
-                "--billing-account=ABCDEF-123456-ABCDEF",
-            ],
-            tmp_path,
-        )
-    ]
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["apply"]["stop_reason"] == "completed"
-    assert payload["apply"]["executed"][0]["cmd"] == (
-        "gcloud beta billing projects link yt-example --billing-account=ABCDEF-123456-ABCDEF"
-    )
+def test_apply_rejects_removed_billing_flag(monkeypatch, tmp_path: Path, capsys) -> None:
+    monkeypatch.setattr(doctor, "run_all_checks", lambda _: [_result("ready")])
+    with pytest.raises(SystemExit) as error:
+        doctor.main(["--apply", "--billing-account", "ABCDEF-123456-ABCDEF", "--target", str(tmp_path)])
+    assert error.value.code == 2
 
 
 def test_apply_stops_with_failed_command_details(monkeypatch, tmp_path: Path, capsys) -> None:
-    action = _ai_action("gcloud", "services", "enable", "example.googleapis.com")
+    action = _ai_action("gcloud", "auth", "application-default", "set-quota-project", "yt-example")
     monkeypatch.setattr(
         doctor,
         "run_all_checks",
-        lambda _channel_dir: [_result("apis_enabled", "fail", action)],
+        lambda _channel_dir: [_result("adc_quota_project", "fail", action)],
     )
     monkeypatch.setattr(
         doctor,
@@ -407,7 +340,7 @@ def test_apply_stops_with_failed_command_details(monkeypatch, tmp_path: Path, ca
     assert code == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["apply"]["stop_reason"] == "command_failed"
-    assert payload["apply"]["check_id"] == "apis_enabled"
+    assert payload["apply"]["check_id"] == "adc_quota_project"
     assert payload["apply"]["cmd"] == action["cmd"]
     assert payload["apply"]["stderr"] == "permission denied"
 
@@ -487,7 +420,6 @@ def test_apply_keeps_pre_install_bootstrap_out_of_scope(monkeypatch, tmp_path: P
     [
         ("--project-id", "--quiet"),
         ("--project-id", "INVALID_PROJECT"),
-        ("--billing-account", "account;rm"),
     ],
 )
 def test_apply_rejects_invalid_decision_values(monkeypatch, flag: str, value: str) -> None:
@@ -500,3 +432,20 @@ def test_apply_rejects_invalid_decision_values(monkeypatch, flag: str, value: st
         doctor.main(["--apply", flag, value])
 
     assert error.value.code == 2
+
+
+def test_apply_missing_project_stops_after_machine_selection(monkeypatch, tmp_path: Path, capsys) -> None:
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.setattr(doctor, "_adc_quota_project", lambda: None)
+    monkeypatch.setattr(doctor, "_run", lambda argv, **kwargs: (1, "", "not found"))
+    monkeypatch.setattr(doctor, "run_all_checks", lambda directory: [doctor.check_gcp_project(directory)])
+    commands = []
+    monkeypatch.setattr(doctor, "_run_apply_command", lambda argv, cwd: commands.append(argv) or (0, "", ""))
+
+    code = doctor.main(["--apply", "--project-id", "yt-example", "--target", str(tmp_path)])
+
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["apply"]["stop_reason"] == "human_required"
+    assert payload["apply"]["next_action"]["kind"] == "human"
+    assert commands == [["gcloud", "config", "set", "project", "yt-example"]]
