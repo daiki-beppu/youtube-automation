@@ -1,0 +1,1 @@
+- channel-research と thumbnail の発動条件に、人間の観察眼を鍛える訓練は `/truth-eye` を使う棲み分けを追加

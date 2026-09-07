@@ -61,3 +61,13 @@ def test_truth_eye_registration_and_cli_workflow_contract():
         "owner": "truth-eye",
         "reason": "人間が記入する訓練記録と、その封印分析（AI 生成・sha256 封印）",
     } in artifacts["allowlists"]["hand_written_inputs"]
+
+
+def test_related_skill_descriptions_point_human_training_to_truth_eye():
+    inventory = SkillInventory(REPO_ROOT / ".claude/skills")
+    truth_eye = inventory.frontmatter("truth-eye")["description"]
+    assert "channel-research" in truth_eye
+    assert "/thumbnail" in truth_eye
+    for skill_name in ("channel-research", "thumbnail"):
+        description = inventory.frontmatter(skill_name)["description"]
+        assert "人間の眼を鍛える訓練は /truth-eye" in description
