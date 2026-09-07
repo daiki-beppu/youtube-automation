@@ -159,7 +159,7 @@ GitHub repository secrets は運用者が `gh secret set <名前>` の stdin へ
 | `TFSTATE_BUCKET` | bootstrap の `bucket_name` output。backend と `TF_VAR_tfstate_bucket` の両方に注入 |
 | `DISCORD_WEBHOOK_URL` | 既存 1Password `YouTube_Stream_Discord_Webhook` |
 
-`cloudresourcemanager.googleapis.com` は drift SA の project 読み取りに必要なため、承認済みの #4932 で `drift-resource-manager.tf` の CI 前提 API として追加する。既存の管理対象 6 API は維持し、この API を別 resource で管理する。Console や drift job から有効化しない。
+`cloudresourcemanager.googleapis.com` は drift SA の project 読み取りに必要なため、承認済みの #4932 で `drift.tf` の CI 前提 API として追加する。既存の管理対象 6 API は維持し、この API を別 resource で管理する。Console や drift job から有効化しない。
 
 main WIF による SA plan と Discord の検知→解消の本番実測は、ユーザー承認によりマージ後の確認事項として残す。ローカル ADC の No changes は WIF / Discord の実測完了を意味しない。初回実行時は SA での plan 成功を確認し、後続の読み取り権限エラーが出たら権限を自動拡張せず診断する。
 
