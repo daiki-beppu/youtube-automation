@@ -86,7 +86,7 @@ def test_collect_channel_restores_environment_and_configuration_after_success(
         assert days == 30
         assert depth == "standard"
         assert os.environ["CHANNEL_DIR"] == str(channel)
-        assert os.environ.get("CHANNEL") == initial_slug
+        assert "CHANNEL" not in os.environ
         (channel / "data").mkdir(parents=True)
         return {"success": True}
 
@@ -102,6 +102,23 @@ def test_collect_channel_restores_environment_and_configuration_after_success(
     assert (channel / "data" / "dashboard_publications.json").is_file()
     assert os.environ.get("CHANNEL_DIR") == initial_dir
     assert os.environ.get("CHANNEL") == initial_slug
+
+
+def test_channel_context_resolves_channel_dir_when_stale_channel_slug_remains(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """単一リポジトリでは残存 CHANNEL を解決できないため、切替中は退避されていなければならない."""
+    channel = tmp_path / "selected"
+    (channel / "config" / "channel").mkdir(parents=True)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CHANNEL_DIR", raising=False)
+    monkeypatch.setenv("CHANNEL", "stale-slug")
+
+    with dashboard_refresh._channel_context(channel):
+        assert configuration.channel_dir() == channel
+
+    assert os.environ["CHANNEL"] == "stale-slug"
 
 
 @pytest.mark.parametrize("days", [7, 30, 90])
@@ -405,7 +422,7 @@ def test_collect_channel_restores_environment_and_raises_automation_error(
         assert days == 30
         assert depth == "standard"
         assert os.environ["CHANNEL_DIR"] == str(tmp_path / "selected")
-        assert os.environ["CHANNEL"] == "previous-slug"
+        assert "CHANNEL" not in os.environ
         return {
             "success": False,
             "error": "reporting collection failed",

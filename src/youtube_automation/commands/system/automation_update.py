@@ -258,12 +258,7 @@ def _run_command(cmd: list[str], cwd: Path) -> int:
         raise _StepFailed(f"{' '.join(cmd)} を起動できません: {e}") from e
 
 
-def _channel_roots(root: Path) -> list[Path]:
-    candidates = [root] if (root / "config" / "channel").is_dir() else []
-    return candidates or [root]
-
-
-def _check_single_channel_config(channel_root: Path) -> str:
+def _check_channel_config(root: Path) -> str:
     cmd = [
         "uv",
         "run",
@@ -272,12 +267,12 @@ def _check_single_channel_config(channel_root: Path) -> str:
         "channel_config",
         "--json",
         "--target",
-        str(channel_root),
+        str(root),
     ]
     try:
         proc = subprocess.run(
             cmd,
-            cwd=channel_root,
+            cwd=root,
             capture_output=True,
             text=True,
             check=False,
@@ -306,14 +301,6 @@ def _check_single_channel_config(channel_root: Path) -> str:
     if proc.returncode != 0:
         return f"{success_message}（warning: yt-doctor の他 check が失敗し exit code {proc.returncode}）"
     return success_message
-
-
-def _check_channel_config(root: Path) -> str:
-    channel_roots = _channel_roots(root)
-    results = [_check_single_channel_config(channel_root) for channel_root in channel_roots]
-    if len(results) == 1:
-        return results[0]
-    return f"{len(results)} チャンネルの config/channel/ ロード成功"
 
 
 def _skills_diff_has_changes(root: Path) -> bool:
