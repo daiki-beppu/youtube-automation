@@ -1,1 +1,0 @@
-- 全 yt-* の共通 --channel / CHANNEL による選択と workspace 自動検出を削除し、CHANNEL_DIR → cwd 祖先の設定解決に統一しました。各コマンド固有の --channel と競合チャンネル向け旧引数の拒否は維持します。

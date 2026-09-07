@@ -1,2 +1,0 @@
-- `yt-channel-export` は削除され、workspace から戻す手段は無くなります。v6.0.0 への更新前に、v5.8.0 の export CLI を使って独立したチャンネルリポジトリへ移行してください。
-- 逆移行ガイドと registry の書込・バックアップ生成を削除しました。registry の読込と `yt-channels` / `yt-dashboard` の利用は継続できます。

@@ -1,2 +1,0 @@
-- 共有プロジェクトの `billing_account` を必須変数にし、`billing_account` / `adc_email` を `sensitive` として plan / apply 出力から秘匿するようにしました。既存の `terraform.tfvars` に `billing_account` がない場合は追記が必要です。
-- 管理対象 API の既定値に `youtubereporting.googleapis.com` を追加し、doctor が要求する API を包含するようにしました。

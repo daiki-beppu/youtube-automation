@@ -1,1 +1,0 @@
-- workspace 専用の `yt-channel` / `yt-channel-import` / `yt-workspace-status` / `yt-workspace-guard` と対応 module を削除しました。チャンネルは独立リポジトリで運用し、一覧は `yt-channels list`、状態確認は各リポジトリの `yt-doctor` / `yt-channel-status` を使用してください。旧 guard hook は `yt-skills sync --asset settings` で除去できます。

@@ -1,1 +1,0 @@
-- `yt-truth-eye seal` と `verify` を追加し、訓練記録と sha256 封印分析を生成・検証可能にした
