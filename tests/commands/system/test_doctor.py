@@ -1233,51 +1233,12 @@ class TestResolveChannelDir:
         r = doctor.resolve_channel_dir(None)
         assert r == tmp_path.resolve()
 
-    def test_common_channel_selection_does_not_redirect_doctor(self, tmp_path, monkeypatch):
-        from youtube_automation.configuration import select_channel
-
-        self._clear_channel_env(monkeypatch)
-        workspace, _channel = self._workspace(tmp_path)
-        monkeypatch.chdir(workspace)
-        select_channel("alpha")
-
-        assert doctor.resolve_channel_dir(None) == workspace.resolve()
-
     def test_workspace_root_without_selection_uses_cwd(self, tmp_path, monkeypatch):
         self._clear_channel_env(monkeypatch)
         workspace, _channel = self._workspace(tmp_path)
         monkeypatch.chdir(workspace)
 
         assert doctor.resolve_channel_dir(None) == workspace.resolve()
-
-    def test_target_remains_higher_priority_than_common_selection(self, tmp_path, monkeypatch):
-        from youtube_automation.configuration import select_channel
-
-        self._clear_channel_env(monkeypatch)
-        workspace, _channel = self._workspace(tmp_path)
-        target = tmp_path / "explicit-target"
-        target.mkdir()
-        monkeypatch.chdir(workspace)
-        select_channel("alpha")
-
-        assert doctor.resolve_channel_dir(str(target)) == target.resolve()
-
-    @pytest.mark.parametrize("selection", ["environment", "explicit"])
-    def test_channel_dir_wins_over_legacy_selection(self, tmp_path, monkeypatch, selection):
-        from youtube_automation.configuration import select_channel
-
-        self._clear_channel_env(monkeypatch)
-        workspace, _channel = self._workspace(tmp_path)
-        target = tmp_path / "standalone"
-        target.mkdir()
-        monkeypatch.chdir(workspace)
-        monkeypatch.setenv("CHANNEL_DIR", str(target))
-        if selection == "environment":
-            monkeypatch.setenv("CHANNEL", "alpha")
-        else:
-            select_channel("alpha")
-
-        assert doctor.resolve_channel_dir(None) == target.resolve()
 
     def test_legacy_channel_env_does_not_redirect_cwd(self, tmp_path, monkeypatch):
         self._clear_channel_env(monkeypatch)

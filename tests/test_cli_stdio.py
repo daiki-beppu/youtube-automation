@@ -178,15 +178,13 @@ def test_cli_entrypoint_configures_utf8_before_importing_target(monkeypatch):
     assert stderr_buffer.getvalue().decode("utf-8") == "import 時エラー — 続行\n"
 
 
-def test_cli_entrypoint_consumes_channel_before_importing_target(monkeypatch):
+def test_cli_entrypoint_preserves_channel_for_target(monkeypatch):
     from youtube_automation import entrypoints
-    from youtube_automation.configuration import loader
 
     monkeypatch.setattr(sys, "argv", ["yt-dummy", "--channel", "alpha", "--dry-run"])
 
     def fake_import_module(_module_name: str) -> object:
-        assert loader._explicit_channel == "alpha"
-        assert sys.argv == ["yt-dummy", "--dry-run"]
+        assert sys.argv == ["yt-dummy", "--channel", "alpha", "--dry-run"]
 
         class TargetModule:
             @staticmethod

@@ -2,67 +2,17 @@
 
 from __future__ import annotations
 
-import sys
 from collections.abc import Callable
 from importlib import import_module
 from typing import cast
 
 from youtube_automation.cli_stdio import configure_utf8_stdio
 
-_CHANNEL_OPTION_CONFLICTS = {
-    "youtube_automation.commands.channel.channel_export",
-    "youtube_automation.commands.analytics.benchmark_collector",
-    "youtube_automation.commands.analytics.fetch_benchmark_comments",
-    "youtube_automation.commands.analytics.video_analyze",
-    "youtube_automation.commands.system.codex_canary_notify",
-    "youtube_automation.commands.system.channels",
-    "youtube_automation.commands.thumbnail.compare_thumbnails",
-}
-
-
-def _consume_channel_option(argv: list[str]) -> str | None:
-    """共通 ``--channel`` を argv から除去し、指定 slug を返す."""
-    slug: str | None = None
-    index = 1
-    while index < len(argv):
-        argument = argv[index]
-        if argument == "--":
-            break
-        if argument == "--channel":
-            if index + 1 >= len(argv) or argv[index + 1].startswith("-"):
-                from youtube_automation.core.errors import ConfigError
-
-                raise ConfigError("--channel には channel slug が必要です")
-            value = argv[index + 1]
-            del argv[index : index + 2]
-        elif argument.startswith("--channel="):
-            value = argument.partition("=")[2]
-            del argv[index]
-        else:
-            index += 1
-            continue
-        if not value:
-            from youtube_automation.core.errors import ConfigError
-
-            raise ConfigError("--channel には空でない channel slug を指定してください")
-        if slug is not None:
-            from youtube_automation.core.errors import ConfigError
-
-            raise ConfigError("--channel は複数回指定できません")
-        slug = value
-    return slug
-
 
 def _run(module_path: str, function_name: str = "main") -> object:
     """Configure CLI stdio before importing and running the real command."""
 
     configure_utf8_stdio()
-    if module_path not in _CHANNEL_OPTION_CONFLICTS:
-        channel = _consume_channel_option(sys.argv)
-        if channel is not None:
-            from youtube_automation.configuration import select_channel
-
-            select_channel(channel)
     target = getattr(import_module(module_path), function_name)
     if not callable(target):
         raise TypeError(f"{module_path}:{function_name} is not callable")

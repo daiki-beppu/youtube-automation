@@ -86,7 +86,6 @@ def test_collect_channel_restores_environment_and_configuration_after_success(
         assert days == 30
         assert depth == "standard"
         assert os.environ["CHANNEL_DIR"] == str(channel)
-        assert "CHANNEL" not in os.environ
         (channel / "data").mkdir(parents=True)
         return {"success": True}
 
@@ -108,7 +107,7 @@ def test_channel_context_resolves_channel_dir_when_stale_channel_slug_remains(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """単一リポジトリでは残存 CHANNEL を解決できないため、切替中は退避されていなければならない."""
+    """CHANNEL が残っていても、収集対象は CHANNEL_DIR で解決する."""
     channel = tmp_path / "selected"
     (channel / "config" / "channel").mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
@@ -422,7 +421,6 @@ def test_collect_channel_restores_environment_and_raises_automation_error(
         assert days == 30
         assert depth == "standard"
         assert os.environ["CHANNEL_DIR"] == str(tmp_path / "selected")
-        assert "CHANNEL" not in os.environ
         return {
             "success": False,
             "error": "reporting collection failed",
