@@ -260,11 +260,12 @@ class BAHMetadataGenerator:
         # 余分なスペース削除
         title = " ".join(title.split())
 
-        # タイトルケース変換（冠詞・前置詞は小文字維持、先頭語は常に大文字）
+        # タイトルケース変換（冠詞・前置詞は小文字維持、各セグメントの先頭語は常に大文字）
         SMALL_WORDS = {"a", "an", "the", "at", "by", "in", "of", "on", "to", "and", "but", "or", "for", "nor"}
+        SEGMENT_SEPARATORS = {"—", "–"}
         words = title.title().split()
         for i, word in enumerate(words):
-            if i > 0 and word.lower() in SMALL_WORDS:
+            if i > 0 and words[i - 1] not in SEGMENT_SEPARATORS and word.lower() in SMALL_WORDS:
                 words[i] = word.lower()
         title = " ".join(words)
 
