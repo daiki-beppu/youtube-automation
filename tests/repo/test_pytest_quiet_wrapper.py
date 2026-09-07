@@ -8,7 +8,9 @@ from pathlib import Path
 
 import pytest
 
-WRAPPER = Path(__file__).resolve().parents[2] / ".claude/skills/automation/references/pytest-quiet.sh"
+from tests.helpers.paths import REPO_ROOT
+
+WRAPPER = REPO_ROOT / ".claude/skills/automation/references/pytest-quiet.sh"
 
 
 @pytest.fixture
