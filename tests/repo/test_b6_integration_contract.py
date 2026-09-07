@@ -117,7 +117,10 @@ MERGE_SOURCE_EXISTS = {"legacy-26", "legacy-27"}
 
 # receipt は B6 統合時点の履歴として凍結するため、その後に恒久削除した owner だけを明示的に除外する。
 # terraform-gcp/ は上流 infra/terraform/gcp/ 専属になり配布を廃止した（#4928）。
-RETIRED_OWNERS = {".claude/skills/setup/references/terraform-gcp/README.md"}
+RETIRED_OWNERS = {
+    ".claude/skills/setup/references/terraform-gcp/README.md",
+    ".claude/skills/setup/references/gcp-bootstrap.md",
+}
 
 
 def _read_receipt() -> dict[str, object]:
@@ -253,7 +256,6 @@ def test_b6_receipt_points_every_mapping_to_an_existing_owner() -> None:
         f"{legacy}benchmark_collector.py": f"{research}benchmark_collector.py",
         f"{legacy}fetch_benchmark_comments.py": f"{research}fetch_benchmark_comments.py",
         f"{legacy}generate_image.py": f"{setup}generate_image.py",
-        f"{legacy}gcp-bootstrap.md": f"{setup}gcp-bootstrap.md",
         f"{legacy}import-mode.md": f"{setup}import-mode.md",
         f"{legacy}regeneration-mode.md": f"{setup}regeneration-mode.md",
         f"{legacy}verification.md": f"{setup}verification.md",
