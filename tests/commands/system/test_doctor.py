@@ -625,6 +625,7 @@ class TestClientSecrets:
         assert r.status == "fail"
         assert str(secrets_dir / "client_secrets.json") in r.message
         assert r.next_action is not None
+        assert "bash .claude/skills/setup/references/oauth-client-wizard.sh" in r.next_action["instructions"]
 
     def test_uses_submodule_fallback_path(self, tmp_path):
         self._write_valid_client_secrets(tmp_path / "automation" / "auth" / "client_secrets.json")

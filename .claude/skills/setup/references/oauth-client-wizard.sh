@@ -252,6 +252,7 @@ FIRST_IN_PROJECT=0
 if confirm "このプロジェクトで Branding / Audience を設定するのは初めてですか？"; then
   FIRST_IN_PROJECT=1
 else
+  # 次は Stage 4 (Clients)。プロジェクト共通の Stage 2・3 は設定済み。
   _STAGE_INDEX=3
   note "Branding / Audience の Stage 2・3 を飛ばします。"
 fi
@@ -336,7 +337,8 @@ pause
 # ── Stage 6: doctor で確認 ────────────────────────────────────────────────
 stage "yt-doctor で確認"
 say "client_secrets check が ok になるか確認します。"
-# --json は check の失敗時も exit 0 なので JSON 内の状態で判定する。
+# check の失敗は exit 0、JSON 出力前の実行失敗は非ゼロになり得る。
+# どちらも JSON を検査し、未読取なら下で未完了として報告する。
 _doctor_json=$(cd "$CHANNEL_DIR" && uv run yt-doctor --json) || true
 _status=$(printf '%s' "$_doctor_json" | (cd "$CHANNEL_DIR" && uv run python -c '
 import json
