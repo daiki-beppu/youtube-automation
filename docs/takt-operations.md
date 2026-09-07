@@ -80,6 +80,38 @@ gh stack sync --prune          # 下段 merge 後の追随。merge 済みロー�
 
 下段を直したくなったら `gh stack down` で降りて直し、`gh stack rebase --upstack` で上段へ波及させる。上段の branch で下段の修正をしない(PR の差分が混ざる)。
 
+### 修正中の CI
+
+修正を繰り返す間は **直接修正した段と最上段の CI を完走**させ、伝播だけの中間段は延期する。例: `main ← A ← B（修正）← C ← D` なら B / D を検証し、C の run をキャンセルする。複数段を直接修正した場合はすべて実行対象に含める。rebase の競合解消で内容を変えた段も直接修正として扱う。対象が不明な段は実行する。
+
+これはエージェントが push 後に行う運用であり、自動判別機能ではない。workflow は各段で一度起動するため、起動数や runner 使用量をゼロにはできない。キャンセルした段を検証済みとは扱わず、最上段の成功も途中の各段の成功を保証するものとは扱わない。既存の changed-path / affected-test 選別はそのまま適用される。
+
+1. rebase 前に `gh stack view --json` で stack を確認し、直接修正した PR と最上段の PR を特定する。作業中の修正はローカルでまとめて検証してから伝播し、push の回数も抑える。
+2. `gh stack rebase --upstack` → `gh stack top` → `gh stack push` を実行する。競合解消があれば実行対象にその段を追加する。
+3. 伝播だけの中間 PR ごとに最新 HEAD と run を照合する。下のコマンドの `<PR番号>` / `<branch>` / `<最新HEAD>` は取得した値に置き換える。
+
+   ```bash
+   gh pr view <PR番号> --json headRefName,headRefOid
+   gh run list --branch <branch> --commit <最新HEAD> --event pull_request --limit 100 \
+     --json databaseId,workflowName,headSha,status,conclusion,url
+   ```
+
+4. 対象 PR の最新 HEAD に対する、後述「CI 失敗の自動修正」の PR をゲートする 5 workflow の queued / in_progress run だけを `gh run cancel <run-id>` で止める。`Code review`、autofix、main push、release、他 stack の run は対象外。起動が遅れている場合は再取得し、キャンセル要求後も終了を確認する。すでに完了した run はその結果を保持する。
+5. 延期した PR 番号・HEAD・workflow・run ID を作業報告に残す。修正段と最上段の最新 HEAD で対象 CI が完了し、成功したことを確認するまで修正ループを終えない。コードレビューは既存のゲートに従う。
+
+`[skip ci]` や必須チェックの削除による省略は使わない。キャンセルによる未検証状態はそのまま残し、次のマージ前手順で解消する。
+
+### マージ前の全段検証
+
+1. 指定 PR までの全段について、最新 `headRefOid` と必要な CI / review の結果を再取得する。報告に残した延期一覧だけでなく、`gh pr checks <PR番号>` も照合する。
+2. 最新 HEAD に対応する延期 run を `gh run rerun <run-id>` で **全 job 再実行**する（`--failed` は使わない）。進行中なら完了を待つ。すでに同じ HEAD の有効な検証が成功していれば、重複再実行は不要。
+3. 再実行は元イベントの SHA / ref を使うため、旧 HEAD の run を再実行しても最新 HEAD の検証にはならない。HEAD または検証対象の base が進んだ場合は、その状態に対応する新しい run を確認する。run が未作成・期限切れ等で再実行できない場合は、通常の PR 更新による新規検証を成立させてから先へ進む。
+4. 各段の必須チェックと実行対象 CI / review が成功し、保留・キャンセル・失敗した必要チェックがなく、HEAD が検証中から変わっていないことを確認して、下記の `gh stack merge` へ進む。キャンセルを理由に required check を弱めない。
+
+コマンドの仕様: [gh run cancel](https://cli.github.com/manual/gh_run_cancel)、[gh run rerun](https://cli.github.com/manual/gh_run_rerun)、[再実行時の SHA / ref](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs)。
+
+`github/gh-stack` の `top` は最上段への移動、`push` は既存 stack の active branch の push 専用コマンドである（[公式コマンド一覧](https://github.com/github/gh-stack/blob/main/skills/gh-stack/references/commands.md)）。`submit` は push に加えて PR / stack の作成・更新も行う。2026-09-07 に `gh stack top --help` / `gh stack push --help` で実在と引数を確認済み。環境の CLI と食い違う場合は、その環境の `--help` を確認する。
+
 ### merge
 
 `gh pr merge` は stacked PR に効かない。
@@ -98,6 +130,8 @@ gh stack merge <stack番号|PR番号> --yes --squash
 | `gh stack submit` | `--auto` | PR タイトルを 1 件ずつ対話で聞く |
 | `gh stack init` / `add` / `checkout` | branch 名・番号を positional で渡す | 対話メニューが出る |
 | `gh stack merge` | `--yes` | 対話ウィザードが出る |
+
+`gh stack top` / `push` / `rebase --upstack` は非対話で実行でき、対話抑制フラグは不要。`push` / `rebase` は複数 remote の場合に `remote.pushDefault` または `--remote origin` を指定する。`--upstack` は対話抑制ではなく伝播範囲の指定である。
 
 ### 落とし穴
 

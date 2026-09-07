@@ -33,6 +33,7 @@ YouTube チャンネル運営を自動化するツールキット。`youtube-cha
 - このリポジトリでは takt を使用しない。実装・検証・レビュー対応は worktree 上のエージェントセッションで直接進める。issue / worktree 運用は `docs/takt-operations.md` を参照する
 - issue は **1 issue = 1 PR = 1 振る舞い変更**の粒度に割る（要件 3 件以上 / 影響ファイル 4 件以上 / 独立した関心事 2 つ以上 / 複数 PR 見込みのいずれかで分割）。分割は sub-issue で階層化し、実装順の依存は `addBlockedBy` で表す
 - PR は **stacked PR 前提**。worktree 内で `gh stack init` / `add` で積む。merge は `gh pr merge` ではなく `gh stack merge --yes --squash`（非対話フラグと落とし穴は `docs/takt-operations.md`）
+- stack の修正を上段へ伝播するときは `docs/takt-operations.md`「修正中の CI」を参照する。修正段と最上段の CI を完走させ、中間段はキャンセルで延期する。マージ前は対象全段の最新 HEAD を検証する。
 - 開発は必ず issue 専用 linked worktree 上で行う（メイン作業ツリーで直接ブランチを切らない）
 - commit は日本語 Conventional Commits + タイトル末尾に `(#<N>)`。stack の PR タイトルは commit から自動生成されるため 1 branch 1 commit に寄せる
 - リリースは `/automation-release`（post-release は `/release-notes`）
