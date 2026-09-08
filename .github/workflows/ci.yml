@@ -187,7 +187,7 @@ jobs:
           PY
           )
           echo "Selected pytest targets: ${#targets[@]}/${total_count}"
-          nix develop --command uv run pytest -n auto -- "${targets[@]}"
+          nix develop --command bash .claude/skills/automation/references/pytest-quiet.sh -n auto -- "${targets[@]}"
 
   test-behavioral:
     needs: changes
@@ -208,7 +208,7 @@ jobs:
       - name: Install dependencies
         run: nix develop --command uv sync
       - name: Behavioral tests
-        run: nix develop --command uv run pytest -n auto -m "not repo_contract and not slow"
+        run: nix develop --command bash .claude/skills/automation/references/pytest-quiet.sh -n auto -m "not repo_contract and not slow"
 
   test-repository-contract:
     needs: changes
@@ -229,7 +229,7 @@ jobs:
       - name: Install dependencies
         run: nix develop --command uv sync
       - name: Repository contract tests
-        run: nix develop --command uv run pytest -n auto -m "repo_contract and not slow"
+        run: nix develop --command bash .claude/skills/automation/references/pytest-quiet.sh -n auto -m "repo_contract and not slow"
 
   test-slow:
     needs: changes
@@ -250,7 +250,7 @@ jobs:
       - name: Install dependencies
         run: nix develop --command uv sync
       - name: Slow tests
-        run: nix develop --command uv run pytest -n auto -m slow
+        run: nix develop --command bash .claude/skills/automation/references/pytest-quiet.sh -n auto -m slow
 
   # branch protection の required check 名を維持し、selected/full/extension-only の
   # いずれでも実行された lane の成功だけを集約する。
@@ -303,13 +303,13 @@ jobs:
           candidate_wheel=$(find dist -maxdepth 1 -name '*.whl' -print -quit)
           test -n "$candidate_wheel"
           YTA_CANDIDATE_WHEEL="$candidate_wheel" \
-            nix develop --command uv run pytest tests/repo/test_skills_sync_installed_wheel.py -q
+            nix develop --command bash .claude/skills/automation/references/pytest-quiet.sh tests/repo/test_skills_sync_installed_wheel.py -q
       - name: Smoke test installed wheel dashboard
         run: |
           candidate_wheel=$(find dist -maxdepth 1 -name '*.whl' -print -quit)
           test -n "$candidate_wheel"
           YTA_CANDIDATE_WHEEL="$candidate_wheel" \
-            nix develop --command uv run pytest tests/repo/test_dashboard_packaging.py -q
+            nix develop --command bash .claude/skills/automation/references/pytest-quiet.sh tests/repo/test_dashboard_packaging.py -q
 
   windows-cost-tracker:
     needs: changes
@@ -324,9 +324,11 @@ jobs:
       - name: Install dependencies
         run: uv sync
       - name: Test cost tracker on Windows
-        run: uv run pytest tests/infrastructure/test_cost_tracker.py -q
+        shell: bash
+        run: bash .claude/skills/automation/references/pytest-quiet.sh tests/infrastructure/test_cost_tracker.py -q
       - name: Test collection serve import on Windows
-        run: uv run pytest tests/commands/collections/test_collection_serve.py::test_module_import_succeeds_without_fcntl -q
+        shell: bash
+        run: bash .claude/skills/automation/references/pytest-quiet.sh tests/commands/collections/test_collection_serve.py::test_module_import_succeeds_without_fcntl -q
 
   changelog:
     runs-on: ubuntu-latest

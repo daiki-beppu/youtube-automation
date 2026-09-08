@@ -241,7 +241,7 @@ nix develop
 
 ### 6.2 開発フロー
 
-- **テスト**: `uv run pytest`
+- **テスト**: `bash .claude/skills/automation/references/pytest-quiet.sh`
 - **Lint**: `uv run ruff check .`
 - **設定アクセス**: チャンネル固有値は `from youtube_automation.configuration import load_config` 経由で取得する。ハードコーディング禁止。詳細は [`CLAUDE.md`](CLAUDE.md) の「開発規約」節
 - **新規 CLI**: `yt-*` プレフィックスを必ず付け、`pyproject.toml` の `[project.scripts]` に entry point を登録する

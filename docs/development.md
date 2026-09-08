@@ -17,10 +17,30 @@ nix develop
 変更は必ず issue 用の linked worktree 上で行う。worktree を作成・移動した後も、その checkout で devShell（direnv または `nix develop`）に入る。親 checkout の `.venv` / `node_modules` は共有しない。
 
 - **対話 shell**: direnv があれば `direnv allow` 一回で `.envrc`（nix-direnv 経由の `use flake`）が devShell へ自動入室させる。なければ `nix develop` を使う。どちらも shellHook が `uv sync` を自動実行する（失敗は warning で入場継続）
-- **非対話 shell / agent**: `nix develop --command <command> [args...]` を正規入口とする。例: `nix develop --command uv run pytest tests/commands/system/test_doctor.py -q`
+- **非対話 shell / agent**: `nix develop --command <command> [args...]` を正規入口とする。例: `nix develop --command bash .claude/skills/automation/references/pytest-quiet.sh tests/commands/system/test_doctor.py -q`
 - **依存同期を fail-closed にしたい場合**: `nix develop --command uv sync` を明示実行する。exit 非 0 なら依存は同期されていないので、後続コマンドを実行しない
 
 worktree の生成・命名・issue / PR 運用は [`docs/takt-operations.md`](takt-operations.md) を参照する。実装・検証は worktree 上のエージェントセッションで直接進める。
+
+## pytest の成功ログを抑える
+
+agent のテスト実行では、devShell 内で次のラッパーを使う。
+
+```bash
+nix develop --command bash .claude/skills/automation/references/pytest-quiet.sh -n auto tests/commands/system/test_doctor.py
+```
+
+pytest の引数はそのまま渡す。追加依存はなく、Bash と `mktemp` / `cat` / `rm` を使い、
+`uv run pytest` を一度だけ実行する。成功時は `pytest: success (exit 0, 3s)` のような
+1 行だけ、失敗時（収集エラー・引数エラー・テスト未検出を含む）は標準出力・標準エラーを
+全量表示し、元の終了コードを返す。一時ログは終了時に削除する。
+
+成功した実行の warning や skip 詳細も非表示になる。実行中の進捗や成功ログを確認したい場合、
+`--collect-only` の一覧が必要な場合は直接 `uv run pytest` を使う。
+`-h` / `--help` / `-V` / `--version` / `--pdb` / `--trace` は出力を捕捉せず直接実行する。
+CI の pytest job とローカルの affected-test runner も同じラッパーを使う。
+Codex Cloud task では `UV_NO_SYNC=1 bash .claude/skills/automation/references/pytest-quiet.sh <targets>`
+で準備済み環境を使い、`nix develop` や依存同期を実行しない。
 
 ## プロジェクト固有コマンド（全量）
 
@@ -48,11 +68,11 @@ devShell の shellHook が実行する `uv sync` で main dependencies と defau
 ユニットテストスイートは待ち時間支配（実 sleep / subprocess 待ち。#2087 の計測で wall 213.5s に対し CPU 合計 ~43s）のため、[pytest-xdist](https://pytest-xdist.readthedocs.io/) による並列実行が有効。dev dependency に含まれている。
 
 ```bash
-uv run pytest -n auto                            # 全スイートを CPU コア数の worker で並列実行
-uv run pytest tests/ --ignore=tests/integration -n auto   # ユニットのみ並列実行
-uv run pytest tests/ --ignore=tests/integration -n auto -m "not repo_contract and not slow"  # behavioral fast lane
-uv run pytest tests/ --ignore=tests/integration -n auto -m "repo_contract and not slow"  # docs / CI / packaging 契約（slow との重複なし）
-uv run pytest tests/ --ignore=tests/integration -n auto -m slow           # 実 tool / process / 待機を含む lane
+bash .claude/skills/automation/references/pytest-quiet.sh -n auto                            # 全スイートを CPU コア数の worker で並列実行
+bash .claude/skills/automation/references/pytest-quiet.sh tests/ --ignore=tests/integration -n auto   # ユニットのみ並列実行
+bash .claude/skills/automation/references/pytest-quiet.sh tests/ --ignore=tests/integration -n auto -m "not repo_contract and not slow"  # behavioral fast lane
+bash .claude/skills/automation/references/pytest-quiet.sh tests/ --ignore=tests/integration -n auto -m "repo_contract and not slow"  # docs / CI / packaging 契約（slow との重複なし）
+bash .claude/skills/automation/references/pytest-quiet.sh tests/ --ignore=tests/integration -n auto -m slow           # 実 tool / process / 待機を含む lane
 python .github/scripts/run-affected-tests.py                              # worktree差分へCI共通selectorを適用
 ```
 
@@ -208,16 +228,16 @@ lint は本文の意味や実際の API 操作、docs / features catalog の横�
 
 ```bash
 # 全 skill 横断の実行契約（frontmatter strict YAML / docs・配布参照整合）
-uv run pytest tests/commands/system/test_skill_frontmatter_yaml.py tests/repo/test_skill_docs_consistency.py -n auto
+bash .claude/skills/automation/references/pytest-quiet.sh tests/commands/system/test_skill_frontmatter_yaml.py tests/repo/test_skill_docs_consistency.py -n auto
 
 # 編集した skill に個別契約テストがあれば併走する。探し方:
 rg -l '<skill-name>' tests/
 
 # 配布経路（sync / packaging）を触った場合のみ:
-uv run pytest tests/commands/system/test_skills_sync.py tests/commands/system/test_skills_sync_package.py tests/commands/system/test_skills_sync_claude_md.py -n auto
+bash .claude/skills/automation/references/pytest-quiet.sh tests/commands/system/test_skills_sync.py tests/commands/system/test_skills_sync_package.py tests/commands/system/test_skills_sync_claude_md.py -n auto
 
 # candidate wheel を隔離 venv へ installし、擬似下流への全 asset sync / diff を貫通確認:
-uv run pytest tests/repo/test_skills_sync_installed_wheel.py -q
+bash .claude/skills/automation/references/pytest-quiet.sh tests/repo/test_skills_sync_installed_wheel.py -q
 ```
 
 最終的な担保は CI の全体 pytest。上記はローカルの高速フィードバック用で、全体スイートの代替ではない。
@@ -226,7 +246,7 @@ uv run pytest tests/repo/test_skills_sync_installed_wheel.py -q
 
 - **upstream（本リポジトリ内）**: `uv run yt-skills list/diff/sync` は editable fallback によりリポジトリ直下の `.claude/skills/` を直接読む（wheel ビルド不要。編集が即反映される）
 - **下流（チャンネルリポジトリ）**: pin されたリリース版 wheel に焼き込まれた `_skills/` を読む。**upstream で編集しただけでは下流の `yt-skills diff/sync` には一切反映されない**
-- release前の packaged-resource 経路は `uv run pytest tests/repo/test_skills_sync_installed_wheel.py -q` で再現できる。testはcandidate wheelをrepository外の一時directoryへbuildし、隔離venvへ非editable installしてから、空の擬似下流へ全assetをsyncする。同期後のtreeをsourceとbyte単位で比較し、`.agents/skills` symlinkとinstalled `yt-skills diff` の差分なしも確認する
+- release前の packaged-resource 経路は `bash .claude/skills/automation/references/pytest-quiet.sh tests/repo/test_skills_sync_installed_wheel.py -q` で再現できる。testはcandidate wheelをrepository外の一時directoryへbuildし、隔離venvへ非editable installしてから、空の擬似下流へ全assetをsyncする。同期後のtreeをsourceとbyte単位で比較し、`.agents/skills` symlinkとinstalled `yt-skills diff` の差分なしも確認する
 - CI `build-smoke` も同じpytest targetへbuild済みwheelを `YTA_CANDIDATE_WHEEL` で渡すため、ローカルとCIで判定ロジックを二重管理しない。環境変数未指定のローカル実行ではtest自身が一時領域へwheelをbuildする
 - このsmokeが保証するのは、candidate wheelから資格情報を持たない標準layoutの擬似下流への配布内容と冪等性まで。実チャンネル固有差分、release作成、pin更新、認証を含む `/automation --update` の運用確認は引き続きリリース後に行う
 
@@ -312,7 +332,7 @@ Python 側の未使用コード検出は、追加依存なしで CI に載って
 devShell の運用:
 
 - **devShell 入場コスト**: `.envrc` は [nix-direnv](https://github.com/nix-community/nix-direnv) をブートストラップし、評価済み dev 環境を `.direnv/` にキャッシュする。`flake.nix` / `flake.lock` / `.envrc` が変わらない限り入場時に nix を起動しないため、dirty worktree でも 2 回目以降の `direnv exec` は 1 秒未満で安定する（direnv stdlib の `use_flake` は入場のたびに `nix print-dev-env` を実行するため、flake 評価コストが毎回壁時計に乗り 7〜80 秒まで変動していた。issue #2097）。shellHook（`uv sync`）はキャッシュヒット時も毎入場で実行される。worktree ごとの初回入場のみキャッシュ生成（20 秒前後）が走る。nix-direnv の direnvrc 本体は初回のみ GitHub から取得しハッシュ検証のうえ `~/.cache/direnv/cas/` に永続キャッシュされる（オフライン初回のみ失敗し得る。その場合は `nix develop` 経路を使う）
-- **devShell 内での実行**: direnv の自動入室が有効な shell ではそのまま `uv run pytest` 等を実行できる。agent や非対話 shell では `nix develop --command uv run pytest` のように実行すると、同じ devShell 内でコマンドを実行できる
+- **devShell 内での実行**: direnv の自動入室が有効な shell ではそのまま `bash .claude/skills/automation/references/pytest-quiet.sh` 等を実行できる。agent や非対話 shell では `nix develop --command bash .claude/skills/automation/references/pytest-quiet.sh` のように実行すると、同じ devShell 内でコマンドを実行できる
 - **skill script の直接実行**: project import / entry point を使う skill script は通常の `uv run` で worktree-local `.venv` を lockfile へ同期してから実行する。環境準備に失敗した場合は外部 API / Codex 呼び出し前に停止し、`nix develop --command <command> [args...]` で再実行する。標準ライブラリだけの補助 Python は `uv run --no-sync` を許容するが、project code には使わない（Claude Code hook は次項の例外）
 - **Claude Code hook の実行**: 本リポジトリ用 `.claude/settings.json` の hook コマンドは devShell の外で、しかも pytest 実行中にも発火するため、上の「project code には `--no-sync` を使わない」規約の対象外とし、project entry point（`yt-progress-hook`）でも `uv run --no-sync` を使う。hook が lockfile 同期を試みると nix 外の CPython が解決されて `.venv` を丸ごと作り直し、実行中テストの console script subprocess を壊す（issue #4605）。`.venv` の正規の構築経路は devShell の shellHook（`uv sync`）であり、hook は既存 `.venv` を読むだけに留める。下流配布用 `.claude/settings.template.json` は uv が venv を管理する前提なので従来どおり `uv run`（`--no-sync` なし）を保つ
 - **worktree 間の依存境界**: 共有するのは uv cache と pnpm content-addressable store だけとし、`.venv` / `node_modules` は各 worktree で生成する。親 checkout や sibling worktree の環境を symlink・コピーせず、branch ごとの lockfile、editable path、entry point を実行中 checkout と一致させる

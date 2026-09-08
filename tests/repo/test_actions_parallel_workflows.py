@@ -26,16 +26,18 @@ _CI_LINT_PARALLEL_STEPS = {
     "pyscn check": "nix develop --command uv run pyscn check src/youtube_automation",
 }
 
+_PYTEST_COMMAND = "nix develop --command bash .claude/skills/automation/references/pytest-quiet.sh"
+
 _CI_FULL_TEST_JOBS = {
     "test-behavioral": (
         "Behavioral tests",
-        'nix develop --command uv run pytest -n auto -m "not repo_contract and not slow"',
+        _PYTEST_COMMAND + ' -n auto -m "not repo_contract and not slow"',
     ),
     "test-repository-contract": (
         "Repository contract tests",
-        'nix develop --command uv run pytest -n auto -m "repo_contract and not slow"',
+        _PYTEST_COMMAND + ' -n auto -m "repo_contract and not slow"',
     ),
-    "test-slow": ("Slow tests", "nix develop --command uv run pytest -n auto -m slow"),
+    "test-slow": ("Slow tests", _PYTEST_COMMAND + " -n auto -m slow"),
 }
 
 _SUNO_FAST_PARALLEL_STEPS = {
@@ -303,7 +305,7 @@ def test_ci_required_jobs_always_report_and_aggregate_only_successful_lanes() ->
     assert jobs["windows-cost-tracker"]["if"] == "needs.changes.outputs.windows == 'true'"
     windows_steps = jobs["windows-cost-tracker"]["steps"]
     collection_serve_import_test = (
-        "uv run pytest tests/commands/collections/test_collection_serve.py"
+        "bash .claude/skills/automation/references/pytest-quiet.sh tests/commands/collections/test_collection_serve.py"
         "::test_module_import_succeeds_without_fcntl -q"
     )
     assert any(step.get("run") == collection_serve_import_test for step in windows_steps)
@@ -354,7 +356,7 @@ def test_ci_selected_and_full_plans_use_separate_runner_jobs() -> None:
     )
     selected = _top_level_step(selected_job["steps"], "Selected tests")
     assert 'targets=("${plan_lines[@]:1}")' in selected["run"]
-    assert 'pytest -n auto -- "${targets[@]}"' in selected["run"]
+    assert 'pytest-quiet.sh -n auto -- "${targets[@]}"' in selected["run"]
 
     for job_name, (step_name, command) in _CI_FULL_TEST_JOBS.items():
         job = jobs[job_name]
@@ -411,9 +413,8 @@ def test_ci_pr_executes_only_selected_targets_and_logs_selected_over_total(tmp_p
     assert arguments == [
         "develop",
         "--command",
-        "uv",
-        "run",
-        "pytest",
+        "bash",
+        ".claude/skills/automation/references/pytest-quiet.sh",
         "-n",
         "auto",
         "--",
