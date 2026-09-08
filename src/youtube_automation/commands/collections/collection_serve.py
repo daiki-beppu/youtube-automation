@@ -57,8 +57,10 @@ from youtube_automation.commands.collections.collection_serve_discovery import (
     create_discovery_lifecycle,
     handle_registry_request,
 )
-from youtube_automation.configuration import Distrokid, channel_dir, load_config
+from youtube_automation.configuration import Distrokid, load_config
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import ConfigError, MediaStoreError, WorkflowStateError
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.distrokid.metadata import parse_album_metadata
 from youtube_automation.domains.distrokid.release import (
@@ -79,6 +81,7 @@ from youtube_automation.domains.suno.downloaded import (
     read_pattern_count,
 )
 from youtube_automation.domains.suno.downloaded.apply import (
+    DownloadedApplyResult,
     apply_downloaded_artifacts_detailed,
     cleanup_downloaded_archive,
 )
@@ -161,7 +164,6 @@ from youtube_automation.infrastructure.localserver.lifecycle import (
 from youtube_automation.infrastructure.localserver.lifecycle import (
     write_pid_file as _write_pid_file,
 )
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 from youtube_automation.infrastructure.media_store import R2MediaStore, R2MediaStoreConfig
 from youtube_automation.infrastructure.notifications.discord import create_discord_notification_sink
 
@@ -474,16 +476,20 @@ def _read_music_downloaded_flag(coll_dir: Path) -> bool:
     return assets.get("music_downloaded") is True
 
 
-def _read_music_expected_file_count(coll_dir: Path) -> int | None:
-    """workflow-state.json から full playlist download の期待ファイル数を読む."""
+def _read_music_plan(coll_dir: Path) -> dict[str, object]:
+    """Read the optional music plan, tolerating missing or malformed sections."""
     ws_path = CollectionPaths(coll_dir).workflow_state_path
     data = _read_workflow_state_lenient(ws_path)
     planning = data.get("planning")
     if not isinstance(planning, dict):
-        return None
+        return {}
     music = planning.get("music")
-    if not isinstance(music, dict):
-        return None
+    return music if isinstance(music, dict) else {}
+
+
+def _read_music_expected_file_count(coll_dir: Path) -> int | None:
+    """workflow-state.json から full playlist download の期待ファイル数を読む."""
+    music = _read_music_plan(coll_dir)
     expected = music.get("expected_file_count")
     if isinstance(expected, int) and not isinstance(expected, bool) and expected > 0:
         return expected
@@ -492,14 +498,7 @@ def _read_music_expected_file_count(coll_dir: Path) -> int | None:
 
 def _read_music_suno_playlist_url(coll_dir: Path) -> str | None:
     """workflow-state.json から保存済み Suno playlist URL を読む."""
-    ws_path = CollectionPaths(coll_dir).workflow_state_path
-    data = _read_workflow_state_lenient(ws_path)
-    planning = data.get("planning")
-    if not isinstance(planning, dict):
-        return None
-    music = planning.get("music")
-    if not isinstance(music, dict):
-        return None
+    music = _read_music_plan(coll_dir)
     url = music.get("suno_playlist_url")
     if isinstance(url, str) and url:
         return url
@@ -998,6 +997,28 @@ def _server_metadata(
     return resolved
 
 
+def _downloaded_response_payload(cid: str, apply_result: DownloadedApplyResult, *, include_summary: bool) -> dict:
+    """Build the legacy acknowledgement and optional applied-download summary."""
+    resp: dict = {"ok": True, "collection_id": cid, "placed_count": apply_result.placed_count}
+    # playlist URL だけを記録する先行 POST は legacy 応答を維持し、実 ZIP 適用後だけ summary を返す。
+    if include_summary:
+        missing_file_count = max(apply_result.expected_count - apply_result.placed_count, 0)
+        resp.update(
+            expected_file_count=apply_result.expected_count,
+            missing_file_count=missing_file_count,
+        )
+        # 部分完了（Suno が期待数未満しか生成しないケース）は 500 にせず warning で返す（#1913）
+        if 0 < apply_result.placed_count < apply_result.expected_count:
+            missing_reasons = apply_result.missing_reasons
+            resp["missing_reasons"] = missing_reasons
+            resp["warning"] = (
+                f"placed {apply_result.placed_count} files, expected {apply_result.expected_count} "
+                f"({missing_file_count} missing; Suno 未生成 {missing_reasons['suno_unfulfilled']} / "
+                f"配置 skip {missing_reasons['apply_skipped']})"
+            )
+    return resp
+
+
 def create_server(
     port: int,
     allow_origin: str | None,
@@ -1326,24 +1347,7 @@ def create_server(
             except (MediaStoreError, WorkflowStateError) as exc:
                 return _server_error(exc)
         cleanup_downloaded_archive(parsed)
-        resp: dict = {"ok": True, "collection_id": cid, "placed_count": apply_result.placed_count}
-        # playlist URL だけを記録する先行 POST は legacy 応答を維持し、実 ZIP 適用後だけ summary を返す。
-        if parsed.download_path:
-            missing_file_count = max(apply_result.expected_count - apply_result.placed_count, 0)
-            resp.update(
-                expected_file_count=apply_result.expected_count,
-                missing_file_count=missing_file_count,
-            )
-            # 部分完了（Suno が期待数未満しか生成しないケース）は 500 にせず warning で返す（#1913）
-            if 0 < apply_result.placed_count < apply_result.expected_count:
-                missing_reasons = apply_result.missing_reasons
-                resp["missing_reasons"] = missing_reasons
-                resp["warning"] = (
-                    f"placed {apply_result.placed_count} files, expected {apply_result.expected_count} "
-                    f"({missing_file_count} missing; Suno 未生成 {missing_reasons['suno_unfulfilled']} / "
-                    f"配置 skip {missing_reasons['apply_skipped']})"
-                )
-        return _json_body(resp)
+        return _json_body(_downloaded_response_payload(cid, apply_result, include_summary=bool(parsed.download_path)))
 
     # --- protocol-level routes ---
 
@@ -1484,14 +1488,8 @@ def _resolve_allow_origin(
     return detected.origin, detected
 
 
-def main() -> None:
-    # nohup / file redirect 下でも extension 検出結果を起動直後に診断できるよう、
-    # block buffering を行バッファへ切り替える。pytest の StringIO 等は reconfigure
-    # を持たないため、その場合はそのまま使う。
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if callable(reconfigure):
-            reconfigure(line_buffering=True)
+def _build_argument_parser() -> argparse.ArgumentParser:
+    """Declare the public CLI independently of startup and shutdown effects."""
     parser = argparse.ArgumentParser(
         description=(
             "Serve collection artifacts over localhost HTTP for the suno-helper / distrokid-helper / "
@@ -1558,6 +1556,97 @@ def main() -> None:
             f"{_DISTROKID_RELEASES_ROUTE} (env fallback: {_DISTROKID_CAPTURE_ROOT_ENV})"
         ),
     )
+    return parser
+
+
+def _print_server_routes(
+    collection_dir: Path,
+    collection_count: int,
+    prompts_path: Path | None,
+    server_info: dict,
+    port: int,
+    distrokid_enabled: bool,
+) -> None:
+    canonical_url = str(server_info["base_url"])
+    if collection_count:
+        print(f"Serving {collection_count} collections from {collection_dir} at {canonical_url}{COLLECTIONS_ROUTE}")
+        print(f"  legacy URL: http://localhost:{port}{COLLECTIONS_ROUTE}")
+        print(f"  selector label: {server_info['label']}")
+        if distrokid_enabled:
+            print(
+                f"  distrokid dir mode enabled: {_DISTROKID_COLLECTIONS_ROUTE}, "
+                f"{COLLECTIONS_ROUTE}/<id>/distrokid/<disc>/release.json"
+            )
+    else:
+        print(f"Serving {collection_dir} at {canonical_url}")
+        if prompts_path is not None:
+            print(f"  suno endpoint: {SUNO_PROMPTS_ROUTE}")
+        print(f"  community endpoints: {COMMUNITY_POSTS_ROUTE}, {COMMUNITY_IMAGE_ROUTE}/<index>/image")
+        print(f"  legacy URL: http://localhost:{port}{SUNO_PROMPTS_ROUTE}")
+        print(f"  selector label: {server_info['label']}")
+        if distrokid_enabled:
+            print(f"  distrokid endpoints enabled: {DISTROKID_RELEASE_ROUTE}, {DISTROKID_ASSETS_PREFIX}<path>")
+
+
+def _print_server_access(
+    capture_root: Path | None,
+    distrokid_capture_active: bool,
+    detected_extension: ChromeExtensionOrigin | None,
+    allow_origin: str | None,
+    canonical_url: str,
+) -> None:
+    if capture_root is not None and distrokid_capture_active:
+        print(
+            f"  distrokid releases enabled: POST {_DISTROKID_RELEASES_ROUTE} "
+            f"-> {distrokid_releases_output_path(capture_root)}"
+        )
+    if detected_extension is not None:
+        print(
+            f"  detected extension: {detected_extension.name} -> "
+            f"{detected_extension.extension_id} ({detected_extension.origin}, "
+            f"path={detected_extension.path}, profile={detected_extension.profile}, enabled=true)"
+        )
+    if allow_origin is not None and allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME):
+        print(f"  serve token: GET {canonical_url}/auth/token")
+    else:
+        print(
+            "  serve token: disabled until --allow-origin chrome-extension://<EXTENSION_ID> "
+            "or --allow-extension <name> is set for /auth/token, "
+            f"/downloaded and {_DISTROKID_RELEASES_ROUTE}"
+        )
+    print("Press Ctrl-C to stop.")
+
+
+def _enable_line_buffering() -> None:
+    # nohup / file redirect 下でも extension 検出結果を起動直後に診断できるよう、
+    # block buffering を行バッファへ切り替える。pytest の StringIO 等は reconfigure
+    # を持たないため、その場合はそのまま使う。
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(line_buffering=True)
+
+
+def _directory_channel_config(r2_handoff_requested: bool) -> tuple[Distrokid | None, str, str]:
+    # dir mode でも distrokid エンドポイントを有効化するため load_config() を試みる（#934）。
+    # distrokid 設定が無いチャンネルでは None のままにして 404 にフォールバックする。
+    try:
+        config = load_config()
+        distrokid_cfg = config.distrokid
+        channel_name = config.meta.channel_name
+        channel_short = config.meta.channel_short
+    except ConfigError:
+        if r2_handoff_requested:
+            raise
+        distrokid_cfg = None
+        channel_name = "YouTube Automation"
+        channel_short = "YA"
+    return distrokid_cfg, channel_name, channel_short
+
+
+def main() -> None:
+    _enable_line_buffering()
+    parser = _build_argument_parser()
     args = parser.parse_args()
 
     if args.stop:
@@ -1596,19 +1685,9 @@ def main() -> None:
     )
 
     if collection_dirs:
-        # dir mode でも distrokid エンドポイントを有効化するため load_config() を試みる（#934）。
-        # distrokid 設定が無いチャンネルでは None のままにして 404 にフォールバックする。
-        try:
-            config = load_config()
-            distrokid_cfg = config.distrokid
-            channel_name = config.meta.channel_name
-            channel_short = config.meta.channel_short
-        except ConfigError:
-            if r2_handoff_requested:
-                raise
-            distrokid_cfg = None
-            channel_name = "YouTube Automation"
-            channel_short = "YA"
+        distrokid_cfg, channel_name, channel_short = _directory_channel_config(r2_handoff_requested)
+        collection_dir = args.path
+        prompts_path = None
         distrokid_capture_active = distrokid_cfg is not None and distrokid_cfg.enabled
         downloaded_handoff = _build_downloaded_handoff(channel_short)
     else:
@@ -1696,48 +1775,35 @@ def main() -> None:
 
     server_info.update(build_server_info(channel_name, channel_short, port))
     canonical_url = str(server_info["base_url"])
-    if collection_dirs:
-        print(f"Serving {len(collection_dirs)} collections from {args.path} at {canonical_url}{COLLECTIONS_ROUTE}")
-        print(f"  legacy URL: http://localhost:{port}{COLLECTIONS_ROUTE}")
-        print(f"  selector label: {server_info['label']}")
-        if distrokid_cfg is not None and distrokid_cfg.enabled:
-            print(
-                f"  distrokid dir mode enabled: {_DISTROKID_COLLECTIONS_ROUTE}, "
-                f"{COLLECTIONS_ROUTE}/<id>/distrokid/<disc>/release.json"
-            )
-    else:
-        print(f"Serving {collection_dir} at {canonical_url}")
-        if prompts_path is not None:
-            print(f"  suno endpoint: {SUNO_PROMPTS_ROUTE}")
-        print(f"  community endpoints: {COMMUNITY_POSTS_ROUTE}, {COMMUNITY_IMAGE_ROUTE}/<index>/image")
-        print(f"  legacy URL: http://localhost:{port}{SUNO_PROMPTS_ROUTE}")
-        print(f"  selector label: {server_info['label']}")
-        if distrokid.enabled:
-            print(f"  distrokid endpoints enabled: {DISTROKID_RELEASE_ROUTE}, {DISTROKID_ASSETS_PREFIX}<path>")
-    if capture_root is not None and distrokid_capture_active:
-        print(
-            f"  distrokid releases enabled: POST {_DISTROKID_RELEASES_ROUTE} "
-            f"-> {distrokid_releases_output_path(capture_root)}"
-        )
-    if detected_extension is not None:
-        print(
-            f"  detected extension: {detected_extension.name} -> "
-            f"{detected_extension.extension_id} ({detected_extension.origin}, "
-            f"path={detected_extension.path}, profile={detected_extension.profile}, enabled=true)"
-        )
-    if allow_origin is not None and allow_origin.startswith(_EXTENSION_ORIGIN_SCHEME):
-        print(f"  serve token: GET {canonical_url}/auth/token")
-    else:
-        print(
-            "  serve token: disabled until --allow-origin chrome-extension://<EXTENSION_ID> "
-            "or --allow-extension <name> is set for /auth/token, "
-            f"/downloaded and {_DISTROKID_RELEASES_ROUTE}"
-        )
-    print("Press Ctrl-C to stop.")
+    _print_server_routes(
+        collection_dir, len(collection_dirs), prompts_path, server_info, port, distrokid_capture_active
+    )
+    _print_server_access(capture_root, distrokid_capture_active, detected_extension, allow_origin, canonical_url)
 
+    cleanup_managed = True
+    _serve_until_stopped(
+        server,
+        server_info,
+        embedded_registry_state,
+        pid_path,
+        stop_request_path,
+        pid,
+        previous_sigterm_handler,
+    )
+
+
+def _serve_until_stopped(
+    server: LocalHTTPServer,
+    server_info: dict,
+    embedded_registry_state: RegistryState | None,
+    pid_path: Path,
+    stop_request_path: Path,
+    pid: int,
+    previous_sigterm_handler,
+) -> None:
+    """Run discovery and HTTP serving, then restore signal and file ownership state."""
     discovery_lifecycle = None
     interrupted = False
-    cleanup_managed = True
     try:
         if embedded_registry_state is None:
             discovery_lifecycle = create_discovery_lifecycle(server_info)

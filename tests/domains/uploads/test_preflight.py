@@ -8,9 +8,9 @@ from pathlib import Path
 import pytest
 
 from tests.helpers.video_description import write_video_description_pair
+from youtube_automation.application.uploads.youtube import PreflightChecker, YouTubeAutoUploader
 from youtube_automation.configuration import load_config
 from youtube_automation.core.errors import ValidationError
-from youtube_automation.domains.uploads.youtube import PreflightChecker, YouTubeAutoUploader
 
 
 def _write_json(path: Path, data: dict) -> None:
@@ -384,3 +384,26 @@ def test_upload_collection_reports_unreachable_tags_min_count_from_channel_confi
     message = str(excinfo.value)
     assert "tags.min_count=30 is unreachable under YouTube's 500-character tag limit" in message
     assert "Reduce tags.min_count or shorten base tags." in message
+
+
+def test_preflight_aggregates_tag_and_duration_issues_in_order(tmp_path: Path, monkeypatch) -> None:
+    channel_dir = _write_minimal_channel(
+        tmp_path,
+        youtube_language="en",
+        supported_languages=["en"],
+        audio={"target_duration_min": 60, "target_duration_max": 90},
+    )
+    content_path = channel_dir / "config" / "channel" / "content.json"
+    content = json.loads(content_path.read_text())
+    content["tags"]["min_count"] = 2
+    _write_json(content_path, content)
+    collection_dir = _write_collection(channel_dir, scene_phrases={}, description="A continuous mix.", tags=["focus"])
+
+    with pytest.raises(ValidationError) as caught:
+        _run_preflight(channel_dir, collection_dir, monkeypatch, duration_seconds=50 * 60)
+
+    message = str(caught.value)
+    assert "tags count: 1 (min 2)" in message
+    assert "duration: 50m" in message
+    assert message.index("tags count:") < message.index("duration:")
+    assert "--allow-duration-outside-target" in message

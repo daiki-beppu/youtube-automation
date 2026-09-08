@@ -33,8 +33,8 @@ from youtube_automation.commands.analytics.benchmark_collector import (
     BenchmarkReportGenerator,
     BenchmarkThumbnailAnalyzer,
 )
-from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.configuration import load_config
+from youtube_automation.core.channel_context import channel_dir as _channel_dir
 
 logger = logging.getLogger(__name__)
 

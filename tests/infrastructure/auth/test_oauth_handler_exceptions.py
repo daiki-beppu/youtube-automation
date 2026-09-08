@@ -24,6 +24,7 @@ import google.auth.exceptions
 import pytest
 from googleapiclient.errors import HttpError
 
+from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
 from youtube_automation.core.errors import (
     AuthError,
     AutomationError,
@@ -31,8 +32,8 @@ from youtube_automation.core.errors import (
     ValidationError,
     YouTubeAPIError,
 )
-from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
-from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler, resolve_client_secrets_location
+from youtube_automation.core.redaction import redact_sensitive_data
+from youtube_automation.infrastructure.auth.youtube import resolve_client_secrets_location
 
 # ---------------------------------------------------------------------------
 # モジュール定数（leak sentinel 入力）
@@ -276,7 +277,7 @@ class TestClientSecretsFallback:
         """
         monkeypatch.delenv("CLIENT_SECRETS_DIR", raising=False)
         monkeypatch.setattr(
-            "youtube_automation.configuration.channel_dir",
+            "youtube_automation.core.channel_context.channel_dir",
             lambda: tmp_path,
         )
 

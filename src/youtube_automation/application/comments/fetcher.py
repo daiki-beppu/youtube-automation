@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Iterator
 
-from youtube_automation.core.errors import YouTubeAPIError
 from youtube_automation.infrastructure.retry import execute_with_retry
 
 # YouTube API が commentThreads.list の replies.comments に含める最大件数
@@ -47,12 +46,13 @@ def _after_since(published: str, since: datetime | None) -> bool:
     return pub_dt is None or pub_dt >= since
 
 
-def _build_reply_comment(
+def _build_comment(
     item: dict,
     *,
     video_id: str,
     can_reply: bool,
-    parent_id: str,
+    parent_id: str | None,
+    total_reply_count: int = 0,
 ) -> FetchedComment:
     snippet = item["snippet"]
     return FetchedComment(
@@ -64,7 +64,7 @@ def _build_reply_comment(
         published_at=snippet.get("publishedAt", ""),
         moderation_status=snippet.get("moderationStatus"),
         can_reply=can_reply,
-        total_reply_count=0,
+        total_reply_count=total_reply_count,
         parent_id=parent_id,
     )
 
@@ -83,33 +83,29 @@ def _fetch_replies_paginated(
     """
     page_token: str | None = None
     while True:
-        try:
-            request = youtube.comments().list(
-                part="snippet",
-                parentId=top_comment_id,
-                maxResults=100,
-                pageToken=page_token,
-                textFormat="plainText",
-            )
-            response = execute_with_retry(request, f"comments.list failed (parentId={top_comment_id})")
-        except YouTubeAPIError:
-            raise
+        request = youtube.comments().list(
+            part="snippet",
+            parentId=top_comment_id,
+            maxResults=100,
+            pageToken=page_token,
+            textFormat="plainText",
+        )
+        response = execute_with_retry(request, f"comments.list failed (parentId={top_comment_id})")
 
-        for item in response.get("items", []):
-            if _after_since(item["snippet"].get("publishedAt", ""), since):
-                yield _build_reply_comment(
-                    item,
-                    video_id=video_id,
-                    can_reply=can_reply,
-                    parent_id=top_comment_id,
-                )
+        yield from _iter_reply_comments(
+            response.get("items", []),
+            video_id=video_id,
+            can_reply=can_reply,
+            parent_id=top_comment_id,
+            since=since,
+        )
 
         page_token = response.get("nextPageToken")
         if not page_token:
             return
 
 
-def _iter_inline_replies(
+def _iter_reply_comments(
     reply_items: list[dict],
     *,
     video_id: str,
@@ -117,10 +113,10 @@ def _iter_inline_replies(
     parent_id: str,
     since: datetime | None,
 ) -> Iterator[FetchedComment]:
-    """commentThreads.list の replies.comments から返信を yield する."""
+    """返信アイテムを日付で絞り込み、取得経路によらず同じ形式で yield する."""
     for item in reply_items:
         if _after_since(item["snippet"].get("publishedAt", ""), since):
-            yield _build_reply_comment(
+            yield _build_comment(
                 item,
                 video_id=video_id,
                 can_reply=can_reply,
@@ -143,14 +139,9 @@ def _iter_thread(
     published = snippet.get("publishedAt", "")
 
     if _after_since(published, since):
-        yield FetchedComment(
-            comment_id=top["id"],
+        yield _build_comment(
+            top,
             video_id=video_id,
-            author=snippet.get("authorDisplayName", ""),
-            author_channel_id=snippet.get("authorChannelId", {}).get("value"),
-            text=snippet.get("textOriginal", snippet.get("textDisplay", "")),
-            published_at=published,
-            moderation_status=snippet.get("moderationStatus"),
             can_reply=thread_can_reply,
             total_reply_count=total_reply_count,
             parent_id=None,
@@ -165,7 +156,7 @@ def _iter_thread(
             since=since,
         )
     else:
-        yield from _iter_inline_replies(
+        yield from _iter_reply_comments(
             item.get("replies", {}).get("comments", []),
             video_id=video_id,
             can_reply=thread_can_reply,
@@ -200,17 +191,14 @@ def fetch_comments(
     next_page_token: str | None = None
     yielded = 0
     while yielded < max_results:
-        try:
-            request = youtube.commentThreads().list(
-                part="snippet,replies",
-                videoId=video_id,
-                maxResults=min(page_size, max_results - yielded),
-                pageToken=next_page_token,
-                textFormat="plainText",
-            )
-            response = execute_with_retry(request, f"commentThreads.list failed (video_id={video_id})")
-        except YouTubeAPIError:
-            raise
+        request = youtube.commentThreads().list(
+            part="snippet,replies",
+            videoId=video_id,
+            maxResults=min(page_size, max_results - yielded),
+            pageToken=next_page_token,
+            textFormat="plainText",
+        )
+        response = execute_with_retry(request, f"commentThreads.list failed (video_id={video_id})")
 
         for item in response.get("items", []):
             for comment in _iter_thread(youtube, item, video_id=video_id, since=since):

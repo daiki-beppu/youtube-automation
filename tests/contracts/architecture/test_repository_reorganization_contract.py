@@ -111,7 +111,7 @@ EXPECTED_MOVED_OWNERS = {
     "src/youtube_automation/utils/channel_target.py": "src/youtube_automation/configuration/channel_target.py",
     "src/youtube_automation/utils/chrome_extensions.py": "src/youtube_automation/infrastructure/collections/chrome_extensions.py",
     "src/youtube_automation/utils/cli_arguments.py": "src/youtube_automation/commands/_shared/arguments.py",
-    "src/youtube_automation/utils/collection_paths.py": "src/youtube_automation/infrastructure/media/collection_paths.py",
+    "src/youtube_automation/utils/collection_paths.py": "src/youtube_automation/domains/collections/paths.py",
     "src/youtube_automation/utils/comments/__init__.py": "src/youtube_automation/application/comments/__init__.py",
     "src/youtube_automation/utils/comments/fetcher.py": "src/youtube_automation/application/comments/fetcher.py",
     "src/youtube_automation/utils/comments/generator.py": "src/youtube_automation/application/comments/generator.py",
@@ -124,7 +124,7 @@ EXPECTED_MOVED_OWNERS = {
     "src/youtube_automation/utils/composition_lock.py": "src/youtube_automation/infrastructure/media/composition_lock.py",
     "src/youtube_automation/utils/ctr_resolver.py": "src/youtube_automation/infrastructure/analytics/ctr_resolver.py",
     "src/youtube_automation/utils/dashboard_read_model.py": "src/youtube_automation/infrastructure/analytics/dashboard_read_model.py",
-    "src/youtube_automation/utils/dashboard_refresh.py": "src/youtube_automation/infrastructure/analytics/dashboard_refresh.py",
+    "src/youtube_automation/utils/dashboard_refresh.py": "src/youtube_automation/application/analytics/dashboard_refresh.py",
     "src/youtube_automation/utils/genai_client.py": "src/youtube_automation/infrastructure/media/genai_client.py",
     "src/youtube_automation/utils/google_cloud_project.py": "src/youtube_automation/infrastructure/runtime/google_cloud_project.py",
     "src/youtube_automation/utils/image_provider/__init__.py": "src/youtube_automation/infrastructure/media/image_provider/__init__.py",
@@ -148,10 +148,10 @@ EXPECTED_MOVED_OWNERS = {
     "src/youtube_automation/utils/probe.py": "src/youtube_automation/infrastructure/media/probe.py",
     "src/youtube_automation/utils/profile.py": "src/youtube_automation/infrastructure/observability/profile.py",
     "src/youtube_automation/utils/progress.py": "src/youtube_automation/infrastructure/runtime/progress.py",
-    "src/youtube_automation/utils/publish_schedule.py": "src/youtube_automation/infrastructure/runtime/publish_schedule.py",
+    "src/youtube_automation/utils/publish_schedule.py": "src/youtube_automation/domains/uploads/scheduling.py",
     "src/youtube_automation/utils/reporting_api.py": "src/youtube_automation/infrastructure/youtube/reporting_api.py",
     "src/youtube_automation/utils/retention_timeline.py": "src/youtube_automation/infrastructure/analytics/retention_timeline.py",
-    "src/youtube_automation/utils/schedule.py": "src/youtube_automation/infrastructure/runtime/schedule.py",
+    "src/youtube_automation/utils/schedule.py": "src/youtube_automation/domains/uploads/scheduling.py",
     "src/youtube_automation/utils/schemas/__init__.py": "src/youtube_automation/infrastructure/legacy_utils/schemas/__init__.py",
     "src/youtube_automation/utils/setup_directory_contract.py": "src/youtube_automation/infrastructure/collections/setup_directory_contract.py",
     "src/youtube_automation/utils/skill_config.py": "src/youtube_automation/configuration/skills.py",
@@ -165,15 +165,15 @@ EXPECTED_MOVED_OWNERS = {
     "src/youtube_automation/utils/streaming/threshold.py": "src/youtube_automation/infrastructure/youtube/streaming/threshold.py",
     "src/youtube_automation/utils/streaming/vultr_bandwidth.py": "src/youtube_automation/infrastructure/youtube/streaming/vultr_bandwidth.py",
     "src/youtube_automation/utils/theme_performance.py": "src/youtube_automation/infrastructure/analytics/theme_performance.py",
-    "src/youtube_automation/utils/time_utils.py": "src/youtube_automation/infrastructure/runtime/time_utils.py",
+    "src/youtube_automation/utils/time_utils.py": "src/youtube_automation/core/time_utils.py",
     "src/youtube_automation/utils/traffic_trend.py": "src/youtube_automation/infrastructure/analytics/traffic_trend.py",
     "src/youtube_automation/utils/ttp_health.py": "src/youtube_automation/infrastructure/analytics/ttp_health.py",
     "src/youtube_automation/utils/veo_generator.py": "src/youtube_automation/infrastructure/media/veo_generator.py",
     "src/youtube_automation/utils/veo_operation_store.py": "src/youtube_automation/infrastructure/media/veo_operation_store.py",
     "src/youtube_automation/utils/video_analyzer.py": "src/youtube_automation/infrastructure/media/video_analyzer.py",
     "src/youtube_automation/utils/worktree.py": "src/youtube_automation/infrastructure/vcs/worktree.py",
-    "src/youtube_automation/utils/youtube_quota.py": "src/youtube_automation/infrastructure/youtube/youtube_quota.py",
-    "src/youtube_automation/utils/youtube_tag.py": "src/youtube_automation/infrastructure/youtube/youtube_tag.py",
+    "src/youtube_automation/utils/youtube_quota.py": "src/youtube_automation/domains/uploads/quota.py",
+    "src/youtube_automation/utils/youtube_tag.py": "src/youtube_automation/core/youtube_tags.py",
     "src/youtube_automation/infrastructure/errors.py": "src/youtube_automation/core/errors.py",
 }
 
@@ -234,16 +234,11 @@ DOMAIN_FORBIDDEN_EXTERNAL_IO_IMPORTS = (
 
 DOMAIN_FORBIDDEN_EXTERNAL_IMPORTS = DOMAIN_FORBIDDEN_SDK_AUTH_IMPORTS + DOMAIN_FORBIDDEN_EXTERNAL_IO_IMPORTS
 
-DOMAIN_EXISTING_EXTERNAL_IMPORT_EXCEPTIONS = frozenset(
-    {
-        ("domains/metadata/service.py", "subprocess"),
-    }
-)
+DOMAIN_EXISTING_EXTERNAL_IMPORT_EXCEPTIONS: frozenset[tuple[str, str]] = frozenset()
 
 EXPECTED_CORE_ADAPTER_FILES = frozenset(
     {
         "core/adapters/__init__.py",
-        "core/adapters/google/__init__.py",
         "core/adapters/media.py",
         "core/adapters/observability.py",
         "core/adapters/runtime.py",
@@ -559,6 +554,7 @@ def test_repository_scanner_rejects_each_external_import_mutation(
     ("mutation", "expected_offender"),
     [
         ("add", "unexpected core adapter file: core/adapters/reintroduced.pyi"),
+        ("google_package", "unexpected core adapter file: core/adapters/google/__init__.py"),
         ("remove", "missing core adapter file: core/adapters/security.py"),
     ],
 )
@@ -572,6 +568,10 @@ def test_repository_scanner_rejects_core_adapter_file_surface_mutations(
     adapter_root = source_root / "core" / "adapters"
     if mutation == "add":
         (adapter_root / "reintroduced.pyi").write_text("def reintroduced() -> None: ...\n", encoding="utf-8")
+    elif mutation == "google_package":
+        namespace = adapter_root / "google"
+        namespace.mkdir(exist_ok=True)
+        (namespace / "__init__.py").write_text("", encoding="utf-8")
     else:
         (adapter_root / "security.py").unlink()
 
@@ -785,6 +785,10 @@ _LEGACY_FACADE_IMPORTS = {
         ),
     },
     "image_provider/__init__.py": {
+        (
+            "youtube_automation.configuration.image_generation",
+            (("load_image_generation_config", "load_image_generation_config"),),
+        ),
         ("youtube_automation.infrastructure.media.image_provider", (("*", None),)),
         (
             "youtube_automation.infrastructure.media.image_provider",
@@ -1524,6 +1528,7 @@ def test_reorganization_receipt_names_existing_non_contract_consumers() -> None:
         consumer_paths.extend(consumers)
 
     historical_consumer_moves = {
+        "tests/domains/analytics/mixins/test_retention.py": "tests/domains/analytics/test_service_retention.py",
         ".claude/skills/metadata-audit/SKILL.md": ".claude/skills/audit/references/metadata.md",
         ".claude/skills/video-analyze/SKILL.md": ".claude/skills/audit/references/video.md",
         ".claude/skills/channel-new/SKILL.md": ".claude/skills/channel-strategy/SKILL.md",
@@ -2116,6 +2121,8 @@ import sys
 
 parent_name = "youtube_automation.utils.image_provider"
 parent = importlib.import_module(parent_name)
+loader = importlib.import_module("youtube_automation.configuration.image_generation")
+assert parent.load_image_generation_config is loader.load_image_generation_config
 for child in ("config", "composition", "prompt_schema", "gemini", "openai"):
     canonical_name = f"youtube_automation.infrastructure.media.image_provider.{child}"
     canonical = sys.modules[canonical_name]

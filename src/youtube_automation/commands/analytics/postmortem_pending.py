@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import TypedDict
 
 from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.core.channel_context import channel_dir as _channel_dir
 from youtube_automation.core.errors import ConfigError
-from youtube_automation.domains.uploads.collection import TrackingStore
+from youtube_automation.domains.uploads._tracking_io import TrackingStore
 
 UPLOAD_TRACKING_MISSING = "upload_tracking_missing"
 VIDEO_ID_MISSING = "video_id_missing"

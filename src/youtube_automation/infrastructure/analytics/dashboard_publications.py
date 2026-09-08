@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TypedDict, cast
 from zoneinfo import ZoneInfo
+
+from youtube_automation.infrastructure.filesystem import write_file_text_atomically
 
 SCHEMA_VERSION = 1
 ROLLING_WINDOW_DAYS = 365
@@ -41,6 +41,16 @@ def _parse_timestamp(value: str, *, field_name: str) -> datetime:
     return timestamp.astimezone(UTC)
 
 
+def _publication_error_timestamp(error: object) -> str | None:
+    """Read an error timestamp only when the complete error structure is valid."""
+    if not isinstance(error, dict):
+        return None
+    if not isinstance(error.get("code"), str) or not isinstance(error.get("message"), str):
+        return None
+    attempted_at = error.get("attempted_at")
+    return attempted_at if isinstance(attempted_at, str) else None
+
+
 def _validate_payload(value: object) -> DashboardPublications | None:
     if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
         return None
@@ -56,14 +66,9 @@ def _validate_payload(value: object) -> DashboardPublications | None:
     error = value.get("error")
     error_attempted_at: str | None = None
     if "error" in value:
-        if not isinstance(error, dict):
+        error_attempted_at = _publication_error_timestamp(error)
+        if error_attempted_at is None:
             return None
-        if not isinstance(error.get("code"), str) or not isinstance(error.get("message"), str):
-            return None
-        attempted_at_value = error.get("attempted_at")
-        if not isinstance(attempted_at_value, str):
-            return None
-        error_attempted_at = attempted_at_value
 
     try:
         _parse_timestamp(fetched_at, field_name="fetched_at")
@@ -158,17 +163,4 @@ def with_dashboard_publication_error(
 
 def save_dashboard_publications(destination: Path, payload: Mapping[str, object]) -> None:
     """同一ディレクトリの一時ファイルを置換して payload を原子的に保存する。"""
-    descriptor, temporary_name = tempfile.mkstemp(
-        dir=destination.parent,
-        prefix=f".{destination.name}.",
-        suffix=".tmp",
-    )
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as file:
-            json.dump(payload, file, ensure_ascii=False, indent=2)
-            file.write("\n")
-            file.flush()
-        os.replace(temporary, destination)
-    finally:
-        temporary.unlink(missing_ok=True)
+    write_file_text_atomically(destination, json.dumps(payload, ensure_ascii=False, indent=2) + "\n", mode=0o600)

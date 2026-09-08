@@ -94,7 +94,7 @@ market report の thumbnail profile fields には競合のチャンネル名、�
 欲求語彙の選択、欠落時の継続条件、`推定` と根拠の記録は `.claude/skills/channel-strategy/references/desire-vocabulary.md` をそのまま適用する。
 
 既存実装の参照: `.claude/skills/thumbnail/SKILL.md` の `single_step` モード（TTP 推奨実装）、
-`src/youtube_automation/domains/metadata/service.py` の TTP 形式タイトル生成。
+`src/youtube_automation/application/metadata/service.py` の TTP 形式タイトル生成。
 
 ## Instructions
 

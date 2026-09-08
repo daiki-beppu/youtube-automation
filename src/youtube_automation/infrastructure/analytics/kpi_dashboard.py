@@ -122,6 +122,30 @@ def _weekly_impressions_frame(impressions_daily: List[Dict]) -> pd.DataFrame:
     return weekly.drop(columns=["weighted_ctr"])
 
 
+def _weekly_kpi_row(week_start: pd.Timestamp, r: pd.Series, has_daily: bool, has_impressions: bool) -> Dict:
+    """Convert one week to KPI values, preserving missing source data as None."""
+    days_covered = int(r["days_covered"]) if has_daily and pd.notna(r.get("days_covered")) else 0
+    imp_days = (
+        int(r["impressions_days_covered"]) if has_impressions and pd.notna(r.get("impressions_days_covered")) else 0
+    )
+    daily_missing = days_covered == 0
+    impressions_missing = imp_days == 0
+
+    row: Dict = {
+        "week_starting": str(week_start.date()),
+        "days_covered": days_covered,
+        "impressions_days_covered": imp_days,
+        "missing": daily_missing and impressions_missing,
+        "views": None if daily_missing else int(r["views"]),
+        "avg_view_percentage": None if daily_missing else _round_or_none(r["avg_view_percentage"]),
+        "subs_net": None if daily_missing else int(r["subs_net"]),
+        "impressions": None if impressions_missing else int(r["impressions"]),
+        "ctr_percentage": None if impressions_missing else _round_or_none(r["ctr_percentage"]),
+    }
+
+    return row
+
+
 def build_weekly_kpi(
     daily_metrics: List[Dict],
     impressions_daily: List[Dict],
@@ -151,24 +175,7 @@ def build_weekly_kpi(
     rows: List[Dict] = []
     previous: Optional[Dict] = None
     for week_start, r in merged.iterrows():
-        days_covered = int(r["days_covered"]) if has_daily and pd.notna(r.get("days_covered")) else 0
-        imp_days = (
-            int(r["impressions_days_covered"]) if has_impressions and pd.notna(r.get("impressions_days_covered")) else 0
-        )
-        daily_missing = days_covered == 0
-        impressions_missing = imp_days == 0
-
-        row: Dict = {
-            "week_starting": str(week_start.date()),
-            "days_covered": days_covered,
-            "impressions_days_covered": imp_days,
-            "missing": daily_missing and impressions_missing,
-            "views": None if daily_missing else int(r["views"]),
-            "avg_view_percentage": None if daily_missing else _round_or_none(r["avg_view_percentage"]),
-            "subs_net": None if daily_missing else int(r["subs_net"]),
-            "impressions": None if impressions_missing else int(r["impressions"]),
-            "ctr_percentage": None if impressions_missing else _round_or_none(r["ctr_percentage"]),
-        }
+        row = _weekly_kpi_row(week_start, r, has_daily, has_impressions)
 
         prev = previous or {}
         row["views_delta_pct"] = _pct_change(row["views"], prev.get("views"))

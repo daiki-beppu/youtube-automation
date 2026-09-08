@@ -12,8 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from youtube_automation.application.master_video_review import approve_generated_master_video
-from youtube_automation.configuration import channel_dir
 from youtube_automation.configuration.skills import load_channel_override
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import (
     ConfigError,
     ReviewError,
@@ -21,10 +21,10 @@ from youtube_automation.core.errors import (
     WorkflowStateError,
     WorkflowStateSectionTypeError,
 )
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 DEFAULT_MAX_WORKERS = 3
 MAX_WORKERS_ENV = "YT_VIDEOUP_MAX_WORKERS"

@@ -14,9 +14,10 @@ import logging
 import sys
 from pathlib import Path
 
-from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.commands._shared.cli_harness import print_json_or_text_report, run_cli, run_logged_command
+from youtube_automation.core.channel_context import channel_dir as _channel_dir
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.analytics.snapshots import find_analytics_snapshots
 from youtube_automation.infrastructure.analytics.traffic_trend import analyze_traffic_trend
 
 logger = logging.getLogger(__name__)
@@ -24,9 +25,7 @@ logger = logging.getLogger(__name__)
 
 def _load_snapshots(channel_dir: Path) -> list[dict]:
     """data/ 配下の analytics_data_*.json を辞書順（=時系列昇順）で読み込む"""
-    candidates = sorted((channel_dir / "data").glob("analytics_data_*.json"))
-    if not candidates:
-        raise ConfigError("analytics_data_*.json が見つかりません。先に `yt-analytics` を実行してください。")
+    candidates = find_analytics_snapshots(channel_dir)
     snapshots = []
     for path in candidates:
         with open(path, encoding="utf-8") as f:
@@ -73,29 +72,22 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(args: argparse.Namespace) -> int:
-    try:
-        channel_dir = _channel_dir()
-        snapshots = _load_snapshots(channel_dir)
-        analysis = analyze_traffic_trend(snapshots, top_search=args.top_search)
+    return run_logged_command(lambda: _run(args), logger)
 
-        if analysis["snapshots_analyzed"] == 0:
-            raise ConfigError(
-                "traffic_sources を含むスナップショットがありません。"
-                "`yt-analytics --depth standard` 以上で再収集してください。"
-            )
 
-        if args.text:
-            _print_text_summary(analysis)
-        else:
-            print(json.dumps(analysis, ensure_ascii=False, indent=2))
-        return 0
+def _run(args: argparse.Namespace) -> int:
+    channel_dir = _channel_dir()
+    snapshots = _load_snapshots(channel_dir)
+    analysis = analyze_traffic_trend(snapshots, top_search=args.top_search)
 
-    except ConfigError as e:
-        logger.error(str(e))
-        return 2
-    except Exception as e:
-        logger.exception(f"エラー: {e}")
-        return 1
+    if analysis["snapshots_analyzed"] == 0:
+        raise ConfigError(
+            "traffic_sources を含むスナップショットがありません。"
+            "`yt-analytics --depth standard` 以上で再収集してください。"
+        )
+
+    print_json_or_text_report(analysis, text=args.text, render_text=_print_text_summary)
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

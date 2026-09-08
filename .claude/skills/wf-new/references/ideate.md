@@ -235,7 +235,7 @@ preview contract の計算契約に従い、mode 別の生成枚数、provider�
 
 ```bash
 uv run python3 -c "
-from youtube_automation.infrastructure.media.image_provider import load_image_generation_config
+from youtube_automation.configuration.image_generation import load_image_generation_config
 from youtube_automation.configuration.skills import (
     load_skill_config,
     get_collection_ideate_thumbnail_mode,
@@ -323,7 +323,7 @@ mapfile -t REF_PATHS <<< "$VALIDATED_REFS"
 
 # 順次実行。candidate_count の数だけ plan-{a,b,c,...} を生成する。
 LABELS=(a b c d e f g h)
-PROVIDER=$(uv run python3 -c "from youtube_automation.infrastructure.media.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
+PROVIDER=$(uv run python3 -c "from youtube_automation.configuration.image_generation import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
   if [ "${#REF_PATHS[@]}" -lt "$CANDIDATE_COUNT" ]; then
     echo "ERROR: codex single_step preview requires at least ${CANDIDATE_COUNT} unique reference images" >&2
@@ -405,7 +405,7 @@ if [ "${#REF_PATHS[@]}" -le "$REF_INDEX" ]; then
   echo "ERROR: selected preview reference is missing: index=${REF_INDEX}" >&2
   exit 1
 fi
-PROVIDER=$(uv run python3 -c "from youtube_automation.infrastructure.media.image_provider import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
+PROVIDER=$(uv run python3 -c "from youtube_automation.configuration.image_generation import load_image_generation_config; cfg = load_image_generation_config(); print(cfg.provider)")
 if [ "$PROVIDER" = "codex" ]; then
   CODEX_PROMPT=$(uv run python3 .claude/skills/thumbnail/references/codex-prompt.py "<選択された企画タイトル>")
   bash .claude/skills/thumbnail/references/codex-image.sh --require-reference \

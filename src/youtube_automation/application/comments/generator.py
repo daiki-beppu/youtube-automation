@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
@@ -45,6 +46,7 @@ class ReplyContext:
 class ReplyGenerator(Protocol):
     """コメント返信テキストを生成するジェネレーターのインターフェース."""
 
+    @abstractmethod
     def generate(self, ctx: ReplyContext) -> str: ...
 
 

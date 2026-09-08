@@ -1,0 +1,1 @@
+- 実装本体のない通知・画像生成・API 要求・Suno callback・stage readiness の Protocol メソッドを抽象メソッドとし、不完全な明示継承クラスの生成を拒否する。

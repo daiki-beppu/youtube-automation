@@ -134,20 +134,25 @@ def generate_srt(
     cues: list[tuple[int, int, str]] = []
     ends = [*starts[1:], total_duration_ms]
     for track_index, (lyrics, start, end) in enumerate(zip(lyrics_by_track, starts, ends, strict=True), 1):
-        lines = lyric_lines(lyrics)
-        if not lines:
-            raise ValidationError(f"トラック {track_index} に表示可能な歌詞行がありません")
-        duration = end - start
-        if duration < 0 or (0 < duration < len(lines)) or (duration == 0 and len(lines) != 1):
-            raise ValidationError(f"トラック {track_index} の区間が歌詞行数より短すぎます")
-        boundaries = [start + duration * i // len(lines) for i in range(len(lines) + 1)]
-        cues.extend((boundaries[i], boundaries[i + 1], line) for i, line in enumerate(lines))
+        cues.extend(_track_cues(lyrics, start, end, track_index))
 
     blocks = [
         f"{index}\n{_format_srt_timestamp(start)} --> {_format_srt_timestamp(end)}\n{text}"
         for index, (start, end, text) in enumerate(cues, 1)
     ]
     return "\n\n".join(blocks) + "\n"
+
+
+def _track_cues(lyrics: str, start: int, end: int, track_index: int) -> list[tuple[int, int, str]]:
+    """Allocate a single track interval to displayable lyric lines."""
+    lines = lyric_lines(lyrics)
+    if not lines:
+        raise ValidationError(f"トラック {track_index} に表示可能な歌詞行がありません")
+    duration = end - start
+    if duration < 0 or (0 < duration < len(lines)) or (duration == 0 and len(lines) != 1):
+        raise ValidationError(f"トラック {track_index} の区間が歌詞行数より短すぎます")
+    boundaries = [start + duration * i // len(lines) for i in range(len(lines) + 1)]
+    return [(boundaries[i], boundaries[i + 1], line) for i, line in enumerate(lines)]
 
 
 def write_srt(path: Path, content: str) -> Path:

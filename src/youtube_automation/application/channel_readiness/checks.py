@@ -14,7 +14,6 @@ import site
 import subprocess
 import sys
 import tomllib
-import unicodedata
 from collections.abc import Iterator, Mapping
 from contextlib import contextmanager, redirect_stdout
 from contextvars import ContextVar
@@ -29,7 +28,13 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from httplib2 import HttpLib2Error
 
+from youtube_automation.application.channel_readiness.readiness import (
+    evaluate_initial_setup_readiness,
+    evaluate_ttp_wf_new_readiness,
+)
+from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
 from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.display import format_terminal_text
 from youtube_automation.core.errors import (
     AutomationError,
     ConfigError,
@@ -40,10 +45,9 @@ from youtube_automation.core.errors import (
 from youtube_automation.domains.channel_readiness import (
     ReadinessResult,
     approved_ttp_exceptions,
-    evaluate_initial_setup_readiness,
-    evaluate_ttp_wf_new_readiness,
 )
 from youtube_automation.domains.documents.operational_artifacts import resolve_artifacts
+from youtube_automation.domains.documents.published import read_published_json_document
 from youtube_automation.domains.documents.schema_registry import RepositorySchema, validate_repository_document
 from youtube_automation.infrastructure.auth import (
     UPLOAD_REQUIRED_SCOPES,
@@ -52,17 +56,13 @@ from youtube_automation.infrastructure.auth import (
     load_credentials,
     load_refreshable_credentials,
 )
-from youtube_automation.infrastructure.auth.youtube import (
-    YouTubeOAuthHandler,
-    resolve_client_secrets_location,
-)
+from youtube_automation.infrastructure.auth.youtube import resolve_client_secrets_location
 from youtube_automation.infrastructure.collections.numbered_duplicates import (
     CLEANUP_GUIDE_URL,
     format_duplicate_name,
     format_scan_error_reason,
     scan_numbered_duplicates,
 )
-from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 from youtube_automation.infrastructure.retry import QUOTA_REASONS
 from youtube_automation.infrastructure.youtube.reporting_api import ReportingAPIClient
 from youtube_automation.infrastructure.youtube.streaming.state_reconciliation import reconcile_streaming_vps
@@ -386,22 +386,7 @@ def _parse_project_id(value: str) -> str:
 
 
 def _format_external_display_value(value: object) -> str:
-    text = "".join(_escape_display_character(char) for char in str(value))
-    if len(text) <= MAX_DISPLAY_VALUE_LEN:
-        return text
-    return text[: MAX_DISPLAY_VALUE_LEN - 3] + "..."
-
-
-def _escape_display_character(char: str) -> str:
-    if char == "\n":
-        return "\\n"
-    if char == "\r":
-        return "\\r"
-    if char == "\t":
-        return "\\t"
-    if unicodedata.category(char)[0] == "C":
-        return char.encode("unicode_escape").decode("ascii")
-    return char
+    return format_terminal_text(str(value), max_length=MAX_DISPLAY_VALUE_LEN)
 
 
 def _adc_quota_project() -> Optional[str]:
@@ -550,76 +535,58 @@ def _agents_skills_link_is_valid(channel_dir: Path, skills_dir: Path) -> bool:
 # --- checks ---
 
 
+def _check_executable(command: str, instructions: str) -> CheckResult:
+    path = shutil.which(command)
+    if path:
+        return CheckResult(id=command, status="ok", category=BOOTSTRAP_CATEGORY, message=f"{command} found: {path}")
+    return CheckResult(
+        id=command,
+        status="fail",
+        category=BOOTSTRAP_CATEGORY,
+        message=f"{command} が見つからない",
+        next_action={"kind": "human", "instructions": instructions},
+    )
+
+
+_FFMPEG_INSTALL_INSTRUCTIONS = (
+    "macOS: `brew install ffmpeg` / "
+    "Ubuntu/Debian: `sudo apt-get install -y ffmpeg` / "
+    "その他: https://ffmpeg.org/download.html を参照"
+)
+
+
 def check_ffmpeg() -> CheckResult:
-    path = shutil.which("ffmpeg")
-    if not path:
-        return CheckResult(
-            id="ffmpeg",
-            status="fail",
-            category=BOOTSTRAP_CATEGORY,
-            message="ffmpeg が見つからない",
-            next_action={
-                "kind": "human",
-                "instructions": (
-                    "macOS: `brew install ffmpeg` / "
-                    "Ubuntu/Debian: `sudo apt-get install -y ffmpeg` / "
-                    "その他: https://ffmpeg.org/download.html を参照"
-                ),
-            },
-        )
-    return CheckResult(id="ffmpeg", status="ok", category=BOOTSTRAP_CATEGORY, message=f"ffmpeg found: {path}")
+    return _check_executable("ffmpeg", _FFMPEG_INSTALL_INSTRUCTIONS)
 
 
 def check_ffprobe() -> CheckResult:
-    path = shutil.which("ffprobe")
-    if not path:
-        return CheckResult(
-            id="ffprobe",
-            status="fail",
-            category=BOOTSTRAP_CATEGORY,
-            message="ffprobe が見つからない",
-            next_action={
-                "kind": "human",
-                "instructions": (
-                    "ffprobe は通常 ffmpeg に同梱されます。"
-                    "macOS: `brew install ffmpeg` / "
-                    "Ubuntu/Debian: `sudo apt-get install -y ffmpeg` / "
-                    "その他: https://ffmpeg.org/download.html を参照"
-                ),
-            },
-        )
-    return CheckResult(id="ffprobe", status="ok", category=BOOTSTRAP_CATEGORY, message=f"ffprobe found: {path}")
+    return _check_executable("ffprobe", "ffprobe は通常 ffmpeg に同梱されます。" + _FFMPEG_INSTALL_INSTRUCTIONS)
 
 
 def check_uv() -> CheckResult:
-    path = shutil.which("uv")
-    if not path:
-        return CheckResult(
-            id="uv",
-            status="fail",
-            category=BOOTSTRAP_CATEGORY,
-            message="uv が見つからない",
-            next_action={
-                "kind": "human",
-                "instructions": (
-                    "https://docs.astral.sh/uv/getting-started/installation/ を参照して uv を install してください"
-                ),
-            },
-        )
-    return CheckResult(id="uv", status="ok", category=BOOTSTRAP_CATEGORY, message=f"uv found: {path}")
+    return _check_executable(
+        "uv", "https://docs.astral.sh/uv/getting-started/installation/ を参照して uv を install してください"
+    )
+
+
+def _global_installation_success(check_id: str, message_suffix: str) -> CheckResult | None:
+    """Recognize a globally installed CLI when a project-local install is unnecessary."""
+    installation_mode = _running_global_installation_mode()
+    if installation_mode is None:
+        return None
+    return CheckResult(
+        id=check_id,
+        status="ok",
+        category=BOOTSTRAP_CATEGORY,
+        message=f"{installation_mode}{message_suffix}",
+    )
 
 
 def check_uv_project(channel_dir: Path) -> CheckResult:
     pyproject_path = channel_dir / PYPROJECT_FILENAME
     if not pyproject_path.exists():
-        installation_mode = _running_global_installation_mode()
-        if installation_mode is not None:
-            return CheckResult(
-                id="uv_project",
-                status="ok",
-                category=BOOTSTRAP_CATEGORY,
-                message=f"{installation_mode} 導入済み（uv project 初期化不要）",
-            )
+        if result := _global_installation_success("uv_project", " 導入済み（uv project 初期化不要）"):
+            return result
         return CheckResult(
             id="uv_project",
             status="fail",
@@ -639,23 +606,10 @@ def check_uv_project(channel_dir: Path) -> CheckResult:
 
 def check_automation_package(channel_dir: Path) -> CheckResult:
     pyproject_path = channel_dir / PYPROJECT_FILENAME
-    if not pyproject_path.exists():
-        installation_mode = _running_global_installation_mode()
-        if installation_mode is not None:
-            return CheckResult(
-                id="automation_package",
-                status="ok",
-                category=BOOTSTRAP_CATEGORY,
-                message=f"{installation_mode} で automation パッケージ導入済み",
-            )
-        return CheckResult(
-            id="automation_package",
-            status="fail",
-            category=BOOTSTRAP_CATEGORY,
-            message=f"{PYPROJECT_FILENAME} が無いため automation パッケージを確認できない",
-            next_action=_ai_exec_action(["uv", "init"], auto_apply=False),
-        )
     if not pyproject_path.is_file():
+        if not pyproject_path.exists():
+            if result := _global_installation_success("automation_package", " で automation パッケージ導入済み"):
+                return result
         return CheckResult(
             id="automation_package",
             status="fail",
@@ -681,14 +635,8 @@ def check_automation_package(channel_dir: Path) -> CheckResult:
             message="automation パッケージ本体プロジェクト",
         )
     if not _has_automation_dependency(dependencies):
-        installation_mode = _running_global_installation_mode()
-        if installation_mode is not None:
-            return CheckResult(
-                id="automation_package",
-                status="ok",
-                category=BOOTSTRAP_CATEGORY,
-                message=f"{installation_mode} で automation パッケージ導入済み",
-            )
+        if result := _global_installation_success("automation_package", " で automation パッケージ導入済み"):
+            return result
         return CheckResult(
             id="automation_package",
             status="fail",
@@ -840,34 +788,30 @@ _TERRAFORM_GCP_ACTION: dict = {
 }
 
 
+def _gcp_terraform_failure(check_id: str, message: str) -> CheckResult:
+    """Attach the shared infrastructure remediation to a failed GCP diagnostic."""
+    return CheckResult(id=check_id, status="fail", message=message, next_action=_TERRAFORM_GCP_ACTION)
+
+
 def check_gcp_project(channel_dir: Path) -> CheckResult:
     project_id = _project_id_for(channel_dir)
     if not project_id:
-        return CheckResult(
-            id="gcp_project",
-            status="fail",
-            message="project_id が環境変数 / ADC quota project のいずれにも無い",
-            next_action=_TERRAFORM_GCP_ACTION,
-        )
+        return _gcp_terraform_failure("gcp_project", "project_id が環境変数 / ADC quota project のいずれにも無い")
     code, _, err = _run(["gcloud", "projects", "describe", project_id, "--format=value(projectId)"])
     if code != 0:
-        return CheckResult(
-            id="gcp_project",
-            status="fail",
-            message=f"プロジェクト {project_id} が見つからない: {err.strip()}",
-            next_action=_TERRAFORM_GCP_ACTION,
-        )
+        return _gcp_terraform_failure("gcp_project", f"プロジェクト {project_id} が見つからない: {err.strip()}")
     return CheckResult(id="gcp_project", status="ok", message=f"プロジェクト {project_id} 存在")
+
+
+def _gcp_project_unset(check_id: str) -> CheckResult:
+    """プロジェクト不明で実行できない GCP 診断を同じ理由で報告する。"""
+    return CheckResult(id=check_id, status="unknown", message="project_id が未設定のためスキップ")
 
 
 def check_billing(channel_dir: Path) -> CheckResult:
     project_id = _project_id_for(channel_dir)
     if not project_id:
-        return CheckResult(
-            id="billing_linked",
-            status="unknown",
-            message="project_id が未設定のためスキップ",
-        )
+        return _gcp_project_unset("billing_linked")
     code, out, err = _run(
         [
             "gcloud",
@@ -880,30 +824,16 @@ def check_billing(channel_dir: Path) -> CheckResult:
         ]
     )
     if code != 0:
-        return CheckResult(
-            id="billing_linked",
-            status="fail",
-            message=f"billing 情報取得失敗: {err.strip()}",
-            next_action=_TERRAFORM_GCP_ACTION,
-        )
+        return _gcp_terraform_failure("billing_linked", f"billing 情報取得失敗: {err.strip()}")
     if out.strip().lower() != "true":
-        return CheckResult(
-            id="billing_linked",
-            status="fail",
-            message=f"プロジェクト {project_id} に billing 未紐付け",
-            next_action=_TERRAFORM_GCP_ACTION,
-        )
+        return _gcp_terraform_failure("billing_linked", f"プロジェクト {project_id} に billing 未紐付け")
     return CheckResult(id="billing_linked", status="ok", message="billing 紐付け済み")
 
 
 def check_apis_enabled(channel_dir: Path) -> CheckResult:
     project_id = _project_id_for(channel_dir)
     if not project_id:
-        return CheckResult(
-            id="apis_enabled",
-            status="unknown",
-            message="project_id が未設定のためスキップ",
-        )
+        return _gcp_project_unset("apis_enabled")
     code, out, err = _run(
         [
             "gcloud",
@@ -915,21 +845,11 @@ def check_apis_enabled(channel_dir: Path) -> CheckResult:
         ]
     )
     if code != 0:
-        return CheckResult(
-            id="apis_enabled",
-            status="fail",
-            message=f"services list 失敗: {err.strip()}",
-            next_action=_TERRAFORM_GCP_ACTION,
-        )
+        return _gcp_terraform_failure("apis_enabled", f"services list 失敗: {err.strip()}")
     enabled = set(out.strip().splitlines())
     missing = [a for a in REQUIRED_APIS if a not in enabled]
     if missing:
-        return CheckResult(
-            id="apis_enabled",
-            status="fail",
-            message=f"未有効 API: {', '.join(missing)}",
-            next_action=_TERRAFORM_GCP_ACTION,
-        )
+        return _gcp_terraform_failure("apis_enabled", f"未有効 API: {', '.join(missing)}")
     return CheckResult(
         id="apis_enabled",
         status="ok",
@@ -997,11 +917,7 @@ def check_adc_quota_project(channel_dir: Path) -> CheckResult:
 def check_iam_aiplatform_user(channel_dir: Path) -> CheckResult:
     project_id = _project_id_for(channel_dir)
     if not project_id:
-        return CheckResult(
-            id="iam_aiplatform_user",
-            status="unknown",
-            message="project_id が未設定のためスキップ",
-        )
+        return _gcp_project_unset("iam_aiplatform_user")
     code, out, _ = _run(["gcloud", "auth", "list", "--filter=status:ACTIVE", "--format=value(account)"])
     if code != 0 or not out.strip():
         return CheckResult(
@@ -1022,19 +938,9 @@ def check_iam_aiplatform_user(channel_dir: Path) -> CheckResult:
         ]
     )
     if code != 0:
-        return CheckResult(
-            id="iam_aiplatform_user",
-            status="fail",
-            message=f"IAM policy 取得失敗: {err.strip()}",
-            next_action=_TERRAFORM_GCP_ACTION,
-        )
+        return _gcp_terraform_failure("iam_aiplatform_user", f"IAM policy 取得失敗: {err.strip()}")
     if not out.strip():
-        return CheckResult(
-            id="iam_aiplatform_user",
-            status="fail",
-            message=f"user:{account} に roles/aiplatform.user 未付与",
-            next_action=_TERRAFORM_GCP_ACTION,
-        )
+        return _gcp_terraform_failure("iam_aiplatform_user", f"user:{account} に roles/aiplatform.user 未付与")
     return CheckResult(
         id="iam_aiplatform_user",
         status="ok",
@@ -1357,6 +1263,24 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
             )
 
 
+def _playlist_entry_issues(playlists: dict) -> tuple[list[str], list[str]]:
+    """Collect invalid entry shapes and missing IDs in declaration order."""
+    invalid_entries: list[str] = []
+    missing_playlist_ids: list[str] = []
+    for key, value in playlists.items():
+        display_key = _format_external_display_value(key)
+        if isinstance(value, str):
+            playlist_id = value
+        elif isinstance(value, dict):
+            playlist_id = value.get("playlist_id")
+        else:
+            invalid_entries.append(f"{display_key} ({type(value).__name__})")
+            continue
+        if not isinstance(playlist_id, str) or not playlist_id.strip():
+            missing_playlist_ids.append(display_key)
+    return invalid_entries, missing_playlist_ids
+
+
 def check_playlist_config(channel_dir: Path) -> CheckResult:
     path = channel_dir / "config" / "channel" / "playlists.json"
     if not path.exists():
@@ -1437,20 +1361,7 @@ def check_playlist_config(channel_dir: Path) -> CheckResult:
             },
         )
 
-    invalid_entries: list[str] = []
-    missing_playlist_ids: list[str] = []
-    for key, value in playlists.items():
-        display_key = _format_external_display_value(key)
-        if isinstance(value, str):
-            if not value.strip():
-                missing_playlist_ids.append(display_key)
-            continue
-        if isinstance(value, dict):
-            playlist_id = value.get("playlist_id")
-            if not isinstance(playlist_id, str) or not playlist_id.strip():
-                missing_playlist_ids.append(display_key)
-            continue
-        invalid_entries.append(f"{display_key} ({type(value).__name__})")
+    invalid_entries, missing_playlist_ids = _playlist_entry_issues(playlists)
 
     if invalid_entries:
         return CheckResult(
@@ -1847,6 +1758,29 @@ def _upload_ready_api_error_result(error: YouTubeAPIError) -> CheckResult:
     )
 
 
+def _read_upload_channel_metadata(meta_path: Path) -> tuple[str | None, str | None]:
+    """Read the upload channel identity and its local remediation diagnostic."""
+    channel_id: Optional[str] = None
+    meta_issue: Optional[str] = None
+
+    if not meta_path.exists():
+        meta_issue = "config/channel/meta.json が存在しない"
+    else:
+        try:
+            meta_data = json.loads(meta_path.read_text(encoding="utf-8"))
+            if not isinstance(meta_data, dict):
+                meta_issue = "meta.json の形式が不正 (dict でない)"
+            else:
+                raw_channel_id = (meta_data.get("channel") or {}).get("channel_id")
+                channel_id = raw_channel_id if raw_channel_id else None
+                if channel_id is None:
+                    meta_issue = "channel.channel_id が未設定"
+        except (json.JSONDecodeError, OSError) as e:
+            meta_issue = f"meta.json 読み込み失敗: {e}"
+
+    return channel_id, meta_issue
+
+
 def _read_upload_local_state(channel_dir: Path) -> CheckResult | tuple[Path, str]:
     token_path = channel_dir / "auth" / "token.json"
 
@@ -1872,24 +1806,7 @@ def _read_upload_local_state(channel_dir: Path) -> CheckResult | tuple[Path, str
     token_scopes = set(token_data.get("scopes") or [])
     missing_scopes = [s for s in UPLOAD_REQUIRED_SCOPES if s not in token_scopes]
 
-    meta_path = channel_dir / "config" / "channel" / "meta.json"
-    channel_id: Optional[str] = None
-    meta_issue: Optional[str] = None
-
-    if not meta_path.exists():
-        meta_issue = "config/channel/meta.json が存在しない"
-    else:
-        try:
-            meta_data = json.loads(meta_path.read_text(encoding="utf-8"))
-            if not isinstance(meta_data, dict):
-                meta_issue = "meta.json の形式が不正 (dict でない)"
-            else:
-                raw_channel_id = (meta_data.get("channel") or {}).get("channel_id")
-                channel_id = raw_channel_id if raw_channel_id else None
-                if channel_id is None:
-                    meta_issue = "channel.channel_id が未設定"
-        except (json.JSONDecodeError, OSError) as e:
-            meta_issue = f"meta.json 読み込み失敗: {e}"
+    channel_id, meta_issue = _read_upload_channel_metadata(channel_dir / "config" / "channel" / "meta.json")
 
     issues = []
     if missing_scopes:

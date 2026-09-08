@@ -7,12 +7,11 @@ import sys
 from pathlib import Path
 
 from youtube_automation.commands.system.skills_sync import (
-    _ASSET_SPECS,
     _DEV_ONLY_SKILL_NAMES,
-    _asset_root,
-    _guard_target_with_all,
+    _dispatch_asset,
     _list_entries,
     _resolve_file_target,
+    _run_all_assets,
 )
 from youtube_automation.commands.system.skills_sync._ops import (
     _copy_entry,
@@ -59,22 +58,13 @@ def _warn_numbered_duplicates(target_dir: Path) -> bool:
 
 
 def cmd_sync(args: argparse.Namespace) -> int:
-    # CLI 以外 (テスト / 公開 API 直呼び) から呼ばれても silent な誤動作にならないよう
-    # 入口でガードする (asset=all + target 指定なら ValueError)。CLI 経由では
-    # _resolve_default_target が先に ValueError を catch して exit 2 するため、
-    # 通常はここまで到達しない。直呼び caller は ValueError を try/except で扱える。
-    _guard_target_with_all(args)
-    if args.asset == "all":
-        return _sync_all(args)
-    spec = _ASSET_SPECS[args.asset]
-    root = _asset_root(args.asset)
-    target = Path(args.target).resolve()
-
-    if spec["kind"] == "file":
-        return _sync_file_asset(spec, root, target, args)
-    if spec["kind"] == "json-merge":
-        return sync_settings_asset(spec, root, target, args)
-    return _sync_dir_asset(spec, root, target, args)
+    return _dispatch_asset(
+        args,
+        all_assets=_sync_all,
+        file_asset=lambda spec, root, target: _sync_file_asset(spec, root, target, args),
+        settings_asset=lambda spec, root, target: sync_settings_asset(spec, root, target, args),
+        directory_asset=lambda spec, root, target: _sync_dir_asset(spec, root, target, args),
+    )
 
 
 def _sync_all(args: argparse.Namespace) -> int:
@@ -83,28 +73,17 @@ def _sync_all(args: argparse.Namespace) -> int:
     `--target` 指定時は parser 側 (`_resolve_default_target`) で既に error 終了
     しているため、ここでは args.target は必ず None。
     """
-    overall_rc = 0
-    for i, asset_name in enumerate(sorted(_ASSET_SPECS.keys())):
-        if i > 0:
-            print()
-        print(f"=== [{asset_name}] sync ===")
-        # --only / --prune は dir asset (skills) でのみ意味を持つ。
-        # それ以外の asset に伝搬すると warning が出るが処理は継続する設計。
-        sub_args = argparse.Namespace(
-            asset=asset_name,
-            target=_ASSET_SPECS[asset_name]["default_target"],
-            symlink=args.symlink,
-            force=args.force,
-            dry_run=args.dry_run,
-            only=args.only,
-            prune=args.prune,
-            yes=args.yes,
-            accept_hooks=getattr(args, "accept_hooks", False),
-        )
-        rc = cmd_sync(sub_args)
-        if rc != 0:
-            overall_rc = rc
-    return overall_rc
+    return _run_all_assets(
+        "sync",
+        cmd_sync,
+        symlink=args.symlink,
+        force=args.force,
+        dry_run=args.dry_run,
+        only=args.only,
+        prune=args.prune,
+        yes=args.yes,
+        accept_hooks=getattr(args, "accept_hooks", False),
+    )
 
 
 def _sync_file_asset(
@@ -149,10 +128,7 @@ def _sync_file_asset(
     print(f"  {prefix}{result:>8}: {target.name}")
 
     counts = {result: 1}
-    print()
-    print(f"完了: {sum(counts.values())} 件処理 — {counts}")
-    if result == "skipped":
-        print("  (skipped を上書きするには --force を指定してください)")
+    _print_sync_summary(counts)
     return 0
 
 
@@ -179,12 +155,12 @@ def _sync_dir_asset(
 
     op = _symlink_entry if args.symlink else _copy_entry
     counts: dict[str, int] = {"created": 0, "updated": 0, "skipped": 0, "linked": 0}
+    prefix = "[dry-run] " if args.dry_run else ""
     for name in entries:
         src = root / name
         dst = target_dir / name
         result = op(src, dst, force=args.force, dry_run=args.dry_run)
         counts[result] = counts.get(result, 0) + 1
-        prefix = "[dry-run] " if args.dry_run else ""
         print(f"  {prefix}{result:>8}: {name}")
 
     # orphan 判定は **全集合** で行う (--only でフィルタしない)。
@@ -196,49 +172,59 @@ def _sync_dir_asset(
         for key, val in prune_counts.items():
             counts[key] = counts.get(key, 0) + val
 
-    if args.asset == "skills":
-        _report_orphan_skill_configs(target_dir, root)
-
-    # skills 配布時は Codex CLI の探索パス `.agents/skills` も併設する。
-    # 標準レイアウト (`.claude/skills`) でないときは対象外 (None) でスキップ。
     rc = 0
     if args.asset == "skills":
-        mirror = _ensure_agents_skills_symlink(target_dir, force=args.force, dry_run=args.dry_run)
-        prefix = "[dry-run] " if args.dry_run else ""
-        if mirror == "unsupported":
-            # symlink 機能自体がない環境 (Windows 非特権ユーザー等)。警告のみで継続。
-            print(
-                "  [warn] .agents/skills の symlink を作成できませんでした (symlink 非対応環境)",
-                file=sys.stderr,
-            )
-        elif mirror == "permission-denied":
-            # 権限エラーは silent 化せず非ゼロ rc で明示的に失敗させる。
-            # ユーザーが手動で復旧できる情報 (link コマンド) を案内する。
-            link_path = target_dir.parent.parent / ".agents" / "skills"
-            print(
-                "  [error] .agents/skills の symlink 作成が権限エラーで失敗しました\n"
-                f"          link 先: {link_path}\n"
-                "          Codex CLI のスキル探索パス (.agents/skills) が無いため、\n"
-                "          このまま放置すると Codex から同期済みスキルが見えません。\n"
-                "          手動で復旧する場合は以下を実行してください:\n"
-                f"            mkdir -p {link_path.parent}\n"
-                f"            ln -s ../.claude/skills {link_path}\n"
-                "          または sudo / 適切な権限で `yt-skills sync --asset skills --force` を再実行してください。",
-                file=sys.stderr,
-            )
-            counts["error"] = counts.get("error", 0) + 1
-            rc = 1
-        elif mirror is not None:
-            print(f"  {prefix}{mirror:>8}: .agents/skills -> ../.claude/skills")
-            counts[mirror] = counts.get(mirror, 0) + 1
+        _report_orphan_skill_configs(target_dir, root)
+        # skills 配布時は Codex CLI の探索パス `.agents/skills` も併設する。
+        # 標準レイアウト (`.claude/skills`) でないときは対象外 (None) でスキップ。
+        rc = _sync_agents_mirror(target_dir, force=args.force, dry_run=args.dry_run, counts=counts)
 
     if not warned_numbered_duplicates:
         _warn_numbered_duplicates(target_dir)
 
+    _print_sync_summary(counts)
+    if args.prune and counts.get("would-prune"):
+        print("  (実削除には --yes を指定してください)")
+    return rc
+
+
+def _print_sync_summary(counts: dict[str, int]) -> None:
+    """Show sync totals and the overwrite hint for skipped entries."""
     print()
     print(f"完了: {sum(counts.values())} 件処理 — {counts}")
     if counts.get("skipped"):
         print("  (skipped を上書きするには --force を指定してください)")
-    if args.prune and counts.get("would-prune"):
-        print("  (実削除には --yes を指定してください)")
+
+
+def _sync_agents_mirror(target_dir: Path, *, force: bool, dry_run: bool, counts: dict[str, int]) -> int:
+    """Create the Codex discovery link and report its outcome in the sync totals."""
+    rc = 0
+    mirror = _ensure_agents_skills_symlink(target_dir, force=force, dry_run=dry_run)
+    prefix = "[dry-run] " if dry_run else ""
+    if mirror == "unsupported":
+        # symlink 機能自体がない環境 (Windows 非特権ユーザー等)。警告のみで継続。
+        print(
+            "  [warn] .agents/skills の symlink を作成できませんでした (symlink 非対応環境)",
+            file=sys.stderr,
+        )
+    elif mirror == "permission-denied":
+        # 権限エラーは silent 化せず非ゼロ rc で明示的に失敗させる。
+        # ユーザーが手動で復旧できる情報 (link コマンド) を案内する。
+        link_path = target_dir.parent.parent / ".agents" / "skills"
+        print(
+            "  [error] .agents/skills の symlink 作成が権限エラーで失敗しました\n"
+            f"          link 先: {link_path}\n"
+            "          Codex CLI のスキル探索パス (.agents/skills) が無いため、\n"
+            "          このまま放置すると Codex から同期済みスキルが見えません。\n"
+            "          手動で復旧する場合は以下を実行してください:\n"
+            f"            mkdir -p {link_path.parent}\n"
+            f"            ln -s ../.claude/skills {link_path}\n"
+            "          または sudo / 適切な権限で `yt-skills sync --asset skills --force` を再実行してください。",
+            file=sys.stderr,
+        )
+        counts["error"] = counts.get("error", 0) + 1
+        rc = 1
+    elif mirror is not None:
+        print(f"  {prefix}{mirror:>8}: .agents/skills -> ../.claude/skills")
+        counts[mirror] = counts.get(mirror, 0) + 1
     return rc

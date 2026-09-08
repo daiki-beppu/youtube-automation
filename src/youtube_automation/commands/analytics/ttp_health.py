@@ -8,7 +8,8 @@ from pathlib import Path
 
 from youtube_automation.application.analytics.benchmark_query import find_latest_benchmark_json
 from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.configuration import load_config
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.infrastructure.analytics.ttp_health import evaluate_ttp_health
 
 

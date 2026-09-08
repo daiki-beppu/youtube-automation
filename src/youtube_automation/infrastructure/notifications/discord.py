@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import sys
+from abc import abstractmethod
 from typing import Protocol
 
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.core.redaction import redact_sensitive_data
 from youtube_automation.domains.notifications import NotificationEvent, category_for
-from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
 from youtube_automation.infrastructure.secrets import get_secret
 from youtube_automation.infrastructure.youtube.notification import NotificationError, notify
 
@@ -15,10 +16,12 @@ _WEBHOOK_SECRET_NAME = "DISCORD_WEBHOOK_URL"
 
 
 class SecretResolver(Protocol):
+    @abstractmethod
     def __call__(self, name: str) -> str: ...
 
 
 class WebhookSender(Protocol):
+    @abstractmethod
     def __call__(self, *, content: str, webhook_url: str | None) -> None: ...
 
 

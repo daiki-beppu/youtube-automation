@@ -11,6 +11,7 @@ from youtube_automation.core.errors import (
     DocumentValidationError,
 )
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure import filesystem
 from youtube_automation.infrastructure.documents import publishing
 
 
@@ -107,7 +108,7 @@ def test_replace_failure_preserves_existing_html_and_cleans_temporary(
     def fail_replace(_source: Path, _target: Path) -> None:
         raise OSError("replace failed")
 
-    monkeypatch.setattr(publishing.os, "replace", fail_replace)
+    monkeypatch.setattr(filesystem.os, "replace", fail_replace)
 
     with pytest.raises(OSError, match="replace failed"):
         publishing.publish_json_document(source, RepositorySchema.WEEKLY_VOTE_LOG)
@@ -120,13 +121,13 @@ def test_publisher_fsyncs_temporary_before_replace(tmp_path: Path, monkeypatch: 
     source = tmp_path / "weekly-vote-log.json"
     _write_json(source, _weekly_document())
     fsynced: list[int] = []
-    real_fsync = publishing.os.fsync
+    real_fsync = filesystem.os.fsync
 
     def record_fsync(descriptor: int) -> None:
         fsynced.append(descriptor)
         real_fsync(descriptor)
 
-    monkeypatch.setattr(publishing.os, "fsync", record_fsync)
+    monkeypatch.setattr(filesystem.os, "fsync", record_fsync)
 
     publishing.publish_json_document(source, RepositorySchema.WEEKLY_VOTE_LOG)
 

@@ -33,7 +33,7 @@ def resolve_channel_root(channel_root: Path | None) -> Path:
     """明示指定がなければ設定の channel root へ解決する。"""
     if channel_root is not None:
         return channel_root
-    from youtube_automation.configuration import channel_dir
+    from youtube_automation.core.channel_context import channel_dir
 
     return channel_dir()
 

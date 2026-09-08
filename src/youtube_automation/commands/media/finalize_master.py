@@ -30,18 +30,17 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any, cast
 
-from youtube_automation.configuration import channel_dir
+from youtube_automation.commands._shared.arguments import add_optional_collection_argument
+from youtube_automation.commands._shared.cli_harness import run_validated_command
 from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.domains.collections.paths import CollectionPaths, resolve_collection_dir
 from youtube_automation.domains.media.audio_adjustments import (
     read_audio_adjustments,
     validate_finalize_settings,
 )
 from youtube_automation.infrastructure.file_lock import file_lock
-from youtube_automation.infrastructure.media.collection_paths import (
-    CollectionPaths,
-    resolve_collection_dir,
-)
 
 # ambient layer 設定の組み込みデフォルト
 # (skill-config audio.finalize.ambient_layers namespace で上書き可)。
@@ -360,6 +359,28 @@ class FinalizeConfig:
         self.layers_overrides = layers_overrides
 
 
+def _resolve_loudnorm_config(loudnorm_block: dict) -> tuple[bool, str, dict[str, float]]:
+    """Resolve loudness targets and reject unsupported normalization modes."""
+    loudnorm_enabled = bool(loudnorm_block.get("enabled", _DEFAULT_LOUDNORM_ENABLED))
+    loudnorm_mode = str(loudnorm_block.get("mode", _DEFAULT_LOUDNORM_MODE))
+    if loudnorm_mode == "dynamic":
+        # ffmpeg loudnorm は linear=true (= measured 注入) と dynamic (= 単発適用) を
+        # 切り替えられるが、本 CLI は two-pass linear 前提で組まれている。
+        raise NotImplementedError(
+            "`audio.finalize.loudnorm.mode: dynamic` は未実装です (現状は two-pass linear のみサポート)。"
+        )
+    if loudnorm_mode != "linear":
+        raise ConfigError(
+            f"`audio.finalize.loudnorm.mode` の値が不正です: {loudnorm_mode!r} (許可: 'linear', 'dynamic'[未実装])"
+        )
+    loudnorm = dict(_DEFAULT_LOUDNORM)
+    for key in ("I", "LRA", "TP"):
+        if key in loudnorm_block:
+            loudnorm[key] = float(loudnorm_block[key])
+
+    return loudnorm_enabled, loudnorm_mode, loudnorm
+
+
 def _resolve_finalize_config(skill_cfg: dict[str, object], adjustments: object | None = None) -> FinalizeConfig:
     """skill-config から `audio.finalize.*` を解決する。
 
@@ -389,22 +410,7 @@ def _resolve_finalize_config(skill_cfg: dict[str, object], adjustments: object |
 
     # loudnorm は finalize namespace で解決する。
     loudnorm_block = finalize_cfg.get("loudnorm") or {}
-    loudnorm_enabled = bool(loudnorm_block.get("enabled", _DEFAULT_LOUDNORM_ENABLED))
-    loudnorm_mode = str(loudnorm_block.get("mode", _DEFAULT_LOUDNORM_MODE))
-    if loudnorm_mode == "dynamic":
-        # ffmpeg loudnorm は linear=true (= measured 注入) と dynamic (= 単発適用) を
-        # 切り替えられるが、本 CLI は two-pass linear 前提で組まれている。
-        raise NotImplementedError(
-            "`audio.finalize.loudnorm.mode: dynamic` は未実装です (現状は two-pass linear のみサポート)。"
-        )
-    if loudnorm_mode != "linear":
-        raise ConfigError(
-            f"`audio.finalize.loudnorm.mode` の値が不正です: {loudnorm_mode!r} (許可: 'linear', 'dynamic'[未実装])"
-        )
-    loudnorm = dict(_DEFAULT_LOUDNORM)
-    for key in ("I", "LRA", "TP"):
-        if key in loudnorm_block:
-            loudnorm[key] = float(loudnorm_block[key])
+    loudnorm_enabled, loudnorm_mode, loudnorm = _resolve_loudnorm_config(loudnorm_block)
 
     # mix セクション (amix の duration / normalize)
     mix_block = finalize_cfg.get("mix") or {}
@@ -414,11 +420,8 @@ def _resolve_finalize_config(skill_cfg: dict[str, object], adjustments: object |
             f"`audio.finalize.mix.duration` の値が不正です: {mix_duration!r} (許可: 'first', 'shortest', 'longest')"
         )
     mix_normalize_raw = mix_block.get("normalize", _DEFAULT_MIX_NORMALIZE)
-    # bool 表現 (True/False) を 1/0 に正規化する
-    if isinstance(mix_normalize_raw, bool):
-        mix_normalize = 1 if mix_normalize_raw else 0
-    else:
-        mix_normalize = int(mix_normalize_raw)
+    # int は bool 表現 (True/False) も 1/0 に正規化する。
+    mix_normalize = int(mix_normalize_raw)
     if mix_normalize not in (0, 1):
         raise ConfigError(
             f"`audio.finalize.mix.normalize` の値が不正です: {mix_normalize!r} (許可: 0 / 1 / true / false)"
@@ -544,6 +547,46 @@ def _install_finalized_output(
             raise ValidationError(f"master 調整原本を finalize 結果へ更新できません: {error}") from error
 
 
+def _render_ambient_mix(
+    source: Path,
+    rains: list[Path],
+    output: Path,
+    cfg: FinalizeConfig,
+    layer_overrides: list[dict[str, object] | None],
+) -> bool:
+    """Measure when normalization is enabled, then encode the ambient mix."""
+
+    def filter_for(measured: dict[str, str] | None = None) -> str:
+        return build_filter(
+            len(rains),
+            cfg.volume_db,
+            cfg.fadein_s,
+            cfg.loudnorm,
+            measured=measured,
+            fadein_curve=cfg.fadein_curve,
+            mix_duration=cfg.mix_duration,
+            mix_normalize=cfg.mix_normalize,
+            layer_overrides=layer_overrides,
+            apply_loudnorm=cfg.loudnorm_enabled,
+        )
+
+    filter_expr = filter_for()
+    if cfg.loudnorm_enabled:
+        measurement = _run_ffmpeg_stage(
+            _build_pass1_cmd(source, rains, filter_expr), label="ffmpeg pass1 (loudnorm measure)"
+        )
+        if measurement.returncode != 0:
+            return False
+        filter_expr = filter_for(_parse_loudnorm_json(measurement.stderr))
+
+    build_command = _build_pass2_cmd if cfg.loudnorm_enabled else _build_single_pass_cmd
+    command = build_command(
+        source, rains, filter_expr, output, cfg.bitrate, codec=cfg.codec, sample_rate=cfg.sample_rate
+    )
+    label = "ffmpeg pass2 (apply)" if cfg.loudnorm_enabled else "ffmpeg (single-pass amix)"
+    return _run_ffmpeg_stage(command, label=label).returncode == 0
+
+
 def _finalize_master_unlocked(
     collection_dir: Path,
     channel: Path,
@@ -595,28 +638,7 @@ def _finalize_master_unlocked(
     master = paths.master_audio_path
     finalize_backup = paths.finalize_backup_path
     master_adjustment_backup = paths.master_adjustment_backup_path
-    collection_root = collection_dir.resolve()
-    for candidate, label in (
-        (master, "master"),
-        (finalize_backup, "finalize 原本"),
-        (master_adjustment_backup, "master 調整原本"),
-    ):
-        if not candidate.parent.resolve().is_relative_to(collection_root):
-            print(f"ERROR: {label} の保存先が collection 外を指しています: {candidate}", file=sys.stderr)
-            return 1
-    if not master.is_file() or master.is_symlink():
-        print(f"ERROR: マスター音源が見つかりません: {master}", file=sys.stderr)
-        return 1
-    if finalize_backup.exists() and (not finalize_backup.is_file() or finalize_backup.is_symlink()):
-        print(f"ERROR: finalize 原本は通常ファイルである必要があります: {finalize_backup}", file=sys.stderr)
-        return 1
-    if master_adjustment_backup.exists() and (
-        not master_adjustment_backup.is_file() or master_adjustment_backup.is_symlink()
-    ):
-        print(
-            f"ERROR: master 調整原本は通常ファイルである必要があります: {master_adjustment_backup}",
-            file=sys.stderr,
-        )
+    if not _validate_finalize_paths(collection_dir, master, finalize_backup, master_adjustment_backup):
         return 1
 
     source = (
@@ -636,117 +658,68 @@ def _finalize_master_unlocked(
         if not quiet:
             print(f"  Layering {len(rains)} ambient layer(s) onto {master.name}...")
 
-        if not finalize_cfg.loudnorm_enabled:
-            # loudnorm を完全に skip して amix だけで encode する 1-pass モード。
-            single_filter = build_filter(
-                len(rains),
-                finalize_cfg.volume_db,
-                finalize_cfg.fadein_s,
-                finalize_cfg.loudnorm,
-                measured=None,
-                fadein_curve=finalize_cfg.fadein_curve,
-                mix_duration=finalize_cfg.mix_duration,
-                mix_normalize=finalize_cfg.mix_normalize,
-                layer_overrides=layer_overrides,
-                apply_loudnorm=False,
-            )
-            single_cmd = _build_single_pass_cmd(
-                source,
-                rains,
-                single_filter,
-                tmp,
-                finalize_cfg.bitrate,
-                codec=finalize_cfg.codec,
-                sample_rate=finalize_cfg.sample_rate,
-            )
-            single = subprocess.run(single_cmd, capture_output=True, text=True, check=False)
-            if single.returncode != 0:
-                print(
-                    f"ERROR: ffmpeg (single-pass amix) failed (rc={single.returncode})",
-                    file=sys.stderr,
-                )
-                if single.stderr:
-                    print(single.stderr, file=sys.stderr)
-                return 1
-            _install_finalized_output(tmp, master, source, finalize_backup, master_adjustment_backup)
-            if not quiet:
-                print(f"  ✓ Ambient layer applied (loudnorm skipped): {master.name}")
-            return 0
-
-        # pass1: loudnorm measure (stderr に print_format=json で計測値が出る)
-        pass1_filter = build_filter(
-            len(rains),
-            finalize_cfg.volume_db,
-            finalize_cfg.fadein_s,
-            finalize_cfg.loudnorm,
-            measured=None,
-            fadein_curve=finalize_cfg.fadein_curve,
-            mix_duration=finalize_cfg.mix_duration,
-            mix_normalize=finalize_cfg.mix_normalize,
-            layer_overrides=layer_overrides,
-        )
-        pass1_cmd = _build_pass1_cmd(source, rains, pass1_filter)
-        pass1 = subprocess.run(pass1_cmd, capture_output=True, text=True, check=False)
-        if pass1.returncode != 0:
-            print(
-                f"ERROR: ffmpeg pass1 (loudnorm measure) failed (rc={pass1.returncode})",
-                file=sys.stderr,
-            )
-            if pass1.stderr:
-                print(pass1.stderr, file=sys.stderr)
+        if not _render_ambient_mix(source, rains, tmp, finalize_cfg, layer_overrides):
             return 1
-
-        measured = _parse_loudnorm_json(pass1.stderr)
-
-        # pass2: measured を fold-in して apply + encode (master.tmp.mp3 へ書く)
-        pass2_filter = build_filter(
-            len(rains),
-            finalize_cfg.volume_db,
-            finalize_cfg.fadein_s,
-            finalize_cfg.loudnorm,
-            measured=measured,
-            fadein_curve=finalize_cfg.fadein_curve,
-            mix_duration=finalize_cfg.mix_duration,
-            mix_normalize=finalize_cfg.mix_normalize,
-            layer_overrides=layer_overrides,
-        )
-        pass2_cmd = _build_pass2_cmd(
-            source,
-            rains,
-            pass2_filter,
-            tmp,
-            finalize_cfg.bitrate,
-            codec=finalize_cfg.codec,
-            sample_rate=finalize_cfg.sample_rate,
-        )
-        pass2 = subprocess.run(pass2_cmd, capture_output=True, text=True, check=False)
-        if pass2.returncode != 0:
-            print(
-                f"ERROR: ffmpeg pass2 (apply) failed (rc={pass2.returncode})",
-                file=sys.stderr,
-            )
-            if pass2.stderr:
-                print(pass2.stderr, file=sys.stderr)
-            return 1
-
-        # pass2 成功時のみ atomic rename で master を上書き (失敗時は元 master を保護)
         _install_finalized_output(tmp, master, source, finalize_backup, master_adjustment_backup)
-
         if not quiet:
-            print(f"  ✓ Ambient layer applied: {master.name}")
+            suffix = "" if finalize_cfg.loudnorm_enabled else " (loudnorm skipped)"
+            print(f"  ✓ Ambient layer applied{suffix}: {master.name}")
         return 0
     except ValidationError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         return 1
     finally:
-        # pass1/pass2/single の中断・例外・失敗いずれの経路でも tmp 残骸を必ず掃除する。
-        if tmp.exists():
-            try:
-                tmp.unlink()
-            except OSError:
-                # tmp 削除失敗は master 保護の本体には影響しないため握りつぶす
-                # (主目的の master.mp3 はこの時点で無傷)。
-                pass
+        _discard_finalize_temporary(tmp)
+
+
+def _discard_finalize_temporary(tmp: Path) -> None:
+    """Remove mix intermediates without replacing the original processing outcome."""
+    # pass1/pass2/single の中断・例外・失敗いずれの経路でも tmp 残骸を必ず掃除する。
+    if tmp.exists():
+        try:
+            tmp.unlink()
+        except OSError:
+            # tmp 削除失敗は master 保護の本体には影響しないため握りつぶす
+            # (主目的の master.mp3 はこの時点で無傷)。
+            pass
+
+
+def _validate_finalize_paths(
+    collection_dir: Path, master: Path, finalize_backup: Path, master_adjustment_backup: Path
+) -> bool:
+    collection_root = collection_dir.resolve()
+    for candidate, label in (
+        (master, "master"),
+        (finalize_backup, "finalize 原本"),
+        (master_adjustment_backup, "master 調整原本"),
+    ):
+        if not candidate.parent.resolve().is_relative_to(collection_root):
+            print(f"ERROR: {label} の保存先が collection 外を指しています: {candidate}", file=sys.stderr)
+            return False
+    if not master.is_file() or master.is_symlink():
+        print(f"ERROR: マスター音源が見つかりません: {master}", file=sys.stderr)
+        return False
+    if finalize_backup.exists() and (not finalize_backup.is_file() or finalize_backup.is_symlink()):
+        print(f"ERROR: finalize 原本は通常ファイルである必要があります: {finalize_backup}", file=sys.stderr)
+        return False
+    if master_adjustment_backup.exists() and (
+        not master_adjustment_backup.is_file() or master_adjustment_backup.is_symlink()
+    ):
+        print(
+            f"ERROR: master 調整原本は通常ファイルである必要があります: {master_adjustment_backup}",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
+def _run_ffmpeg_stage(command: list[str], *, label: str) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        print(f"ERROR: {label} failed (rc={result.returncode})", file=sys.stderr)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+    return result
 
 
 def finalize_master(
@@ -764,21 +737,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="branding/<layers_dir>/ の ambient レイヤーをマスター音源にレイヤーする",
     )
-    parser.add_argument(
-        "collection",
-        nargs="?",
-        help="コレクションディレクトリ (省略時は CWD)",
-    )
+    add_optional_collection_argument(parser)
     parser.add_argument("--quiet", action="store_true", help="進捗表示を抑制")
     args = parser.parse_args()
 
-    try:
-        collection_dir = resolve_collection_dir(args.collection)
-        channel = channel_dir()
-        return finalize_master(collection_dir, channel, quiet=args.quiet)
-    except (ValidationError, ConfigError) as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    return run_validated_command(
+        lambda: finalize_master(
+            resolve_collection_dir(args.collection),
+            channel_dir(),
+            quiet=args.quiet,
+        )
+    )
 
 
 if __name__ == "__main__":

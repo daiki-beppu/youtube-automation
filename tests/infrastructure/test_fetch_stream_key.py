@@ -575,7 +575,7 @@ class TestOAuthHandlerExtension:
         When 既存 callsite が ``YouTubeOAuthHandler(auth_dir=...)`` 相当で構築
         Then ``token_file`` は ``auth_dir/"token.json"`` のまま（後方互換）。
         """
-        from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+        from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
 
         auth_dir = tmp_path / "auth"
         auth_dir.mkdir()
@@ -590,7 +590,7 @@ class TestOAuthHandlerExtension:
         When ``YouTubeOAuthHandler()``
         Then ``SCOPES`` クラス属性は元の 4 件のまま（broaden しない）。
         """
-        from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+        from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
 
         # クラス属性 SCOPES は引き続き 4 件で機能（既存のデフォルトとして残す）
         assert "https://www.googleapis.com/auth/youtube" in YouTubeOAuthHandler.SCOPES
@@ -607,7 +607,7 @@ class TestOAuthHandlerExtension:
         When ``YouTubeOAuthHandler(token_path=...)``
         Then ``token_file`` は指定値を保持する。
         """
-        from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+        from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
 
         custom_token = tmp_path / "auth" / "token_streaming.json"
         custom_token.parent.mkdir(parents=True)
@@ -623,7 +623,7 @@ class TestOAuthHandlerExtension:
 
         ``self._scopes`` のような実装詳細に依存せず、観測可能な API 呼び出しで検証する。
         """
-        from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+        from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
 
         custom_scopes = ["https://www.googleapis.com/auth/youtube"]
         token_file = tmp_path / "token_streaming.json"
@@ -650,7 +650,7 @@ class TestOAuthHandlerExtension:
         When ``authenticate()``
         Then ``InstalledAppFlow.from_client_secrets_file`` に指定した scopes が渡る。
         """
-        from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+        from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
 
         custom_scopes = ["https://www.googleapis.com/auth/youtube"]
         token_file = tmp_path / "token_streaming.json"  # 存在させない

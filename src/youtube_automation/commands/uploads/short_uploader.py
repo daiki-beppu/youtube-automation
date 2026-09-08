@@ -4,10 +4,9 @@ import argparse
 import json
 from pathlib import Path
 
-from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.core.errors import AutomationError
-from youtube_automation.domains.uploads.shorts import ACTION_FAILED, ShortUploader
-from youtube_automation.infrastructure.google.youtube import create_authenticated_youtube_clients
+from youtube_automation.application.uploads.shorts import ACTION_FAILED, ShortUploader
+from youtube_automation.application.youtube_auth import create_authenticated_youtube_clients
+from youtube_automation.commands._shared.cli_harness import UPLOAD_COMMAND_ERRORS, run_cli
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -36,8 +35,5 @@ def main(argv: list[str] | None = None) -> int:
         build_parser,
         run,
         argv,
-        failure_message="エラー",
-        interrupt_message="中断されました",
-        interrupt_exit_code=130,
-        handled_errors=(AutomationError, OSError, ValueError),
+        handled_errors=UPLOAD_COMMAND_ERRORS,
     )

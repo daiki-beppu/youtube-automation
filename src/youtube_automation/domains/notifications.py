@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Protocol
@@ -46,6 +47,7 @@ class NotificationEvent:
 
 
 class NotificationNotifier(Protocol):
+    @abstractmethod
     def notify(self, event: NotificationEvent) -> bool: ...
 
 

@@ -29,11 +29,8 @@ from google.genai.errors import APIError
 from youtube_automation.application.analytics.video_report import write_video_analysis_report
 from youtube_automation.application.documents.migration import MarkdownMigrationDecision
 from youtube_automation.core.errors import DocumentMigrationError, ValidationError
-from youtube_automation.infrastructure.media.video_analyzer import (
-    VideoAnalysisReport,
-    VideoAnalyzer,
-    VideoTarget,
-)
+from youtube_automation.domains.analytics.video_analysis import VideoAnalysisReport, VideoTarget
+from youtube_automation.infrastructure.media.video_analyzer import VideoAnalyzer
 
 
 def _make_target(**overrides) -> VideoTarget:

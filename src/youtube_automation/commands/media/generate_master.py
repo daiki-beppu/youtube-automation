@@ -2,7 +2,7 @@
 """コレクションの個別音声 (MP3 / M4A / WAV) をクロスフェード結合してマスター音源を生成する。
 
 skill-config (`masterup.audio.crossfade_duration` / `bitrate`) を参照するため、
-`domains.metadata.service.BAHMetadataGenerator` のタイムスタンプ計算と常に同じクロスフェード秒数で結合される。
+`application.metadata.service.BAHMetadataGenerator` のタイムスタンプ計算と常に同じクロスフェード秒数で結合される。
 
 入力は `.mp3` / `.m4a` / `.wav` を受け付け、出力は常に `master.mp3`
 (`libmp3lame -b:a {bitrate}` の CBR/ABR rate-control) に統一する。
@@ -22,17 +22,16 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Mapping
 from pathlib import Path
 
+from youtube_automation.commands._shared.arguments import add_optional_collection_argument
 from youtube_automation.configuration import load_config
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ValidationError
+from youtube_automation.domains.collections.paths import CollectionPaths, resolve_collection_dir
 from youtube_automation.domains.media.audio_adjustments import apply_track_order, read_audio_adjustments
 from youtube_automation.infrastructure.file_lock import file_lock
-from youtube_automation.infrastructure.media.collection_paths import (
-    CollectionPaths,
-    resolve_collection_dir,
-)
 from youtube_automation.infrastructure.media.probe import probe_duration
 
 SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
@@ -177,6 +176,25 @@ def _collect_audio_inputs(music_dir: Path) -> list[Path]:
     return sorted(matches, key=lambda p: p.name)
 
 
+def _pin_named_audio_files(files: list[Path], pin_first: list[str]) -> tuple[list[Path], list[Path]]:
+    """Resolve requested names in order and partition the remaining audio inputs."""
+    by_name = {p.name: p for p in files}
+    pinned: list[Path] = []
+    missing: list[str] = []
+    for name in pin_first:
+        target = by_name.get(name)
+        if target is None:
+            missing.append(name)
+        else:
+            pinned.append(target)
+    if missing:
+        available = ", ".join(p.name for p in files)
+        raise ValidationError(f"--pin-first で指定したファイルが見つかりません: {missing} (利用可能: {available})")
+    pinned_paths = set(pinned)
+    remaining = [p for p in files if p not in pinned_paths]
+    return pinned, remaining
+
+
 def _apply_pin_first(
     files: list[Path],
     *,
@@ -197,20 +215,7 @@ def _apply_pin_first(
         raise ValidationError("pin_first と pin_first_count は同時指定できません (mutually exclusive)")
 
     if pin_first:
-        by_name = {p.name: p for p in files}
-        pinned: list[Path] = []
-        missing: list[str] = []
-        for name in pin_first:
-            target = by_name.get(name)
-            if target is None:
-                missing.append(name)
-            else:
-                pinned.append(target)
-        if missing:
-            available = ", ".join(p.name for p in files)
-            raise ValidationError(f"--pin-first で指定したファイルが見つかりません: {missing} (利用可能: {available})")
-        remaining = [p for p in files if p not in pinned]
-        return pinned, remaining
+        return _pin_named_audio_files(files, pin_first)
 
     if pin_first_count and pin_first_count > 0:
         if pin_first_count > len(files):
@@ -242,6 +247,100 @@ def _discard_stale_adjustment_backups(paths: CollectionPaths) -> None:
         raise ValidationError(f"古い master 調整原本を無効化できません: {error}") from error
 
 
+def _order_master_inputs(
+    files: list[Path],
+    *,
+    order: list[str] | None,
+    shuffle: bool,
+    shuffle_seed: int | None,
+    pin_first: list[str] | None,
+    pin_first_count: int | None,
+) -> list[Path]:
+    if order is not None:
+        if shuffle or pin_first or pin_first_count:
+            raise ValidationError("保存済み order と shuffle / pin_first は同時に指定できません")
+        files = apply_track_order(files, order)
+        print("[Order] audio-adjustments.json の保存順を使用します")
+
+    # 先頭固定を解決 (要件 1-4, 10): pin された曲は順序固定、残りを shuffle 対象とする。
+    pinned, remaining = _apply_pin_first(
+        files,
+        pin_first=pin_first,
+        pin_first_count=pin_first_count,
+    )
+
+    # ループ展開前にシャッフルする (要件 8: 同一シャッフル順を N 回繰り返す)。
+    # 再現性ログは quiet モードでも常に stdout に出す (要件 4)。
+    # pin がある場合は pinned を順序固定したまま remaining のみ shuffle する。
+    if shuffle:
+        effective_seed = shuffle_seed if shuffle_seed is not None else random.SystemRandom().randrange(_AUTO_SEED_BOUND)
+        random.Random(effective_seed).shuffle(remaining)
+        print(f"[Shuffle] seed={effective_seed}")
+
+    files = pinned + remaining
+    if pinned:
+        print(f"[Pin] first {len(pinned)} track(s) fixed: {[p.name for p in pinned]}")
+    return files
+
+
+def _master_ffmpeg_command(expanded: list[Path], output: Path, *, bitrate: str, crossfade: float) -> list[str]:
+    n_effective = len(expanded)
+    if n_effective == 1:
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(expanded[0]),
+            *_OUTPUT_CODEC,
+            "-b:a",
+            bitrate,
+            str(output),
+            "-loglevel",
+            "error",
+        ]
+    else:
+        cmd = ["ffmpeg", "-y"]
+        for f in expanded:
+            cmd.extend(["-i", str(f)])
+        cmd.extend(
+            [
+                "-filter_complex",
+                build_filter(n_effective, crossfade),
+                "-map",
+                "[aout]",
+                *_OUTPUT_CODEC,
+                "-b:a",
+                bitrate,
+                str(output),
+                "-loglevel",
+                "error",
+            ]
+        )
+    return cmd
+
+
+def _run_master_ffmpeg(command: list[str], *, quiet: bool, segments: int) -> tuple[subprocess.CompletedProcess, int]:
+    """Run encoding and always stop its progress spinner before returning."""
+    start = time.monotonic()
+    stop_event = threading.Event()
+    spinner_thread: threading.Thread | None = None
+    if not quiet and sys.stderr.isatty():
+        spinner_thread = threading.Thread(target=_spin, args=(stop_event, start, segments))
+        spinner_thread.start()
+
+    try:
+        result = subprocess.run(command, check=False)
+    finally:
+        stop_event.set()
+        if spinner_thread is not None:
+            spinner_thread.join()
+            sys.stderr.write("\r" + " " * 80 + "\r")
+            sys.stderr.flush()
+
+    elapsed = int(time.monotonic() - start)
+    return result, elapsed
+
+
 def _generate_master_unlocked(
     collection_dir: Path,
     crossfade: float,
@@ -271,30 +370,14 @@ def _generate_master_unlocked(
     files = _collect_audio_inputs(music_dir)
     n = len(files)
 
-    if order is not None:
-        if shuffle or pin_first or pin_first_count:
-            raise ValidationError("保存済み order と shuffle / pin_first は同時に指定できません")
-        files = apply_track_order(files, order)
-        print("[Order] audio-adjustments.json の保存順を使用します")
-
-    # 先頭固定を解決 (要件 1-4, 10): pin された曲は順序固定、残りを shuffle 対象とする。
-    pinned, remaining = _apply_pin_first(
+    files = _order_master_inputs(
         files,
+        order=order,
+        shuffle=shuffle,
+        shuffle_seed=shuffle_seed,
         pin_first=pin_first,
         pin_first_count=pin_first_count,
     )
-
-    # ループ展開前にシャッフルする (要件 8: 同一シャッフル順を N 回繰り返す)。
-    # 再現性ログは quiet モードでも常に stdout に出す (要件 4)。
-    # pin がある場合は pinned を順序固定したまま remaining のみ shuffle する。
-    if shuffle:
-        effective_seed = shuffle_seed if shuffle_seed is not None else random.SystemRandom().randrange(_AUTO_SEED_BOUND)
-        random.Random(effective_seed).shuffle(remaining)
-        print(f"[Shuffle] seed={effective_seed}")
-
-    files = pinned + remaining
-    if pinned:
-        print(f"[Pin] first {len(pinned)} track(s) fixed: {[p.name for p in pinned]}")
 
     if no_loop:
         loops = 1
@@ -358,55 +441,9 @@ def _generate_master_unlocked(
             print("  Single file — copied directly.\n")
         return output
 
-    if n_effective == 1:
-        cmd = [
-            "ffmpeg",
-            "-y",
-            "-i",
-            str(expanded[0]),
-            *_OUTPUT_CODEC,
-            "-b:a",
-            bitrate,
-            str(output),
-            "-loglevel",
-            "error",
-        ]
-    else:
-        cmd = ["ffmpeg", "-y"]
-        for f in expanded:
-            cmd.extend(["-i", str(f)])
-        cmd.extend(
-            [
-                "-filter_complex",
-                build_filter(n_effective, crossfade),
-                "-map",
-                "[aout]",
-                *_OUTPUT_CODEC,
-                "-b:a",
-                bitrate,
-                str(output),
-                "-loglevel",
-                "error",
-            ]
-        )
+    cmd = _master_ffmpeg_command(expanded, output, bitrate=bitrate, crossfade=crossfade)
 
-    start = time.monotonic()
-    stop_event = threading.Event()
-    spinner_thread: threading.Thread | None = None
-    if not quiet and sys.stderr.isatty():
-        spinner_thread = threading.Thread(target=_spin, args=(stop_event, start, n_effective))
-        spinner_thread.start()
-
-    try:
-        result = subprocess.run(cmd, check=False)
-    finally:
-        stop_event.set()
-        if spinner_thread is not None:
-            spinner_thread.join()
-            sys.stderr.write("\r" + " " * 80 + "\r")
-            sys.stderr.flush()
-
-    elapsed = int(time.monotonic() - start)
+    result, elapsed = _run_master_ffmpeg(cmd, quiet=quiet, segments=n_effective)
     m, s = divmod(elapsed, 60)
 
     if result.returncode != 0:
@@ -473,6 +510,66 @@ def generate_master(
         )
 
 
+def _resolve_target_duration(
+    args: argparse.Namespace, channel_target: float | None, skill_target: float | None
+) -> int | None:
+    # CLI フラグ (--loop / --target-duration / --no-loop) がすべて未指定なら
+    # skill-config の `audio.target_duration_min` をデフォルト値として採用する。
+    # --loop / --no-loop 指定時は CLI 指定が最優先のため skill-config 値を黙って無視する。
+    target_duration: int | None = args.target_duration
+    if args.loop is None and args.target_duration is None and not args.no_loop:
+        if channel_target is not None and skill_target is not None:
+            print(
+                "WARNING: masterup.audio.target_duration_min の "
+                f"skill-config={float(skill_target):g}分は無視し、"
+                f"channel={channel_target:g}分 "
+                "(config/channel/audio.json の SSOT) を採用します",
+                file=sys.stderr,
+            )
+        effective_target = channel_target if channel_target is not None else skill_target
+        if effective_target is not None:
+            target_duration = int(effective_target)
+            if target_duration < 1:
+                raise ValidationError(
+                    f"skill-config masterup.audio.{_TARGET_DURATION_MIN_KEY} は 1 以上を指定してください"
+                )
+
+    return target_duration
+
+
+def _skill_integer(value: object, key: str) -> int | None:
+    if value is None:
+        return None
+    # bool は int サブクラスのため明示的に除外する。
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValidationError(f"skill-config masterup.audio.{key} は整数で指定してください")
+    return value
+
+
+def _resolve_pin_first_count(
+    args: argparse.Namespace, audio: Mapping[str, object], use_saved_order: bool
+) -> int | None:
+    # CLI > skill-config の優先順位で pin_first / pin_first_count を解決。
+    # CLI で --pin-first または --pin-first-count のいずれかが指定されていれば
+    # CLI 優先で skill-config の `audio.pin_first_count` は黙って無視する。
+    pin_first: list[str] | None = args.pin_first
+    pin_first_count: int | None = args.pin_first_count
+
+    if args.pin_first_count is not None and args.pin_first_count < 0:
+        raise ValidationError("--pin-first-count は 0 以上を指定してください")
+
+    if pin_first is None and pin_first_count is None and not use_saved_order:
+        skill_pin_count = _skill_integer(audio.get(_PIN_FIRST_COUNT_KEY), _PIN_FIRST_COUNT_KEY)
+        if skill_pin_count is not None:
+            if skill_pin_count < 0:
+                raise ValidationError(f"skill-config masterup.audio.{_PIN_FIRST_COUNT_KEY} は 0 以上を指定してください")
+            # 0 は「固定なし」として扱う (互換: 未設定と等価)
+            if skill_pin_count > 0:
+                pin_first_count = skill_pin_count
+
+    return pin_first_count
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="個別音声 (MP3 / M4A / WAV) をクロスフェード結合して master.mp3 を生成",
@@ -482,11 +579,7 @@ def main() -> int:
         action="store_true",
         help="channel audio の目標尺外でも operator 判断で生成を許可",
     )
-    parser.add_argument(
-        "collection",
-        nargs="?",
-        help="コレクションディレクトリ (省略時は CWD)",
-    )
+    add_optional_collection_argument(parser)
     parser.add_argument("--quiet", action="store_true", help="進捗表示を抑制")
     loop_group = parser.add_mutually_exclusive_group()
     loop_group.add_argument(
@@ -550,28 +643,9 @@ def main() -> int:
         bitrate = str(audio.get("bitrate", "192k"))
         channel_audio = load_config().audio
 
-        # CLI フラグ (--loop / --target-duration / --no-loop) がすべて未指定なら
-        # skill-config の `audio.target_duration_min` をデフォルト値として採用する。
-        # --loop / --no-loop 指定時は CLI 指定が最優先のため skill-config 値を黙って無視する。
-        target_duration: int | None = args.target_duration
-        if args.loop is None and args.target_duration is None and not args.no_loop:
-            channel_target = channel_audio.target_duration_min
-            skill_target = audio.get(_TARGET_DURATION_MIN_KEY)
-            if channel_target is not None and skill_target is not None:
-                print(
-                    "WARNING: masterup.audio.target_duration_min の "
-                    f"skill-config={float(skill_target):g}分は無視し、"
-                    f"channel={channel_target:g}分 "
-                    "(config/channel/audio.json の SSOT) を採用します",
-                    file=sys.stderr,
-                )
-            effective_target = channel_target if channel_target is not None else skill_target
-            if effective_target is not None:
-                target_duration = int(effective_target)
-                if target_duration < 1:
-                    raise ValidationError(
-                        f"skill-config masterup.audio.{_TARGET_DURATION_MIN_KEY} は 1 以上を指定してください"
-                    )
+        target_duration = _resolve_target_duration(
+            args, channel_audio.target_duration_min, audio.get(_TARGET_DURATION_MIN_KEY)
+        )
 
         # CLI > skill-config > デフォルト の優先順位で shuffle / shuffle_seed を解決。
         # CLI で --shuffle または --shuffle-seed のいずれかが指定されていれば CLI 優先。
@@ -582,39 +656,12 @@ def main() -> int:
         use_saved_order = adjustments.order is not None and not cli_shuffle_specified and not cli_pin_specified
         shuffle_enabled = False if use_saved_order else cli_shuffle_specified or bool(audio.get(_SHUFFLE_KEY, False))
 
-        shuffle_seed: int | None = args.shuffle_seed
+        shuffle_seed = args.shuffle_seed
         if shuffle_seed is None and not use_saved_order:
-            skill_seed = audio.get(_SHUFFLE_SEED_KEY)
-            if skill_seed is not None:
-                # bool は int サブクラスのため明示的に除外する。
-                if isinstance(skill_seed, bool) or not isinstance(skill_seed, int):
-                    raise ValidationError(f"skill-config masterup.audio.{_SHUFFLE_SEED_KEY} は整数で指定してください")
-                shuffle_seed = skill_seed
+            shuffle_seed = _skill_integer(audio.get(_SHUFFLE_SEED_KEY), _SHUFFLE_SEED_KEY)
 
-        # CLI > skill-config の優先順位で pin_first / pin_first_count を解決。
-        # CLI で --pin-first または --pin-first-count のいずれかが指定されていれば
-        # CLI 優先で skill-config の `audio.pin_first_count` は黙って無視する。
-        pin_first: list[str] | None = args.pin_first
-        pin_first_count: int | None = args.pin_first_count
-
-        if args.pin_first_count is not None and args.pin_first_count < 0:
-            raise ValidationError("--pin-first-count は 0 以上を指定してください")
-
-        if pin_first is None and pin_first_count is None and not use_saved_order:
-            skill_pin_count = audio.get(_PIN_FIRST_COUNT_KEY)
-            if skill_pin_count is not None:
-                # bool は int サブクラスのため明示的に除外する。
-                if isinstance(skill_pin_count, bool) or not isinstance(skill_pin_count, int):
-                    raise ValidationError(
-                        f"skill-config masterup.audio.{_PIN_FIRST_COUNT_KEY} は整数で指定してください"
-                    )
-                if skill_pin_count < 0:
-                    raise ValidationError(
-                        f"skill-config masterup.audio.{_PIN_FIRST_COUNT_KEY} は 0 以上を指定してください"
-                    )
-                # 0 は「固定なし」として扱う (互換: 未設定と等価)
-                if skill_pin_count > 0:
-                    pin_first_count = skill_pin_count
+        pin_first = args.pin_first
+        pin_first_count = _resolve_pin_first_count(args, audio, use_saved_order)
 
         generate_master(
             collection_dir,

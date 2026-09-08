@@ -98,58 +98,79 @@ def _detect_pin(pyproject: dict) -> Pin:
         uv_table = tool.get("uv")
         if isinstance(uv_table, dict):
             sources = uv_table.get("sources")
-    if isinstance(sources, dict):
-        for key, spec in sources.items():
-            if _canonicalize_name(key) != PACKAGE_NAME or not isinstance(spec, dict):
-                continue
-            git_url = spec.get("git")
-            if not isinstance(git_url, str):
-                continue
-            _require_official_upstream(git_url)
-            ref_keys = [key for key in ("tag", "rev", "branch") if key in spec]
-            if len(ref_keys) > 1:
-                raise ConfigError(
-                    f"[tool.uv.sources] の tag / rev / branch は同時指定できません: {', '.join(ref_keys)}"
-                )
-            tag = spec.get("tag")
-            if isinstance(tag, str):
-                kind, _ = _classify_git_ref(tag)
-                if kind != "tag":
-                    raise ConfigError(f"[tool.uv.sources] の tag には vX.Y.Z 形式の tag を指定してください: {tag}")
-                return Pin("inline-table", "tag", tag, git_url)
-            rev = spec.get("rev")
-            if isinstance(rev, str):
-                kind, _ = _classify_git_ref(rev)
-                if kind != "sha":
-                    raise ConfigError(f"[tool.uv.sources] の rev には 40 桁の hex sha を指定してください: {rev}")
-                return Pin("inline-table", "sha", rev, git_url)
-            branch = spec.get("branch")
-            branch_ref = branch if isinstance(branch, str) else "main"
-            kind, value = _classify_git_ref(branch_ref)
-            if kind != "branch":
-                raise ConfigError(f"[tool.uv.sources] の branch は main のみ自動追従できます: {branch_ref}")
-            return Pin("inline-table", "branch", value, git_url)
+    source_pin = _detect_uv_source_pin(sources)
+    if source_pin is not None:
+        return source_pin
 
     project = pyproject.get("project")
     dependencies = project.get("dependencies") if isinstance(project, dict) else None
-    if isinstance(dependencies, list):
-        for dependency in dependencies:
-            if not isinstance(dependency, str):
-                continue
-            match = _DEPENDENCY_NAME_RE.match(dependency)
-            if not match or _canonicalize_name(match.group(1)) != PACKAGE_NAME:
-                continue
-            git_match = _GIT_REFERENCE_RE.search(dependency)
-            if not git_match:
-                return Pin("url", "registry", dependency.strip(), dependency=dependency)
-            url = git_match.group("url").split("#", 1)[0]
-            base_url, ref = _split_git_ref(url)
-            _require_official_upstream(base_url)
-            if ref is None:
-                return Pin("url", "branch", "main", base_url, dependency)
-            kind, value = _classify_git_ref(ref)
-            return Pin("url", kind, value, base_url, dependency)
+    dependency_pin = _detect_dependency_pin(dependencies)
+    if dependency_pin is not None:
+        return dependency_pin
     raise ConfigError(f"pyproject.toml から {PACKAGE_NAME} の pin を特定できません")
+
+
+def _detect_uv_source_pin(sources: object) -> Pin | None:
+    """Find the official package's uv source before considering dependencies."""
+    if not isinstance(sources, dict):
+        return None
+    for key, spec in sources.items():
+        if _canonicalize_name(key) != PACKAGE_NAME or not isinstance(spec, dict):
+            continue
+        git_url = spec.get("git")
+        if not isinstance(git_url, str):
+            continue
+        return _pin_from_uv_source(spec, git_url)
+    return None
+
+
+def _pin_from_uv_source(spec: dict, git_url: str) -> Pin:
+    """Validate the mutually exclusive uv Git ref forms."""
+    _require_official_upstream(git_url)
+    ref_keys = [key for key in ("tag", "rev", "branch") if key in spec]
+    if len(ref_keys) > 1:
+        raise ConfigError(f"[tool.uv.sources] の tag / rev / branch は同時指定できません: {', '.join(ref_keys)}")
+    tag = spec.get("tag")
+    if isinstance(tag, str):
+        kind, _ = _classify_git_ref(tag)
+        if kind != "tag":
+            raise ConfigError(f"[tool.uv.sources] の tag には vX.Y.Z 形式の tag を指定してください: {tag}")
+        return Pin("inline-table", "tag", tag, git_url)
+    rev = spec.get("rev")
+    if isinstance(rev, str):
+        kind, _ = _classify_git_ref(rev)
+        if kind != "sha":
+            raise ConfigError(f"[tool.uv.sources] の rev には 40 桁の hex sha を指定してください: {rev}")
+        return Pin("inline-table", "sha", rev, git_url)
+    branch = spec.get("branch")
+    branch_ref = branch if isinstance(branch, str) else "main"
+    kind, value = _classify_git_ref(branch_ref)
+    if kind != "branch":
+        raise ConfigError(f"[tool.uv.sources] の branch は main のみ自動追従できます: {branch_ref}")
+    return Pin("inline-table", "branch", value, git_url)
+
+
+def _detect_dependency_pin(dependencies: object) -> Pin | None:
+    """Read registry or direct Git requirements from the dependency list."""
+    if not isinstance(dependencies, list):
+        return None
+    for dependency in dependencies:
+        if not isinstance(dependency, str):
+            continue
+        match = _DEPENDENCY_NAME_RE.match(dependency)
+        if not match or _canonicalize_name(match.group(1)) != PACKAGE_NAME:
+            continue
+        git_match = _GIT_REFERENCE_RE.search(dependency)
+        if not git_match:
+            return Pin("url", "registry", dependency.strip(), dependency=dependency)
+        url = git_match.group("url").split("#", 1)[0]
+        base_url, ref = _split_git_ref(url)
+        _require_official_upstream(base_url)
+        if ref is None:
+            return Pin("url", "branch", "main", base_url, dependency)
+        kind, value = _classify_git_ref(ref)
+        return Pin("url", kind, value, base_url, dependency)
+    return None
 
 
 def _describe_pin(pin: Pin) -> str:
@@ -172,34 +193,40 @@ def _find_table_range(text: str, table_name: str) -> tuple[int, int]:
     raise ConfigError(f"pyproject.toml の [{table_name}] table を特定できません")
 
 
+def _toml_quote_end(text: str, quote_start: int) -> int | None:
+    quote = text[quote_start]
+    escaped = False
+    for index in range(quote_start + 1, len(text)):
+        char = text[index]
+        if quote == '"' and char == "\\" and not escaped:
+            escaped = True
+            continue
+        if char == quote and not escaped:
+            return index
+        escaped = False
+    return None
+
+
 def _find_array_range(text: str, start: int) -> tuple[int, int]:
     bracket_start = text.find("[", start)
     if bracket_start == -1:
         raise ConfigError("pyproject.toml の dependencies 配列を特定できません")
 
     depth = 0
-    in_quote: str | None = None
-    escaped = False
-    in_comment = False
-    for index in range(bracket_start, len(text)):
+    index = bracket_start
+    while index < len(text):
         char = text[index]
-        if in_comment:
-            if char == "\n":
-                in_comment = False
-            continue
-        if in_quote:
-            if in_quote == '"' and char == "\\" and not escaped:
-                escaped = True
-                continue
-            if char == in_quote and not escaped:
-                in_quote = None
-            escaped = False
-            continue
         if char == "#":
-            in_comment = True
+            newline = text.find("\n", index)
+            if newline == -1:
+                break
+            index = newline + 1
             continue
         if char in {'"', "'"}:
-            in_quote = char
+            quote_end = _toml_quote_end(text, index)
+            if quote_end is None:
+                break
+            index = quote_end + 1
             continue
         if char == "[":
             depth += 1
@@ -207,6 +234,7 @@ def _find_array_range(text: str, start: int) -> tuple[int, int]:
             depth -= 1
             if depth == 0:
                 return bracket_start, index + 1
+        index += 1
     raise ConfigError("pyproject.toml の dependencies 配列が閉じていません")
 
 
@@ -236,23 +264,13 @@ def _iter_toml_string_spans(text: str):
         if char not in {'"', "'"}:
             index += 1
             continue
-        quote = char
         quote_start = index
-        index += 1
-        content_start = index
-        escaped = False
-        while index < len(text):
-            char = text[index]
-            if quote == '"' and char == "\\" and not escaped:
-                escaped = True
-                index += 1
-                continue
-            if char == quote and not escaped:
-                yield quote_start, content_start, index, index + 1, text[content_start:index]
-                index += 1
-                break
-            escaped = False
-            index += 1
+        content_start = index + 1
+        quote_end = _toml_quote_end(text, quote_start)
+        if quote_end is None:
+            return
+        yield quote_start, content_start, quote_end, quote_end + 1, text[content_start:quote_end]
+        index = quote_end + 1
 
 
 def _rewrite_url_dependency(dependency: str, new_ref: str) -> str:

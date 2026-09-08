@@ -1,0 +1,2 @@
+- メタデータ生成の import を `from youtube_automation.application.metadata.service import BAHMetadataGenerator` へ移しました。`generate_shorts_metadata` も同じモジュールが所有します。生成クラスの引数と出力は維持します。
+- スタンドアロン実行は `python -m youtube_automation.application.metadata.service <collection_directory>` を使用してください。従来の `domains.metadata.service` 入口は移動しました。タイトル・タグ・説明・翻訳の純粋な組み立て API は `domains.metadata` に残ります。

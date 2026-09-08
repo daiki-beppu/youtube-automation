@@ -39,7 +39,7 @@ from __future__ import annotations
 import argparse
 from importlib.resources import as_file, files
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
 import youtube_automation
 
@@ -205,6 +205,46 @@ def _guard_target_with_all(args: argparse.Namespace) -> None:
             " skills だけを独自 path に出すなら --asset skills --target ... のように"
             " asset を明示してください。全 asset を sync するなら --target を外してください。"
         )
+
+
+def _dispatch_asset(
+    args: argparse.Namespace,
+    *,
+    all_assets: Callable[[argparse.Namespace], int],
+    file_asset: Callable[[dict[str, str], Path, Path], int],
+    settings_asset: Callable[[dict[str, str], Path, Path], int],
+    directory_asset: Callable[[dict[str, str], Path, Path], int],
+) -> int:
+    """Validate the target and dispatch a resolved asset to its operation."""
+    _guard_target_with_all(args)
+    if args.asset == "all":
+        return all_assets(args)
+    spec = _ASSET_SPECS[args.asset]
+    root = _asset_root(args.asset)
+    target = Path(args.target).resolve()
+    if spec["kind"] == "file":
+        return file_asset(spec, root, target)
+    if spec["kind"] == "json-merge":
+        return settings_asset(spec, root, target)
+    return directory_asset(spec, root, target)
+
+
+def _run_all_assets(operation: str, action: Callable[[argparse.Namespace], int], **options: object) -> int:
+    """Run each asset against its own default target, retaining the last nonzero result."""
+    overall_rc = 0
+    for index, asset_name in enumerate(sorted(_ASSET_SPECS)):
+        if index > 0:
+            print()
+        print(f"=== [{asset_name}] {operation} ===")
+        args = argparse.Namespace(
+            asset=asset_name,
+            target=_ASSET_SPECS[asset_name]["default_target"],
+            **options,
+        )
+        result = action(args)
+        if result != 0:
+            overall_rc = result
+    return overall_rc
 
 
 def _list_entries(

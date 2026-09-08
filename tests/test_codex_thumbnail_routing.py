@@ -34,13 +34,13 @@ from youtube_automation.commands.media import generate_image, generate_lyria_mas
 from youtube_automation.commands.thumbnail import auto_select_thumbnail
 from youtube_automation.configuration import skills as skill_config
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.media.image import (
     ImageGenerationRequest,
     ImageGenerationResult,
 )
 from youtube_automation.domains.thumbnail.references import plan_ttp_reference_assignments
 from youtube_automation.domains.thumbnail.text import OverlaySpec, TextStyle, compose_thumbnail_text
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 from youtube_automation.infrastructure.media.image_provider import get_provider
 from youtube_automation.infrastructure.media.image_provider.config import (
     build_codex_prompt,

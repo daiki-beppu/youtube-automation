@@ -5,8 +5,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from youtube_automation.configuration import channel_dir
 from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.thumbnail.text.config import (
     overlay_config_from_skill_config,

@@ -2,8 +2,8 @@
 
 YouTube API I/O は持たず、`DiscoveryParams` 等の dataclass と
 4 軸スコアリング・フィルタ・候補理由整形などの純粋関数のみを置く。
-パイプライン orchestration（`discover_competitors`）と API I/O は
-`competitor_discovery.py` を参照。
+パイプライン orchestration は `application.analytics.competitor_discovery`、
+API I/O は `infrastructure.analytics.competitor_discovery` を参照。
 """
 
 from __future__ import annotations

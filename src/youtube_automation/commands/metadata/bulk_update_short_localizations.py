@@ -18,14 +18,14 @@ import logging
 import sys
 import time
 
-from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.application.youtube_auth import create_authenticated_youtube_clients
+from youtube_automation.configuration import load_config
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.metadata import build_short_localizations
-from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.cost_tracker import log_quota
-from youtube_automation.infrastructure.google.youtube import YouTubeClients
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 logger = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ def main() -> None:
             print(f"  - {v['video_id']} ({v['collection_name']}): langs={list(locs.keys())}")
         return
 
-    youtube = YouTubeClients(full_handler=YouTubeOAuthHandler()).youtube
+    youtube = create_authenticated_youtube_clients().youtube
     for v in videos:
         localizations = _locs_for(v)
         if not localizations:

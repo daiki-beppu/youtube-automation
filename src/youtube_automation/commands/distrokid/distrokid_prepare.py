@@ -28,6 +28,7 @@ from PIL import Image, UnidentifiedImageError
 from youtube_automation.application.distrokid.disc_query import find_distrokid_discs
 from youtube_automation.configuration import load_config
 from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.paths import CollectionPaths, resolve_collection_dir
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.distrokid.preparation import (
     _MAX_TRACKS_PER_DISC,
@@ -48,7 +49,6 @@ from youtube_automation.domains.distrokid.release import (
     build_release_payload,
 )
 from youtube_automation.domains.distrokid.specification import SPEC_FILENAME, write_collection_spec
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths, resolve_collection_dir
 from youtube_automation.infrastructure.media.probe import probe_duration
 
 # ファイル名先頭の連番プレフィックス（metadata.md の # 列 = グローバル番号として使う）
@@ -132,66 +132,26 @@ def _cmd_plan(args: argparse.Namespace) -> None:
         print(f"\n次のステップ:\n  yt-distrokid-prepare build --spec {output_path} {collection_dir}")
 
 
-def _cmd_build(args: argparse.Namespace) -> None:
-    """build サブコマンド: spec.json に従って成果物を生成する（#936）."""
-    collection_dir = resolve_collection_dir(args.collection)
-
-    # spec 読み込み
-    spec_path = Path(args.spec)
-    if not spec_path.is_file():
-        raise ConfigError(f"spec.json が見つかりません: {spec_path}")
-    try:
-        spec = json.loads(spec_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ConfigError(f"spec.json が不正な JSON です: {spec_path}\n{exc}") from exc
-
-    # release-date 検証
-    release_date: str | None = None
-    if args.release_date:
-        try:
-            datetime.date.fromisoformat(args.release_date)
-        except ValueError as exc:
-            raise ConfigError(f"--release-date の形式が不正です（YYYY-MM-DD が必要）: {args.release_date!r}") from exc
-        release_date = args.release_date
-
-    # mp3 一覧
-    music_dir = collection_dir / INDIVIDUAL_MUSIC_DIRNAME
-    mp3_files = sorted(music_dir.glob("*.mp3")) if music_dir.is_dir() else []
-    music_filenames = [f.name for f in mp3_files]
-
-    # spec 検証
-    validate_spec(spec, music_filenames)
-
-    # 冪等性チェック
-    distrokid_dir = collection_dir / DISTROKID_DIRNAME
-    discs = spec.get("discs", [])
+def _prepare_existing_discs(discs: list[dict], distrokid_dir: Path, *, force: bool) -> None:
     for disc in discs:
         slug = disc["slug"]
         disc_dir = distrokid_dir / slug
         has_existing_mp3 = disc_dir.is_dir() and any(disc_dir.glob("*.mp3"))
-        if has_existing_mp3 and not args.force:
+        if has_existing_mp3 and not force:
             raise ConfigError(
                 f"既存の disc ディレクトリに mp3 があります: {disc_dir}\n--force を指定して再生成してください。"
             )
 
     # --force: spec に載っている disc dir のみ rmtree
-    if args.force:
+    if force:
         for disc in discs:
             slug = disc["slug"]
             disc_dir = distrokid_dir / slug
             if disc_dir.is_dir():
                 shutil.rmtree(disc_dir)
 
-    # 検証済み spec を canonical パス（30-distrokid/spec.json）へ atomic 書き込みする（#941）。
-    # serve が 30-distrokid/spec.json を SSOT として直接読むために必要。
-    # --spec が canonical と同一パスでも問題ない（読み込み済み dict を書くため自己上書き OK）。
-    # 冪等性チェックの後に書く: --force 不足で build を拒否した場合に
-    # ディスク上の状態を一切変更しないため（#941）。
-    write_collection_spec(distrokid_dir, spec)
-    # spec.json を先頭に追加。serve が SSOT として直接読む canonical ファイル（#941）。
-    generated_files: list[Path] = [distrokid_dir / SPEC_FILENAME]
 
-    # 全 disc の mp3 を probe して尺計測
+def _probe_disc_durations(discs: list[dict], music_dir: Path) -> dict[str, float]:
     all_durations: dict[str, float] = {}
     for disc in discs:
         for track in disc.get("tracks", []):
@@ -204,15 +164,20 @@ def _cmd_build(args: argparse.Namespace) -> None:
                     "ffprobe がインストールされているか確認してください（brew install ffmpeg）。"
                 )
             all_durations[fn] = dur
+    return all_durations
 
-    # global_numbers マッピング
-    global_numbers: dict[str, int] = {}
-    for disc in discs:
-        for track in disc.get("tracks", []):
-            fn = track["filename"]
-            global_numbers[fn] = _global_num(fn)
 
-    # 各 disc の成果物生成
+def _build_disc_artifacts(
+    discs: list[dict],
+    distrokid_dir: Path,
+    music_dir: Path,
+    spec: dict,
+    all_durations: dict[str, float],
+    global_numbers: dict[str, int],
+    release_date: str | None,
+) -> tuple[list[Path], list[dict]]:
+    """Build and round-trip-check every disc before generating collection-wide output."""
+    generated_files: list[Path] = []
     disc_infos: list[dict] = []
 
     for disc in discs:
@@ -267,6 +232,68 @@ def _cmd_build(args: argparse.Namespace) -> None:
             }
         )
 
+    return generated_files, disc_infos
+
+
+def _cmd_build(args: argparse.Namespace) -> None:
+    """build サブコマンド: spec.json に従って成果物を生成する（#936）."""
+    collection_dir = resolve_collection_dir(args.collection)
+
+    # spec 読み込み
+    spec_path = Path(args.spec)
+    if not spec_path.is_file():
+        raise ConfigError(f"spec.json が見つかりません: {spec_path}")
+    try:
+        spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ConfigError(f"spec.json が不正な JSON です: {spec_path}\n{exc}") from exc
+
+    # release-date 検証
+    release_date: str | None = None
+    if args.release_date:
+        try:
+            datetime.date.fromisoformat(args.release_date)
+        except ValueError as exc:
+            raise ConfigError(f"--release-date の形式が不正です（YYYY-MM-DD が必要）: {args.release_date!r}") from exc
+        release_date = args.release_date
+
+    # mp3 一覧
+    music_dir = collection_dir / INDIVIDUAL_MUSIC_DIRNAME
+    mp3_files = sorted(music_dir.glob("*.mp3")) if music_dir.is_dir() else []
+    music_filenames = [f.name for f in mp3_files]
+
+    # spec 検証
+    validate_spec(spec, music_filenames)
+
+    # 冪等性チェック
+    distrokid_dir = collection_dir / DISTROKID_DIRNAME
+    discs = spec.get("discs", [])
+    _prepare_existing_discs(discs, distrokid_dir, force=args.force)
+
+    # 検証済み spec を canonical パス（30-distrokid/spec.json）へ atomic 書き込みする（#941）。
+    # serve が 30-distrokid/spec.json を SSOT として直接読むために必要。
+    # --spec が canonical と同一パスでも問題ない（読み込み済み dict を書くため自己上書き OK）。
+    # 冪等性チェックの後に書く: --force 不足で build を拒否した場合に
+    # ディスク上の状態を一切変更しないため（#941）。
+    write_collection_spec(distrokid_dir, spec)
+    # spec.json を先頭に追加。serve が SSOT として直接読む canonical ファイル（#941）。
+    generated_files: list[Path] = [distrokid_dir / SPEC_FILENAME]
+
+    # 全 disc の mp3 を probe して尺計測
+    all_durations = _probe_disc_durations(discs, music_dir)
+
+    # global_numbers マッピング
+    global_numbers: dict[str, int] = {}
+    for disc in discs:
+        for track in disc.get("tracks", []):
+            fn = track["filename"]
+            global_numbers[fn] = _global_num(fn)
+
+    disc_files, disc_infos = _build_disc_artifacts(
+        discs, distrokid_dir, music_dir, spec, all_durations, global_numbers, release_date
+    )
+    generated_files.extend(disc_files)
+
     # README.md 生成
     readme_path = distrokid_dir / "README.md"
     readme_content = render_readme_md(spec, disc_infos, collection_dir)
@@ -279,10 +306,19 @@ def _cmd_build(args: argparse.Namespace) -> None:
         write_release_date(paths.workflow_state_path, release_date)
         generated_files.append(paths.workflow_state_path)
 
-    # サマリ表示
+    _print_build_summary(len(discs), disc_infos, generated_files, release_date)
+
+
+def _print_build_summary(
+    disc_count: int,
+    disc_infos: list[dict],
+    generated_files: list[Path],
+    release_date: str | None,
+) -> None:
+    """Report generated release artifacts only after all build steps succeed."""
     total_tracks = sum(d["count"] for d in disc_infos)
     total_secs_all = sum(d["total_secs"] for d in disc_infos)
-    print(f"\n✅ build 完了: {len(discs)} discs / {total_tracks} 曲 / 合計 {format_total_duration(total_secs_all)}")
+    print(f"\n✅ build 完了: {disc_count} discs / {total_tracks} 曲 / 合計 {format_total_duration(total_secs_all)}")
     for di in disc_infos:
         print(f"  {di['slug']}: {di['count']} 曲 / {format_total_duration(di['total_secs'])}")
     print(f"\n生成ファイル ({len(generated_files)} 件):")
@@ -335,39 +371,8 @@ def _cmd_verify(args: argparse.Namespace) -> None:
             "先に yt-distrokid-prepare build を実行してください。"
         )
 
-    errors: list[str] = []
-    warnings: list[str] = []
-
-    # cover_art_3000.jpg の存在とサイズ検証
-    cover_path = distrokid_dir / COVER_ART_FILENAME
-    if not cover_path.is_file():
-        errors.append(f"cover_art_3000.jpg が存在しません: {cover_path}")
-    else:
-        try:
-            img = Image.open(cover_path)
-            if img.size != (3000, 3000):
-                errors.append(f"cover_art_3000.jpg のサイズが 3000×3000 ではありません: {img.size}")
-            if img.format != "JPEG":
-                errors.append(f"cover_art_3000.jpg が JPEG ではありません: {img.format}")
-        except (UnidentifiedImageError, OSError) as exc:
-            errors.append(f"cover_art_3000.jpg を開けませんでした: {exc}")
-
-    # workflow-state.json の publish_target_at 確認
-    paths = CollectionPaths(collection_dir)
-    if paths.workflow_state_path.is_file():
-        try:
-            state = read_workflow_state(paths.workflow_state_path)
-            planning = state.planning
-            publish_at = planning.publish_target_at if planning is not None else None
-            if not publish_at:
-                warnings.append(
-                    "workflow-state.json の planning.publish_target_at が未設定です。"
-                    "\n  yt-distrokid-prepare build --release-date YYYY-MM-DD で設定できます。"
-                )
-        except WorkflowStateError:
-            warnings.append("workflow-state.json の読み取りに失敗しました。")
-    else:
-        warnings.append("workflow-state.json が存在しません（publish_target_at 未設定）。")
+    errors = _verify_cover_art(distrokid_dir / COVER_ART_FILENAME)
+    warnings = _verify_release_date(collection_dir)
 
     # disc 横断タイトルユニーク・disc 曲数チェック
     all_titles: list[str] = []
@@ -413,18 +418,58 @@ def _cmd_verify(args: argparse.Namespace) -> None:
     for r in disc_results:
         print(f"{r['disc']:<35} {r['track_count']:>5}  {r['album_title']}")
 
-    if warnings:
-        print(f"\n⚠  警告 ({len(warnings)} 件):")
-        for w in warnings:
-            print(f"  - {w}")
+    _print_verify_findings(warnings, "⚠  警告")
+    _print_verify_findings(errors, "❌ エラー")
 
     if errors:
-        print(f"\n❌ エラー ({len(errors)} 件):")
-        for e in errors:
-            print(f"  - {e}")
         raise ConfigError(f"verify で {len(errors)} 件のエラーが見つかりました。上記を確認してください。")
 
     print(f"\n✅ verify 完了: {len(disc_results)} discs すべてパスしました。")
+
+
+def _print_verify_findings(findings: list[str], heading: str) -> None:
+    """検証結果がある場合に、件数と各項目を表示する。"""
+    if findings:
+        print(f"\n{heading} ({len(findings)} 件):")
+        for finding in findings:
+            print(f"  - {finding}")
+
+
+def _verify_cover_art(cover_path: Path) -> list[str]:
+    errors: list[str] = []
+    if not cover_path.is_file():
+        errors.append(f"cover_art_3000.jpg が存在しません: {cover_path}")
+    else:
+        try:
+            img = Image.open(cover_path)
+            if img.size != (3000, 3000):
+                errors.append(f"cover_art_3000.jpg のサイズが 3000×3000 ではありません: {img.size}")
+            if img.format != "JPEG":
+                errors.append(f"cover_art_3000.jpg が JPEG ではありません: {img.format}")
+        except (UnidentifiedImageError, OSError) as exc:
+            errors.append(f"cover_art_3000.jpg を開けませんでした: {exc}")
+    return errors
+
+
+def _verify_release_date(collection_dir: Path) -> list[str]:
+    warnings: list[str] = []
+    # workflow-state.json の publish_target_at 確認
+    paths = CollectionPaths(collection_dir)
+    if paths.workflow_state_path.is_file():
+        try:
+            state = read_workflow_state(paths.workflow_state_path)
+            planning = state.planning
+            publish_at = planning.publish_target_at if planning is not None else None
+            if not publish_at:
+                warnings.append(
+                    "workflow-state.json の planning.publish_target_at が未設定です。"
+                    "\n  yt-distrokid-prepare build --release-date YYYY-MM-DD で設定できます。"
+                )
+        except WorkflowStateError:
+            warnings.append("workflow-state.json の読み取りに失敗しました。")
+    else:
+        warnings.append("workflow-state.json が存在しません（publish_target_at 未設定）。")
+    return warnings
 
 
 def _build_parser() -> argparse.ArgumentParser:

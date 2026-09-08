@@ -20,9 +20,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
-from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.configuration import channel_dir as _channel_dir
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.commands._shared.cli_harness import run_cli, run_logged_command
+from youtube_automation.core.channel_context import channel_dir as _channel_dir
 from youtube_automation.infrastructure.analytics.kpi_dashboard import analyze_kpi_dashboard, render_markdown
 
 logger = logging.getLogger(__name__)
@@ -67,28 +66,24 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(args: argparse.Namespace) -> int:
-    try:
-        channel_dir = _channel_dir()
-        snapshots = _load_snapshots(channel_dir)
-        analysis = analyze_kpi_dashboard(snapshots)
-        markdown = render_markdown(analysis)
+    return run_logged_command(lambda: _run(args), logger)
 
-        if args.save:
-            for path in _save_reports(channel_dir, analysis, markdown):
-                logger.warning(f"保存しました: {path}")
 
-        if args.markdown:
-            print(markdown, end="")
-        else:
-            print(json.dumps(analysis, ensure_ascii=False, indent=2))
-        return 0
+def _run(args: argparse.Namespace) -> int:
+    channel_dir = _channel_dir()
+    snapshots = _load_snapshots(channel_dir)
+    analysis = analyze_kpi_dashboard(snapshots)
+    markdown = render_markdown(analysis)
 
-    except ConfigError as e:
-        logger.error(str(e))
-        return 2
-    except Exception as e:
-        logger.exception(f"エラー: {e}")
-        return 1
+    if args.save:
+        for path in _save_reports(channel_dir, analysis, markdown):
+            logger.warning(f"保存しました: {path}")
+
+    if args.markdown:
+        print(markdown, end="")
+    else:
+        print(json.dumps(analysis, ensure_ascii=False, indent=2))
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from youtube_automation.core.errors import ValidationError
-from youtube_automation.domains.suno.name_matching import normalize_suno_name_for_lookup
+from youtube_automation.domains.suno.name_matching import normalize_suno_name_for_lookup, suno_prompt_lookup_candidates
 from youtube_automation.domains.suno.playlist import verify_playlist_titles
 
 
@@ -40,3 +40,21 @@ def test_playlist_matching_rejects_names_that_collide_after_symbol_normalization
             ["ABC"],
             expected_clips_per_entry=1,
         )
+
+
+@pytest.mark.parametrize("title", [None, "", " \t\n", "夜景 — Echo", "Echo"])
+def test_prompt_aliases_keep_name_priority_and_deduplicate_title(title):
+    assert suno_prompt_lookup_candidates("Track 12 夜景 — Echo", title) == ("夜景 — Echo", "Echo")
+
+
+def test_prompt_aliases_append_distinct_title_after_all_name_aliases():
+    assert suno_prompt_lookup_candidates("Track 12 夜景 — Echo", "別名 — Dawn") == (
+        "夜景 — Echo",
+        "Echo",
+        "別名 — Dawn",
+        "Dawn",
+    )
+
+
+def test_prompt_aliases_retain_numeric_song_prefix():
+    assert suno_prompt_lookup_candidates("3 AM", "夜明け") == ("3 AM", "AM", "夜明け")

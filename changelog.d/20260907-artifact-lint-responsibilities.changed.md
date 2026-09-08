@@ -1,0 +1,1 @@
+- 運用成果物 lint の writer・consumer・schema・allowlist 検証を責務ごとに分割し、診断内容と出力順を保持しながら複雑度を削減した。

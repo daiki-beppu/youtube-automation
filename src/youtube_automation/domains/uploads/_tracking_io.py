@@ -7,9 +7,13 @@ import logging
 from pathlib import Path
 
 from youtube_automation.configuration import ScheduleConfig
-from youtube_automation.core.adapters.media import CollectionPaths
-from youtube_automation.core.adapters.runtime import now_in_schedule_tz
-from youtube_automation.core.errors import ValidationError, WorkflowStateError, WorkflowStateSectionTypeError
+from youtube_automation.core.errors import (
+    UploadError,
+    ValidationError,
+    WorkflowStateError,
+    WorkflowStateSectionTypeError,
+)
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
@@ -18,6 +22,7 @@ from youtube_automation.domains.uploads._collection_uploader_constants import (
     WORKFLOW_PHASE_COMPLETE,
     WORKFLOW_STAGE_LIVE,
 )
+from youtube_automation.domains.uploads.scheduling import now_in_schedule_tz
 from youtube_automation.infrastructure.filesystem import (
     make_directory,
     path_exists,
@@ -58,6 +63,13 @@ class TrackingStore:
     def read(self, collection_path: Path) -> dict:
         """tracking を読み、欠落・破損時の例外を呼び出し側へ伝える。"""
         return json.loads(read_file_text(self.tracking_path(collection_path)))
+
+    def read_for_upload(self, collection_path: Path) -> dict:
+        """Read required upload state without quarantining or replacing its file."""
+        try:
+            return self.read(collection_path)
+        except (json.JSONDecodeError, OSError) as error:
+            raise UploadError("upload tracking could not be read") from error
 
     def save(self, collection_path: Path, tracking: dict) -> None:
         """tracking 保存"""

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from html import escape
 from html.parser import HTMLParser
 from importlib.resources import files
 from string import Template
-from typing import Mapping, Sequence
+from typing import Iterator, Mapping, Sequence
 from urllib.parse import unquote, urlsplit
 
 from youtube_automation.core.errors import DocumentRenderError
@@ -143,6 +144,14 @@ def _collect_statuses(
         return
     if view.get("collapsed") is True:
         return
+    for child_value, child_schema, child_context in _status_children(value, resolved, context):
+        _collect_statuses(child_value, child_schema, root_schema, child_context, output)
+
+
+def _status_children(
+    value: object, resolved: Mapping[str, object], context: str
+) -> Iterator[tuple[object, Mapping[str, object], str]]:
+    """Yield schema-defined children with their status summary labels in display order."""
     if isinstance(value, dict):
         properties = resolved.get("properties")
         children = properties if isinstance(properties, dict) else {}
@@ -151,14 +160,14 @@ def _collect_statuses(
                 child_context = context
                 if not context:
                     child_context = _annotation(child, "title", name)
-                _collect_statuses(value[name], child, root_schema, child_context, output)
+                yield value[name], child, child_context
     elif isinstance(value, list):
         item_schema = resolved.get("items")
         child = item_schema if isinstance(item_schema, dict) else {}
         object_labels = _item_labels(value, resolved) if all(isinstance(item, dict) for item in value) else None
         for index, item in enumerate(value, 1):
             label = object_labels[index - 1] if object_labels is not None else f"{context} {index}".strip()
-            _collect_statuses(item, child, root_schema, label, output)
+            yield item, child, label
 
 
 def _render_section(
@@ -288,20 +297,7 @@ def _validate_review_view(view: Mapping[str, object]) -> None:
     priority = view.get("priority")
     if priority is not None and priority not in {"critical", "high", "normal", "low"}:
         raise DocumentRenderError("x-view.priority は critical/high/normal/low のいずれかにしてください")
-    groups = view.get("itemGroups")
-    if groups is not None:
-        if not isinstance(groups, list) or not groups:
-            raise DocumentRenderError("x-view.itemGroups は空でない array で指定してください")
-        for group in groups:
-            if not isinstance(group, dict) or not isinstance(group.get("title"), str):
-                raise DocumentRenderError("x-view.itemGroups の各要素には title が必要です")
-            match = group.get("match")
-            if not isinstance(match, dict) or not isinstance(match.get("property"), str):
-                raise DocumentRenderError("x-view.itemGroups.match.property は string で指定してください")
-            if not isinstance(match.get("values"), list) or not match["values"]:
-                raise DocumentRenderError("x-view.itemGroups.match.values は空でない array で指定してください")
-            if group.get("collapsed") not in {None, True, False}:
-                raise DocumentRenderError("x-view.itemGroups.collapsed は boolean で指定してください")
+    _validate_item_groups(view.get("itemGroups"))
     compare = view.get("compare")
     if compare is not None and (
         not isinstance(compare, list) or not compare or not all(isinstance(field, str) for field in compare)
@@ -321,6 +317,23 @@ def _validate_review_view(view: Mapping[str, object]) -> None:
             raise DocumentRenderError("x-view.statusMap の値は pass/fail/warning/neutral のいずれかにしてください")
     if view.get("statusSummary") not in {None, True, False}:
         raise DocumentRenderError("x-view.statusSummary は boolean で指定してください")
+
+
+def _validate_item_groups(groups: object) -> None:
+    if groups is None:
+        return
+    if not isinstance(groups, list) or not groups:
+        raise DocumentRenderError("x-view.itemGroups は空でない array で指定してください")
+    for group in groups:
+        if not isinstance(group, dict) or not isinstance(group.get("title"), str):
+            raise DocumentRenderError("x-view.itemGroups の各要素には title が必要です")
+        match = group.get("match")
+        if not isinstance(match, dict) or not isinstance(match.get("property"), str):
+            raise DocumentRenderError("x-view.itemGroups.match.property は string で指定してください")
+        if not isinstance(match.get("values"), list) or not match["values"]:
+            raise DocumentRenderError("x-view.itemGroups.match.values は空でない array で指定してください")
+        if group.get("collapsed") not in {None, True, False}:
+            raise DocumentRenderError("x-view.itemGroups.collapsed は boolean で指定してください")
 
 
 def _review_classes(view: Mapping[str, object]) -> str:
@@ -395,6 +408,11 @@ def _render_value(value: object, schema: Mapping[str, object], root_schema: Mapp
         child_schema = item_schema if isinstance(item_schema, dict) else {}
         items = "".join(f"<li>{_render_value(item, child_schema, root_schema)}</li>" for item in value)
         return f"<ul>{items}</ul>" if items else '<p class="empty">No items</p>'
+    return _render_scalar_value(value, view)
+
+
+def _render_scalar_value(value: object, view: Mapping[str, object]) -> str:
+    """Render scalar values with their status, copy and diff annotations."""
     if value is None:
         return '<span class="empty">None</span>'
     if isinstance(value, bool):
@@ -508,40 +526,7 @@ def _render_cards(
             for anchor, label, item in selected
         )
 
-    groups = view.get("itemGroups")
-    grouped_content = ""
-    if isinstance(groups, list):
-        claimed: set[int] = set()
-        ordered_entries = []
-        for group in groups:
-            assert isinstance(group, dict)
-            match = group["match"]
-            assert isinstance(match, dict)
-            property_name = match["property"]
-            accepted = match["values"]
-            selected_indices = [
-                index
-                for index, entry in enumerate(entries)
-                if index not in claimed and entry[2].get(property_name) in accepted
-            ]
-            selected = [entries[index] for index in selected_indices]
-            claimed.update(selected_indices)
-            ordered_entries.extend(selected)
-            if not selected:
-                continue
-            group_cards = f'<div class="entry-card-grid">{render_entries(selected)}</div>'
-            group_title = str(group["title"])
-            if group.get("collapsed") is True:
-                grouped_content += _details(group_title, "", group_cards)
-            else:
-                grouped_content += f'<section class="entry-group"><h3>{escape(group_title)}</h3>{group_cards}</section>'
-        remaining = [entry for index, entry in enumerate(entries) if index not in claimed]
-        if remaining:
-            grouped_content += f'<div class="entry-card-grid">{render_entries(remaining)}</div>'
-        ordered_entries.extend(remaining)
-    else:
-        grouped_content = f'<div class="entry-card-grid">{render_entries(entries)}</div>'
-        ordered_entries = entries
+    grouped_content, ordered_entries = _render_card_groups(entries, view.get("itemGroups"), render_entries)
     flow = "".join(f'<li><a href="#{anchor}">{escape(label)}</a></li>' for anchor, label, _ in ordered_entries)
     comparison = _render_comparison(
         [entry[2] for entry in ordered_entries], item_schema, root_schema, view.get("compare")
@@ -554,6 +539,43 @@ def _render_cards(
         f'<section class="view-cards-section{modifiers}"><h2>{escape(heading)}</h2>{description_html}'
         f"{content}</section>"
     )
+
+
+def _render_card_groups(
+    entries: list[tuple[str, str, dict[str, object]]],
+    groups: object,
+    render_entries: Callable[[list[tuple[str, str, dict[str, object]]]], str],
+) -> tuple[str, list[tuple[str, str, dict[str, object]]]]:
+    """Render declared groups once per card and retain their navigation order."""
+    grouped_content = ""
+    if isinstance(groups, list):
+        ungrouped = dict(enumerate(entries))
+        ordered_entries = []
+        for group in groups:
+            assert isinstance(group, dict)
+            match = group["match"]
+            assert isinstance(match, dict)
+            property_name = match["property"]
+            accepted = match["values"]
+            selected_indices = [index for index, entry in ungrouped.items() if entry[2].get(property_name) in accepted]
+            selected = [ungrouped.pop(index) for index in selected_indices]
+            ordered_entries.extend(selected)
+            if not selected:
+                continue
+            group_cards = f'<div class="entry-card-grid">{render_entries(selected)}</div>'
+            group_title = str(group["title"])
+            if group.get("collapsed") is True:
+                grouped_content += _details(group_title, "", group_cards)
+            else:
+                grouped_content += f'<section class="entry-group"><h3>{escape(group_title)}</h3>{group_cards}</section>'
+        remaining = list(ungrouped.values())
+        if remaining:
+            grouped_content += f'<div class="entry-card-grid">{render_entries(remaining)}</div>'
+        ordered_entries.extend(remaining)
+    else:
+        grouped_content = f'<div class="entry-card-grid">{render_entries(entries)}</div>'
+        ordered_entries = entries
+    return grouped_content, ordered_entries
 
 
 def _render_comparison(
@@ -674,7 +696,7 @@ class _GeneratedHTMLParser(HTMLParser):
             raise DocumentRenderError("生成 HTML に srcset reference があります")
         if tag == "main":
             self.has_main = True
-        if tag == "meta" and attributes.get("http-equiv", "").lower() == "content-security-policy":
+        if tag == "meta" and (attributes.get("http-equiv") or "").lower() == "content-security-policy":
             self.has_csp = attributes.get("content") == _CSP
         if tag == "script":
             if attributes != {"id": "document-data", "type": "application/json"}:

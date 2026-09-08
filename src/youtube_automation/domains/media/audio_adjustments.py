@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import json
 import math
-import os
 import stat
-import tempfile
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Mapping, Set
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePath
 
 from youtube_automation.core.errors import ValidationError
+from youtube_automation.infrastructure.filesystem import write_file_text_atomically
 
 SCHEMA_VERSION = 1
 MAX_SHUFFLE_SEED = 2**32 - 1
@@ -142,39 +141,42 @@ def _validate_scalar(
     return value
 
 
+def _require_cleanup_fields(raw: Mapping[str, object], expected: Set[str], *, partial: bool, context: str) -> None:
+    """Reject unknown keys first and require complete fields only for full settings."""
+    actual = set(raw)
+    unknown = actual - expected
+    if unknown:
+        raise ValidationError(f"{context} に未知のキーがあります: {', '.join(sorted(unknown))}")
+    if not partial and actual != expected:
+        missing = expected - actual
+        raise ValidationError(f"{context} に必須キーがありません: {', '.join(sorted(missing))}")
+
+
+def _validate_section_scalars(
+    raw: Mapping[str, object],
+    fields: Mapping[str, tuple[type[object], float | None, float | None]],
+    context: str,
+) -> dict[str, object]:
+    """Validate each supplied scalar against its field definition in input order."""
+    result: dict[str, object] = {}
+    for name, item in raw.items():
+        expected_type, minimum, maximum = fields[name]
+        result[name] = _validate_scalar(item, expected_type, minimum, maximum, f"{context}.{name}")
+    return result
+
+
 def validate_cleanup_settings(value: object, *, partial: bool) -> dict[str, object]:
     """Validate full UI settings or a persisted partial override."""
     raw = _mapping(value, "cleanup settings")
-    unknown = set(raw) - _ALL_FIELDS
-    if unknown:
-        raise ValidationError(f"cleanup settings に未知のキーがあります: {', '.join(sorted(unknown))}")
-    if not partial and set(raw) != _ALL_FIELDS:
-        missing = _ALL_FIELDS - set(raw)
-        raise ValidationError(f"cleanup settings に必須キーがありません: {', '.join(sorted(missing))}")
+    _require_cleanup_fields(raw, _ALL_FIELDS, partial=partial, context="cleanup settings")
 
     result: dict[str, object] = {}
     for section, fields in _NESTED_FIELDS.items():
         if section not in raw:
             continue
         section_raw = _mapping(raw[section], f"cleanup settings.{section}")
-        section_unknown = set(section_raw) - fields.keys()
-        if section_unknown:
-            raise ValidationError(
-                f"cleanup settings.{section} に未知のキーがあります: {', '.join(sorted(section_unknown))}"
-            )
-        if not partial and set(section_raw) != fields.keys():
-            missing = fields.keys() - set(section_raw)
-            raise ValidationError(f"cleanup settings.{section} に必須キーがありません: {', '.join(sorted(missing))}")
-        validated_section: dict[str, object] = {}
-        for name, item in section_raw.items():
-            expected_type, minimum, maximum = fields[name]
-            validated_section[name] = _validate_scalar(
-                item,
-                expected_type,
-                minimum,
-                maximum,
-                f"cleanup settings.{section}.{name}",
-            )
+        _require_cleanup_fields(section_raw, fields.keys(), partial=partial, context=f"cleanup settings.{section}")
+        validated_section = _validate_section_scalars(section_raw, fields, f"cleanup settings.{section}")
         if validated_section:
             result[section] = validated_section
 
@@ -184,36 +186,26 @@ def validate_cleanup_settings(value: object, *, partial: bool) -> dict[str, obje
     return result
 
 
+def _require_exact_fields(raw: Mapping[str, object], expected: Set[str], label: str) -> None:
+    """Reject missing and unknown settings fields with a stable diagnostic."""
+    actual = set(raw)
+    if actual != expected:
+        raise ValidationError(
+            f"{label} が不正です: missing={sorted(expected - actual)}, unknown={sorted(actual - expected)}"
+        )
+
+
 def validate_master_settings(value: object) -> dict[str, object]:
     """Validate the complete EQ / loudnorm / limiter settings for master adjustment."""
     raw = _mapping(value, "master settings")
     expected_sections = {"eq", "loudnorm", "limiter"}
-    if set(raw) != expected_sections:
-        missing = expected_sections - set(raw)
-        unknown = set(raw) - expected_sections
-        raise ValidationError(
-            f"master settings の section が不正です: missing={sorted(missing)}, unknown={sorted(unknown)}"
-        )
+    _require_exact_fields(raw, expected_sections, "master settings の section")
     result: dict[str, object] = {}
     for section in sorted(expected_sections):
         fields = _NESTED_FIELDS[section]
         section_raw = _mapping(raw[section], f"master settings.{section}")
-        if set(section_raw) != fields.keys():
-            missing = fields.keys() - set(section_raw)
-            unknown = set(section_raw) - fields.keys()
-            raise ValidationError(
-                f"master settings.{section} の field が不正です: missing={sorted(missing)}, unknown={sorted(unknown)}"
-            )
-        result[section] = {
-            name: _validate_scalar(
-                item,
-                fields[name][0],
-                fields[name][1],
-                fields[name][2],
-                f"master settings.{section}.{name}",
-            )
-            for name, item in section_raw.items()
-        }
+        _require_exact_fields(section_raw, fields.keys(), f"master settings.{section} の field")
+        result[section] = _validate_section_scalars(section_raw, fields, f"master settings.{section}")
     return result
 
 
@@ -229,23 +221,27 @@ def _validate_fadein_curve(value: object, context: str) -> str:
     return value
 
 
+def _validate_ambient_mix_fields(raw: Mapping[str, object], context: str) -> dict[str, object]:
+    """Validate shared ambient defaults and optional per-layer overrides in field order."""
+    validated = {
+        key: _validate_scalar(raw[key], float, low, high, f"{context}.{key}")
+        for key, low, high in (("volume_db", -60, 12), ("fadein_s", 0, 60))
+        if key in raw
+    }
+    if "fadein_curve" in raw:
+        validated["fadein_curve"] = _validate_fadein_curve(raw["fadein_curve"], f"{context}.fadein_curve")
+    return validated
+
+
 def validate_finalize_settings(value: object) -> dict[str, object]:
     """Validate complete collection-level ambient finalize settings."""
     raw = _mapping(value, "finalize settings")
     expected_sections = {"ambient_layers", "loudnorm", "mix"}
-    if set(raw) != expected_sections:
-        raise ValidationError(
-            "finalize settings の section が不正です: "
-            f"missing={sorted(expected_sections - set(raw))}, unknown={sorted(set(raw) - expected_sections)}"
-        )
+    _require_exact_fields(raw, expected_sections, "finalize settings の section")
 
     ambient = _mapping(raw["ambient_layers"], "finalize settings.ambient_layers")
     ambient_fields = {"dirname", "glob", "volume_db", "fadein_s", "fadein_curve", "layers"}
-    if set(ambient) != ambient_fields:
-        raise ValidationError(
-            "finalize settings.ambient_layers の field が不正です: "
-            f"missing={sorted(ambient_fields - set(ambient))}, unknown={sorted(set(ambient) - ambient_fields)}"
-        )
+    _require_exact_fields(ambient, ambient_fields, "finalize settings.ambient_layers の field")
     dirname = ambient["dirname"]
     if (
         not isinstance(dirname, str)
@@ -276,20 +272,7 @@ def validate_finalize_settings(value: object) -> dict[str, object]:
             raise ValidationError(
                 f"finalize settings.ambient_layers.layers.{filename} は既知 field を1件以上含めてください"
             )
-        validated_override: dict[str, object] = {}
-        if "volume_db" in override:
-            validated_override["volume_db"] = _validate_scalar(
-                override["volume_db"], float, -60, 12, f"finalize settings layer {filename}.volume_db"
-            )
-        if "fadein_s" in override:
-            validated_override["fadein_s"] = _validate_scalar(
-                override["fadein_s"], float, 0, 60, f"finalize settings layer {filename}.fadein_s"
-            )
-        if "fadein_curve" in override:
-            validated_override["fadein_curve"] = _validate_fadein_curve(
-                override["fadein_curve"], f"finalize settings layer {filename}.fadein_curve"
-            )
-        layers[filename] = validated_override
+        layers[filename] = _validate_ambient_mix_fields(override, f"finalize settings layer {filename}")
 
     loudnorm = _mapping(raw["loudnorm"], "finalize settings.loudnorm")
     loudnorm_fields = {"enabled", "mode", "I", "LRA", "TP"}
@@ -308,15 +291,7 @@ def validate_finalize_settings(value: object) -> dict[str, object]:
         "ambient_layers": {
             "dirname": dirname,
             "glob": glob_pattern,
-            "volume_db": _validate_scalar(
-                ambient["volume_db"], float, -60, 12, "finalize settings.ambient_layers.volume_db"
-            ),
-            "fadein_s": _validate_scalar(
-                ambient["fadein_s"], float, 0, 60, "finalize settings.ambient_layers.fadein_s"
-            ),
-            "fadein_curve": _validate_fadein_curve(
-                ambient["fadein_curve"], "finalize settings.ambient_layers.fadein_curve"
-            ),
+            **_validate_ambient_mix_fields(ambient, "finalize settings.ambient_layers"),
             "layers": layers,
         },
         "loudnorm": {
@@ -331,6 +306,21 @@ def validate_finalize_settings(value: object) -> dict[str, object]:
             "normalize": _validate_scalar(mix["normalize"], bool, None, None, "finalize settings.mix.normalize"),
         },
     }
+
+
+def _validate_order_consistency(order: list[str] | None, pin_first: list[str], shuffle_seed: int | None) -> None:
+    """Check cross-field constraints after validating the individual order settings."""
+    if order is not None:
+        unknown_pins = set(pin_first) - set(order)
+        if unknown_pins:
+            raise ValidationError(
+                "audio-adjustments.json の pin_first が order にない filename を含みます: "
+                f"{', '.join(sorted(unknown_pins))}"
+            )
+        if order[: len(pin_first)] != pin_first:
+            raise ValidationError("audio-adjustments.json の pin_first は order の先頭と同じ順序である必要があります")
+    elif pin_first or shuffle_seed is not None:
+        raise ValidationError("audio-adjustments.json の pin_first / shuffle_seed には order が必要です")
 
 
 def read_audio_adjustments(path: Path) -> AudioAdjustments:
@@ -358,17 +348,7 @@ def read_audio_adjustments(path: Path) -> AudioAdjustments:
     shuffle_seed = _validate_shuffle_seed(root.get("shuffle_seed"))
     master = validate_master_settings(root["master"]) if "master" in root else None
     finalize = validate_finalize_settings(root["finalize"]) if "finalize" in root else None
-    if order is not None:
-        unknown_pins = set(pin_first) - set(order)
-        if unknown_pins:
-            raise ValidationError(
-                "audio-adjustments.json の pin_first が order にない filename を含みます: "
-                f"{', '.join(sorted(unknown_pins))}"
-            )
-        if order[: len(pin_first)] != pin_first:
-            raise ValidationError("audio-adjustments.json の pin_first は order の先頭と同じ順序である必要があります")
-    elif pin_first or shuffle_seed is not None:
-        raise ValidationError("audio-adjustments.json の pin_first / shuffle_seed には order が必要です")
+    _validate_order_consistency(order, pin_first, shuffle_seed)
     owned_keys = {"schema_version", "tracks", "order", "shuffle_seed", "pin_first", "master", "finalize"}
     extra = {key: value for key, value in root.items() if key not in owned_keys}
     return AudioAdjustments(
@@ -448,26 +428,9 @@ def _write_audio_adjustments(path: Path, document: AudioAdjustments) -> None:
         payload["finalize"] = document.finalize
     payload.update(document.extra)
     existing_mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o644
-    temporary_path: Path | None = None
     try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            suffix=".tmp",
-            delete=False,
-        ) as temporary:
-            temporary_path = Path(temporary.name)
-            json.dump(payload, temporary, ensure_ascii=False, indent=2)
-            temporary.write("\n")
-            temporary.flush()
-            os.fsync(temporary.fileno())
-        os.chmod(temporary_path, existing_mode)
-        os.replace(temporary_path, path)
+        write_file_text_atomically(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n", mode=existing_mode)
     except OSError as error:
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
         raise ValidationError(f"audio-adjustments.json を保存できません: {error}") from error
 
 
@@ -486,15 +449,7 @@ def replace_track_cleanup_overrides(
         tracks[filename] = overrides
     else:
         tracks.pop(filename, None)
-    updated = AudioAdjustments(
-        tracks=tracks,
-        order=document.order,
-        shuffle_seed=document.shuffle_seed,
-        pin_first=document.pin_first,
-        master=document.master,
-        finalize=document.finalize,
-        extra=document.extra,
-    )
+    updated = replace(document, tracks=tracks)
     _write_audio_adjustments(path, updated)
     return updated
 
@@ -518,14 +473,11 @@ def replace_track_order(
     if validated_order[: len(validated_pins)] != validated_pins:
         raise ValidationError("audio-adjustments.json の pin_first は order の先頭と同じ順序である必要があります")
     document = read_audio_adjustments(path)
-    updated = AudioAdjustments(
-        tracks=document.tracks,
+    updated = replace(
+        document,
         order=validated_order,
         shuffle_seed=validated_seed,
         pin_first=validated_pins,
-        master=document.master,
-        finalize=document.finalize,
-        extra=document.extra,
     )
     _write_audio_adjustments(path, updated)
     return updated
@@ -534,15 +486,7 @@ def replace_track_order(
 def replace_master_adjustments(path: Path, settings: object) -> AudioAdjustments:
     """Atomically replace complete master settings while preserving track and order stages."""
     document = read_audio_adjustments(path)
-    updated = AudioAdjustments(
-        tracks=document.tracks,
-        order=document.order,
-        shuffle_seed=document.shuffle_seed,
-        pin_first=document.pin_first,
-        master=validate_master_settings(settings),
-        finalize=document.finalize,
-        extra=document.extra,
-    )
+    updated = replace(document, master=validate_master_settings(settings))
     _write_audio_adjustments(path, updated)
     return updated
 
@@ -550,14 +494,6 @@ def replace_master_adjustments(path: Path, settings: object) -> AudioAdjustments
 def replace_finalize_adjustments(path: Path, settings: object) -> AudioAdjustments:
     """Atomically replace finalize settings while preserving all other Audio Studio stages."""
     document = read_audio_adjustments(path)
-    updated = AudioAdjustments(
-        tracks=document.tracks,
-        order=document.order,
-        shuffle_seed=document.shuffle_seed,
-        pin_first=document.pin_first,
-        master=document.master,
-        finalize=validate_finalize_settings(settings),
-        extra=document.extra,
-    )
+    updated = replace(document, finalize=validate_finalize_settings(settings))
     _write_audio_adjustments(path, updated)
     return updated

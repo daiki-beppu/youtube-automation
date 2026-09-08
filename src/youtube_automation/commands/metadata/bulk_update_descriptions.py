@@ -23,13 +23,12 @@ import json
 import logging
 import time
 
-from googleapiclient.errors import HttpError
-
-from youtube_automation.configuration import channel_dir
+from youtube_automation.application.youtube_auth import create_authenticated_youtube_clients
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import YouTubeAPIError
 from youtube_automation.domains.documents.video_description import read_video_description_metadata
 from youtube_automation.infrastructure.cost_tracker import log_quota
-from youtube_automation.infrastructure.google.youtube import create_authenticated_youtube_clients
+from youtube_automation.infrastructure.google.youtube import execute_metered_request
 
 logger = logging.getLogger(__name__)
 
@@ -108,12 +107,11 @@ def _execute_youtube_request(
     quota はリクエストの成否に関わらず消費されるため、失敗時も記録してから
     例外を伝播させる（Issue #2058）。
     """
-    try:
-        return request.execute()
-    except HttpError as error:
-        raise YouTubeAPIError.from_http_error(error, context) from error
-    finally:
-        log_quota(QUOTA_SERVICE, quota_bucket, QUOTA_UNITS[quota_bucket], metadata=quota_metadata)
+    return execute_metered_request(
+        request,
+        error_context=context,
+        on_finish=lambda: log_quota(QUOTA_SERVICE, quota_bucket, QUOTA_UNITS[quota_bucket], metadata=quota_metadata),
+    )
 
 
 def load_collection(col: str) -> dict:
@@ -158,20 +156,23 @@ def main() -> None:
         substrs = [s.strip() for s in args.only.split(",") if s.strip()]
         targets = [c for c in targets if any(s in c for s in substrs)]
 
-    payloads = []
-    for col in targets:
-        try:
-            payloads.append(load_collection(col))
-        # 1 collection の意味的な metadata 不備は他 collection の更新を妨げない。
-        # JSON 破損や I/O error はここで捕捉せず、修復が必要な失敗として伝播させる。
-        except RuntimeError as error:
-            logger.error("❌ %s: %s", col, error)
+    payloads = _load_update_payloads(targets)
 
     if not payloads:
         logger.info("nothing to do")
         return
 
     yt = create_authenticated_youtube_clients().youtube
+    _update_video_snippets(yt, payloads, dry_run=args.dry_run)
+
+    if args.dry_run:
+        logger.info("\n🔍 dry-run; %s videos would be updated", len(payloads))
+    else:
+        logger.info("\n✅ done")
+
+
+def _update_video_snippets(yt, payloads: list[dict], *, dry_run: bool) -> None:
+    """Preview each available video and attempt all writes before surfacing the first API failure."""
     ids = ",".join(p["video_id"] for p in payloads)
     current = _execute_youtube_request(
         yt.videos().list(id=ids, part="snippet"),
@@ -188,36 +189,9 @@ def main() -> None:
             logger.error("❌ %s (%s): not found on YouTube", p["video_id"], p["collection"])
             continue
         old_snippet = item["snippet"]
-        old_title = old_snippet.get("title", "")
-        old_desc = old_snippet.get("description", "")
+        new_title, new_desc, new_tags = _preview_snippet_update(p, old_snippet)
 
-        new_title = p["title"]
-        new_desc = p["description"]
-        new_tags = p["tags"] or old_snippet.get("tags", [])
-
-        title_units = utf16_units(new_title)
-        if title_units > 100:
-            logger.warning(
-                "⚠️  %s (%s): new title is %s UTF-16 units (>100). Keeping old title; updating description only.",
-                p["video_id"],
-                p["collection"],
-                title_units,
-            )
-            new_title = old_title
-
-        logger.info("\n%s", "─" * 60)
-        logger.info("🎬 %s  %s", p["video_id"], p["collection"])
-        logger.info("   title (old → new):")
-        logger.info("     %s", old_title)
-        logger.info("     %s  [%s units]", new_title, title_units)
-        logger.info("   description first lines (old → new):")
-        for line in old_desc.split("\n")[:6]:
-            logger.info("     - %s", line)
-        logger.info("       …")
-        for line in new_desc.split("\n")[:6]:
-            logger.info("     + %s", line)
-
-        if args.dry_run:
+        if dry_run:
             continue
 
         body = build_snippet_update_body(p["video_id"], old_snippet, new_title, new_desc, new_tags)
@@ -238,10 +212,49 @@ def main() -> None:
     if first_update_error is not None:
         raise first_update_error
 
-    if args.dry_run:
-        logger.info("\n🔍 dry-run; %s videos would be updated", len(payloads))
-    else:
-        logger.info("\n✅ done")
+
+def _load_update_payloads(targets: list[str]) -> list[dict]:
+    payloads = []
+    for col in targets:
+        try:
+            payloads.append(load_collection(col))
+        # 1 collection の意味的な metadata 不備は他 collection の更新を妨げない。
+        # JSON 破損や I/O error はここで捕捉せず、修復が必要な失敗として伝播させる。
+        except RuntimeError as error:
+            logger.error("❌ %s: %s", col, error)
+    return payloads
+
+
+def _preview_snippet_update(p: dict, old_snippet: dict) -> tuple[str, str, list[str]]:
+    old_title = old_snippet.get("title", "")
+    old_desc = old_snippet.get("description", "")
+
+    new_title = p["title"]
+    new_desc = p["description"]
+    new_tags = p["tags"] or old_snippet.get("tags", [])
+
+    title_units = utf16_units(new_title)
+    if title_units > 100:
+        logger.warning(
+            "⚠️  %s (%s): new title is %s UTF-16 units (>100). Keeping old title; updating description only.",
+            p["video_id"],
+            p["collection"],
+            title_units,
+        )
+        new_title = old_title
+
+    logger.info("\n%s", "─" * 60)
+    logger.info("🎬 %s  %s", p["video_id"], p["collection"])
+    logger.info("   title (old → new):")
+    logger.info("     %s", old_title)
+    logger.info("     %s  [%s units]", new_title, title_units)
+    logger.info("   description first lines (old → new):")
+    for line in old_desc.split("\n")[:6]:
+        logger.info("     - %s", line)
+    logger.info("       …")
+    for line in new_desc.split("\n")[:6]:
+        logger.info("     + %s", line)
+    return new_title, new_desc, new_tags
 
 
 if __name__ == "__main__":

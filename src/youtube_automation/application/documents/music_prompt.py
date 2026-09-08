@@ -17,8 +17,8 @@ from youtube_automation.application.documents.projection import publish_and_proj
 from youtube_automation.core.errors import DocumentMigrationError
 from youtube_automation.domains.collections.workflow_state import read_or_none
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
+from youtube_automation.domains.documents.published import read_published_json_document
 from youtube_automation.domains.documents.schema_registry import RepositorySchema, validate_repository_document
-from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 
 MachineVerifier = Callable[[object], None]
 ReviewDecision = Literal["approve", "reject"]

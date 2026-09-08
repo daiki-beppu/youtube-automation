@@ -96,3 +96,33 @@ def test_acceptance_policy_rejects_inverted_thresholds() -> None:
             maximum_integrated_lufs=-40.0,
             maximum_loudness_deviation_lu=0.0,
         )
+
+
+@pytest.mark.parametrize("duration", [60.0, 300.0])
+@pytest.mark.parametrize("loudness", [-40.0, -5.0])
+def test_acceptance_includes_absolute_range_endpoints(duration: float, loudness: float) -> None:
+    report = evaluate_media_acceptance(
+        (_measurement("01.mp3", duration=duration, loudness=loudness),), _policy(expected=1)
+    )
+
+    assert report.passed is True
+
+
+def test_acceptance_reports_all_range_failures_in_track_order_with_units() -> None:
+    report = evaluate_media_acceptance(
+        (
+            _measurement("01.mp3", duration=59.9999, loudness=-40.0001),
+            _measurement("02.mp3", duration=300.0001, loudness=-4.9999),
+        ),
+        _policy(expected=3),
+    )
+
+    issues = report.to_dict()["issues"]
+    assert issues == [
+        {"code": "track_count", "file": None, "message": "planned=3, actual=2"},
+        {"code": "duration", "file": "01.mp3", "message": "60.000s is outside 60.000..300.000s"},
+        {"code": "loudness", "file": "01.mp3", "message": "-40.000 LUFS is outside -40.000..-5.000 LUFS"},
+        {"code": "duration", "file": "02.mp3", "message": "300.000s is outside 60.000..300.000s"},
+        {"code": "loudness", "file": "02.mp3", "message": "-5.000 LUFS is outside -40.000..-5.000 LUFS"},
+        {"code": "loudness_deviation", "file": None, "message": "35.000 LU exceeds 2.000 LU"},
+    ]

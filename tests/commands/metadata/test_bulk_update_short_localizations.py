@@ -320,7 +320,7 @@ class TestMain:
         yt_mock = self._build_youtube_mock()
 
         with (
-            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
+            patch.object(mod, "create_authenticated_youtube_clients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep") as sleep_mock,
         ):
             # When
@@ -353,7 +353,7 @@ class TestMain:
         yt_mock = self._build_youtube_mock()
 
         with (
-            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
+            patch.object(mod, "create_authenticated_youtube_clients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep"),
         ):
             # When
@@ -385,7 +385,7 @@ class TestMain:
         yt_mock = self._build_youtube_mock()
 
         with (
-            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
+            patch.object(mod, "create_authenticated_youtube_clients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod.time, "sleep") as sleep_mock,
         ):
             try:
@@ -408,7 +408,7 @@ class TestMain:
         reset()
         monkeypatch.setattr(sys, "argv", ["yt-shorts-bulk-update-loc"])
 
-        with patch.object(mod, "YouTubeClients") as clients_mock:
+        with patch.object(mod, "create_authenticated_youtube_clients") as clients_mock:
             # When/Then
             with pytest.raises(SystemExit) as excinfo:
                 mod.main()
@@ -447,7 +447,7 @@ class TestQuotaLogging:
         yt_mock = self._build_youtube_mock()
 
         with (
-            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
+            patch.object(mod, "create_authenticated_youtube_clients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod, "log_quota") as quota_mock,
             patch.object(mod.time, "sleep"),
         ):
@@ -477,7 +477,7 @@ class TestQuotaLogging:
         yt_mock = self._build_youtube_mock()
 
         with (
-            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
+            patch.object(mod, "create_authenticated_youtube_clients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod, "log_quota") as quota_mock,
             patch.object(mod.time, "sleep"),
         ):
@@ -519,7 +519,7 @@ class TestQuotaLogging:
         ]
 
         with (
-            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt_mock)),
+            patch.object(mod, "create_authenticated_youtube_clients", return_value=SimpleNamespace(youtube=yt_mock)),
             patch.object(mod, "log_quota") as quota_mock,
             patch.object(mod.time, "sleep"),
         ):

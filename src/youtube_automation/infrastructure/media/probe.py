@@ -21,28 +21,7 @@ class VideoProbe:
 
 def probe_duration(path: Path) -> float | None:
     """ffprobe で動画/音声ファイルの再生秒数を取得する。失敗時は None."""
-    try:
-        result = subprocess.run(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "csv=p=0",
-                "--",
-                str(path),
-            ],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=DEFAULT_FFPROBE_TIMEOUT_SECONDS,
-        )
-        value = float(result.stdout.strip())
-        return value if isfinite(value) else None
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, ValueError, FileNotFoundError):
-        return None
+    return _probe_format_number(path, "duration")
 
 
 def probe_bitrate(path: Path) -> float | None:
@@ -51,6 +30,10 @@ def probe_bitrate(path: Path) -> float | None:
     `format=bit_rate` を参照するため、container 全体の平均ビットレートが返る。
     Mbps 換算は呼び出し側の責務。
     """
+    return _probe_format_number(path, "bit_rate")
+
+
+def _probe_format_number(path: Path, field: str) -> float | None:
     try:
         result = subprocess.run(
             [
@@ -58,7 +41,7 @@ def probe_bitrate(path: Path) -> float | None:
                 "-v",
                 "error",
                 "-show_entries",
-                "format=bit_rate",
+                f"format={field}",
                 "-of",
                 "csv=p=0",
                 "--",

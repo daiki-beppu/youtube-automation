@@ -9,11 +9,11 @@ from datetime import UTC, datetime
 
 from googleapiclient.discovery import build
 
-from youtube_automation.configuration import channel_dir
+from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import AutomationError
+from youtube_automation.core.redaction import redact_sensitive_data
 from youtube_automation.domains.youtube.broadcast_recovery import RecoveryRequest, recover_broadcast
-from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
-from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.youtube.streaming.broadcast_recovery import (
     YouTubeBroadcastRecoveryGateway,
 )

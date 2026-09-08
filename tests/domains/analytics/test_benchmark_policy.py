@@ -9,6 +9,7 @@ from youtube_automation.domains.analytics.benchmark import (
     is_short_benchmark_duration,
     is_short_benchmark_video,
     select_top_vod_benchmark_videos,
+    summarize_benchmark_videos,
 )
 
 
@@ -62,3 +63,35 @@ def test_top_vod_selection_skips_live_and_honors_limit(
 
     assert [video["video_id"] for video in selected] == expected_ids
     assert [video["video_id"] for video in skipped_live] == expected_live_ids
+
+
+def test_summary_uses_long_videos_for_averages_and_all_videos_for_tags() -> None:
+    videos = [
+        {
+            "duration_iso": "PT10M",
+            "views": 100,
+            "daily_views": 1.25,
+            "engagement_rate": 2.001,
+            "tags": ["Study", "calm"],
+        },
+        {"duration_iso": "PT20M", "views": 201, "daily_views": 2.5, "engagement_rate": 3.01, "tags": ["CALM"]},
+        {"duration_iso": "PT1M", "views": 9000, "daily_views": 999, "engagement_rate": 50, "tags": ["study", "Short"]},
+    ]
+
+    assert summarize_benchmark_videos(videos) == {
+        "avg_views": 150,
+        "avg_daily_views": 1.9,
+        "avg_engagement_rate": 2.51,
+        "top_tags": [{"tag": "study", "count": 2}, {"tag": "calm", "count": 2}, {"tag": "short", "count": 1}],
+    }
+    assert videos[0]["tags"] == ["Study", "calm"]
+
+
+@pytest.mark.parametrize("videos", [[], [{"duration_iso": "PT1M", "tags": []}]])
+def test_summary_without_long_videos_has_zero_averages(videos: list[dict]) -> None:
+    assert summarize_benchmark_videos(videos) == {
+        "avg_views": 0,
+        "avg_daily_views": 0,
+        "avg_engagement_rate": 0,
+        "top_tags": [],
+    }

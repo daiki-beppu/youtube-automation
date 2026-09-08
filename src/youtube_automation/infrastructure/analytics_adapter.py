@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from collections.abc import Callable
 from typing import Protocol
 
@@ -14,29 +15,57 @@ from youtube_automation.infrastructure.retry import execute_with_retry
 
 
 class _AnalyticsRequest(Protocol):
+    @abstractmethod
     def execute(self) -> AnalyticsResponse: ...
 
 
 class _AnalyticsReports(Protocol):
+    @abstractmethod
     def query(self, **kwargs: object) -> _AnalyticsRequest: ...
 
 
 class _AnalyticsService(Protocol):
+    @abstractmethod
     def reports(self) -> _AnalyticsReports: ...
 
 
 class _DataResource(Protocol):
+    @abstractmethod
     def list(self, **kwargs: object) -> _AnalyticsRequest: ...
 
 
 class _YouTubeService(Protocol):
+    @abstractmethod
     def channels(self) -> _DataResource: ...
+    @abstractmethod
     def playlistItems(self) -> _DataResource: ...
+    @abstractmethod
     def playlists(self) -> _DataResource: ...
+    @abstractmethod
     def videos(self) -> _DataResource: ...
 
 
-class AnalyticsAdapter:
+class _RequestExecutor:
+    """Share retry and per-attempt accounting policy across Google API adapters."""
+
+    def __init__(self, *, retry_requests: bool, on_request: Callable[[str], None] | None) -> None:
+        self._retry_requests = retry_requests
+        self._on_request = on_request
+
+    def _execute(self, request: _AnalyticsRequest, bucket: str, context: str) -> AnalyticsResponse:
+        return execute_request(
+            request,
+            context,
+            retry_requests=self._retry_requests,
+            on_attempt=lambda: self._record_request(bucket),
+        )
+
+    def _record_request(self, bucket: str) -> None:
+        if self._on_request is not None:
+            self._on_request(bucket)
+
+
+class AnalyticsAdapter(_RequestExecutor):
     """Adapt the Google Analytics reporting client to the analytics port."""
 
     def __init__(
@@ -47,21 +76,11 @@ class AnalyticsAdapter:
         on_request: Callable[[str], None] | None = None,
     ) -> None:
         self._client = client
-        self._retry_requests = retry_requests
-        self._on_request = on_request
+        super().__init__(retry_requests=retry_requests, on_request=on_request)
 
     def query(self, **kwargs: object) -> AnalyticsResponse:
         request = self._client.reports().query(**kwargs)
-        return execute_request(
-            request,
-            "YouTube Analytics API request failed",
-            retry_requests=self._retry_requests,
-            on_attempt=self._record_request,
-        )
-
-    def _record_request(self) -> None:
-        if self._on_request is not None:
-            self._on_request("reports.query")
+        return self._execute(request, "reports.query", "YouTube Analytics API request failed")
 
 
 def execute_request(
@@ -84,7 +103,7 @@ def execute_request(
             on_attempt()
 
 
-class YouTubeDataAdapter:
+class YouTubeDataAdapter(_RequestExecutor):
     """Expose named Data API operations without leaking request chains."""
 
     def __init__(
@@ -95,20 +114,7 @@ class YouTubeDataAdapter:
         on_request: Callable[[str], None] | None = None,
     ) -> None:
         self._service = service
-        self._retry_requests = retry_requests
-        self._on_request = on_request
-
-    def _execute(self, request: _AnalyticsRequest, bucket: str, context: str) -> AnalyticsResponse:
-        return execute_request(
-            request,
-            context,
-            retry_requests=self._retry_requests,
-            on_attempt=lambda: self._record_request(bucket),
-        )
-
-    def _record_request(self, bucket: str) -> None:
-        if self._on_request is not None:
-            self._on_request(bucket)
+        super().__init__(retry_requests=retry_requests, on_request=on_request)
 
     def resolve_channel(self) -> AnalyticsResponse:
         response = self._execute(

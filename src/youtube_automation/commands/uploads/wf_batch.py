@@ -51,7 +51,8 @@ from datetime import datetime
 from pathlib import Path
 
 from youtube_automation.application.master_video_review import approve_generated_master_video
-from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.configuration import load_config
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import (
     ConfigError,
     ReviewError,
@@ -60,6 +61,7 @@ from youtube_automation.core.errors import (
     WorkflowStateSectionTypeError,
 )
 from youtube_automation.domains.collections.inventory import UnreadableWorkflowState, iter_collections
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import (
     WorkflowState,
 )
@@ -69,7 +71,6 @@ from youtube_automation.domains.collections.workflow_state import (
 from youtube_automation.domains.collections.workflow_state import (
     update as update_workflow_state,
 )
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 # 02-Individual-music/ のダウンロード済み判定に使う音声拡張子（/wf-next Suno パスと同一）。
 AUDIO_EXTENSIONS = (".mp3", ".m4a", ".wav")
@@ -149,6 +150,22 @@ def _has_downloaded_audio(music_dir: Path) -> bool:
     return any(p.is_file() and p.suffix.lower() in AUDIO_EXTENSIONS for p in music_dir.iterdir())
 
 
+def _missing_download_requirements(coll: Path, state: dict) -> list[str]:
+    """Explain which download prerequisites are missing from a prepared collection."""
+    planning = state.get("planning")
+    music = planning.get("music") if isinstance(planning, dict) else None
+    url = music.get("suno_playlist_url") if isinstance(music, dict) else None
+    has_url = isinstance(url, str) and bool(url.strip())
+    has_audio = _has_downloaded_audio(coll / "02-Individual-music")
+
+    reasons = []
+    if not has_url:
+        reasons.append("planning.music.suno_playlist_url が未記録です")
+    if not has_audio:
+        reasons.append("02-Individual-music/ に音声ファイルがありません（未ダウンロード）")
+    return reasons
+
+
 def discover_targets(planning_root: Path) -> tuple[list[WfBatchTarget], list[ExcludedCollection]]:
     """collections/planning/ を走査し、batch 対象と対象外（警告付き）を返す。
 
@@ -177,31 +194,30 @@ def discover_targets(planning_root: Path) -> tuple[list[WfBatchTarget], list[Exc
             excluded.append(ExcludedCollection(coll.name, "workflow-state.json::assets が object ではありません"))
             continue
 
-        if state.get("phase") != "prepared":
-            continue
-        if assets.get("music_prompts") is not True:
-            continue
-        if assets.get("raw_master") is not None:
+        if (
+            state.get("phase") != "prepared"
+            or assets.get("music_prompts") is not True
+            or assets.get("raw_master") is not None
+        ):
             continue
 
-        planning = state.get("planning")
-        music = planning.get("music") if isinstance(planning, dict) else None
-        url = music.get("suno_playlist_url") if isinstance(music, dict) else None
-        has_url = isinstance(url, str) and bool(url.strip())
-        has_audio = _has_downloaded_audio(coll / "02-Individual-music")
-
-        if has_url and has_audio:
+        reasons = _missing_download_requirements(coll, state)
+        if not reasons:
             targets.append(WfBatchTarget(slug=coll.name, path=coll))
             continue
-
-        reasons = []
-        if not has_url:
-            reasons.append("planning.music.suno_playlist_url が未記録です")
-        if not has_audio:
-            reasons.append("02-Individual-music/ に音声ファイルがありません（未ダウンロード）")
         excluded.append(ExcludedCollection(coll.name, " / ".join(reasons)))
 
     return targets, excluded
+
+
+def _select_requested_targets(targets: list[WfBatchTarget], only: list[str]) -> list[WfBatchTarget]:
+    """Validate requested slugs and keep matching targets in discovery order."""
+    known = {target.slug for target in targets}
+    unknown = [slug for slug in only if slug not in known]
+    if unknown:
+        raise ValidationError(f"--only 指定の slug が対象一覧にありません: {', '.join(unknown)}")
+    wanted = set(only)
+    return [target for target in targets if target.slug in wanted]
 
 
 def select_targets(
@@ -214,12 +230,7 @@ def select_targets(
     selected = list(targets)
 
     if only:
-        known = {t.slug for t in selected}
-        unknown = [s for s in only if s not in known]
-        if unknown:
-            raise ValidationError(f"--only 指定の slug が対象一覧にありません: {', '.join(unknown)}")
-        wanted = set(only)
-        selected = [t for t in selected if t.slug in wanted]
+        selected = _select_requested_targets(selected, only)
 
     if from_slug is not None:
         slugs = [t.slug for t in selected]
@@ -439,6 +450,25 @@ def _parse_only(raw: str | None) -> list[str] | None:
     return slugs
 
 
+def _run_batch_target(
+    target: WfBatchTarget, settings: WfNextSettings, report_dir: Path, channel_root: Path
+) -> CollectionOutcome:
+    """Execute and report one target while containing its recoverable failure."""
+    log_path = report_dir / f"{target.slug}.log"
+    log_path.touch()
+    print(f"▶ {target.slug} を処理中... (log: {log_path})")
+    try:
+        outcome = process_collection(target, settings, log_path, channel_root)
+    except (ValidationError, OSError) as e:
+        # 1 件の失敗で batch 全体を止めない（後続 collection の処理を継続する）
+        outcome = CollectionOutcome(slug=target.slug, status=STATUS_FAILED, error=str(e))
+    if outcome.status == STATUS_SUCCESS:
+        print(f"  ✅ {target.slug}: {outcome.video_url}")
+    else:
+        print(f"  ❌ {target.slug}: {outcome.error}", file=sys.stderr)
+    return outcome
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="prepared 済み collection 群を /wf-next 相当の CLI チェーンで直列自動進行させる",
@@ -497,19 +527,7 @@ def main(argv: list[str] | None = None) -> int:
     started = time.monotonic()
     outcomes: list[CollectionOutcome] = []
     for target in selected:
-        log_path = report_dir / f"{target.slug}.log"
-        log_path.touch()
-        print(f"▶ {target.slug} を処理中... (log: {log_path})")
-        try:
-            outcome = process_collection(target, settings, log_path, channel_root)
-        except (ValidationError, OSError) as e:
-            # 1 件の失敗で batch 全体を止めない（後続 collection の処理を継続する）
-            outcome = CollectionOutcome(slug=target.slug, status=STATUS_FAILED, error=str(e))
-        outcomes.append(outcome)
-        if outcome.status == STATUS_SUCCESS:
-            print(f"  ✅ {target.slug}: {outcome.video_url}")
-        else:
-            print(f"  ❌ {target.slug}: {outcome.error}", file=sys.stderr)
+        outcomes.append(_run_batch_target(target, settings, report_dir, channel_root))
 
     elapsed = time.monotonic() - started
     summary = _build_summary(outcomes, excluded, elapsed)

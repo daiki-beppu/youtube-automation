@@ -8,10 +8,11 @@ from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from youtube_automation.configuration import channel_dir
-from youtube_automation.core.adapters.media import VIDEO_ANALYSIS_DIRNAME
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.domains.analytics.video_analysis import VIDEO_ANALYSIS_DIRNAME
 
+SUNO_DEFAULT_STYLE_CHAR_LIMIT = 120
 _TOP_GENRE_PHRASES = 8
 _VOCAL_TERMS = (
     "male vocals",
@@ -92,3 +93,19 @@ def collect_video_analysis_genre_line() -> str:
 
 def _split_csv(value: object) -> list[str]:
     return [part.strip() for part in str(value).split(",") if part.strip()]
+
+
+def check_suno_genre_line_char_limit(suno_cfg: Mapping[str, object]) -> str | None:
+    """``config/skills/music.yaml::prompt.genre_line`` が Suno Style 欄制限内か検証する."""
+    genre_line = str(suno_cfg.get("genre_line") or "").strip()
+    if not genre_line:
+        return None
+    limit = suno_cfg.get("style_char_limit")
+    if not isinstance(limit, int) or limit <= 0:
+        limit = SUNO_DEFAULT_STYLE_CHAR_LIMIT
+    if len(genre_line) <= limit:
+        return None
+    return (
+        "config/skills/music.yaml::prompt.genre_line が Suno Style 欄の文字数上限を超過: "
+        f"{len(genre_line)} / {limit}。5-Element Order に沿って要素を絞ってください"
+    )

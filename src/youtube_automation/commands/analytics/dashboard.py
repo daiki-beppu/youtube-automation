@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-import mimetypes
 import threading
 import webbrowser
 from collections.abc import Callable, Mapping, Sequence
@@ -13,10 +12,14 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from importlib.resources.abc import Traversable
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import cast
 from urllib.parse import unquote, urlsplit
 
+from youtube_automation.application.analytics.dashboard_refresh import (
+    collect_channel_analytics,
+    refresh_dashboard_channels,
+)
 from youtube_automation.commands.analytics.analytics_system import AnalyticsSystem
 from youtube_automation.configuration.loader import load_config_from_path
 from youtube_automation.core.errors import ConfigError, DashboardChannelNotFoundError, WorkflowStateError
@@ -26,11 +29,8 @@ from youtube_automation.infrastructure.analytics.channel_registry import (
     load_channel_registry,
 )
 from youtube_automation.infrastructure.analytics.dashboard_read_model import DashboardAPI, build_dashboard_read_model
-from youtube_automation.infrastructure.analytics.dashboard_refresh import (
-    collect_channel_analytics,
-    refresh_dashboard_channels,
-)
 from youtube_automation.infrastructure.analytics.workflow_timing import build_workflow_timing
+from youtube_automation.infrastructure.localserver.assets import serve_spa_asset
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
@@ -168,34 +168,15 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             return True
         return False
 
-    def _resource(self, relative_path: str) -> Traversable | None:
-        pure_path = PurePosixPath(relative_path)
-        if pure_path.is_absolute() or ".." in pure_path.parts:
-            return None
-        resource = self.server.asset_root
-        for part in pure_path.parts:
-            resource = resource.joinpath(part)
-        return resource
-
     def _static(self, path: str) -> None:
-        relative_path = unquote(path).lstrip("/") or "index.html"
-        resource = self._resource(relative_path)
-        if resource is None:
-            self._not_found("asset が見つかりません")
-            return
-        if not resource.is_file():
-            resource = self._resource("index.html")
-        if resource is None or not resource.is_file():
-            self._not_found("dashboard build asset が見つかりません")
-            return
-        body = resource.read_bytes()
-        content_type, _ = mimetypes.guess_type(str(resource))
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", content_type or "application/octet-stream")
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
-        self.wfile.write(body)
+        serve_spa_asset(
+            self,
+            self.server.asset_root,
+            path,
+            on_invalid_path=lambda: self._not_found("asset が見つかりません"),
+            on_missing_build=lambda: self._not_found("dashboard build asset が見つかりません"),
+            send_headers=lambda: self.send_header("X-Content-Type-Options", "nosniff"),
+        )
 
     def do_GET(self) -> None:
         path = urlsplit(self.path).path

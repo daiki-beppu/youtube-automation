@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
@@ -12,6 +10,7 @@ from youtube_automation.core.errors import DocumentRenderError
 from youtube_automation.domains.documents.published import read_published_json_document
 from youtube_automation.domains.documents.rendering import render_repository_document, validate_generated_html
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
+from youtube_automation.infrastructure.filesystem import write_file_text_atomically
 
 __all__ = ["publish_html_snapshot", "publish_json_document", "read_published_json_document"]
 
@@ -37,21 +36,10 @@ def publish_html_snapshot(destination: Path, html: str, validator: Callable[[str
 
 
 def _write_html_atomically(destination: Path, html: str, validator: Callable[[str], None]) -> None:
-    descriptor, temporary_name = tempfile.mkstemp(
-        dir=destination.parent,
-        prefix=f".{destination.name}.",
-        suffix=".tmp",
-    )
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as stream:
-            stream.write(html)
-            stream.flush()
-            os.fsync(stream.fileno())
+    def validate_staged(temporary: Path) -> None:
         persisted = temporary.read_text(encoding="utf-8")
         if persisted != html:
             raise DocumentRenderError("temporary HTML の再読込結果が一致しません")
         validator(persisted)
-        os.replace(temporary, destination)
-    finally:
-        temporary.unlink(missing_ok=True)
+
+    write_file_text_atomically(destination, html, mode=0o600, newline="\n", validate_staged=validate_staged)

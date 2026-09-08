@@ -166,7 +166,7 @@ class TestMain:
         yt = _youtube_mock([_video("V1", False), _video("V2", None)])
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-synthetic-media"])
         with (
-            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt)),
+            patch.object(mod, "create_authenticated_youtube_clients", return_value=SimpleNamespace(youtube=yt)),
             patch.object(mod.time, "sleep") as sleep_mock,
         ):
             mod.main()
@@ -177,7 +177,7 @@ class TestMain:
         yt = _youtube_mock([_video("V1", False), _video("V2", None)])
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-synthetic-media", "--apply"])
         with (
-            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt)),
+            patch.object(mod, "create_authenticated_youtube_clients", return_value=SimpleNamespace(youtube=yt)),
             patch.object(mod.time, "sleep") as sleep_mock,
         ):
             mod.main()
@@ -191,7 +191,7 @@ class TestMain:
         yt = _youtube_mock([_video("V1", True), _video("V2", True)])
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-synthetic-media", "--apply"])
         with (
-            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt)),
+            patch.object(mod, "create_authenticated_youtube_clients", return_value=SimpleNamespace(youtube=yt)),
             patch.object(mod.time, "sleep"),
         ):
             mod.main()  # 例外なく終了（exit しない）
@@ -201,7 +201,7 @@ class TestMain:
         yt = _youtube_mock([], uploads_items=[])
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-synthetic-media"])
         with (
-            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt)),
+            patch.object(mod, "create_authenticated_youtube_clients", return_value=SimpleNamespace(youtube=yt)),
             patch.object(mod.time, "sleep"),
         ):
             with pytest.raises(SystemExit) as exc:
@@ -222,7 +222,7 @@ class TestMain:
 
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-synthetic-media", "--apply"])
         with (
-            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt)),
+            patch.object(mod, "create_authenticated_youtube_clients", return_value=SimpleNamespace(youtube=yt)),
             patch.object(mod.time, "sleep"),
         ):
             with pytest.raises(SystemExit) as exc:
@@ -249,7 +249,7 @@ class TestQuotaLogging:
         yt = _youtube_mock([_video("V1", False)])
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-synthetic-media"])
         with (
-            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt)),
+            patch.object(mod, "create_authenticated_youtube_clients", return_value=SimpleNamespace(youtube=yt)),
             patch.object(mod, "log_quota") as quota_mock,
             patch.object(mod.time, "sleep"),
         ):
@@ -266,7 +266,7 @@ class TestQuotaLogging:
         yt = _youtube_mock([_video("V1", False), _video("V2", None)])
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-synthetic-media", "--apply"])
         with (
-            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt)),
+            patch.object(mod, "create_authenticated_youtube_clients", return_value=SimpleNamespace(youtube=yt)),
             patch.object(mod, "log_quota") as quota_mock,
             patch.object(mod.time, "sleep"),
         ):
@@ -304,7 +304,7 @@ class TestQuotaLogging:
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-synthetic-media"])
 
         with (
-            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt)),
+            patch.object(mod, "create_authenticated_youtube_clients", return_value=SimpleNamespace(youtube=yt)),
             patch.object(mod, "log_quota") as quota_mock,
             patch.object(mod.time, "sleep"),
         ):
@@ -330,7 +330,7 @@ class TestQuotaLogging:
         monkeypatch.setattr(sys, "argv", ["yt-bulk-update-synthetic-media", "--apply"])
 
         with (
-            patch.object(mod, "YouTubeClients", return_value=SimpleNamespace(youtube=yt)),
+            patch.object(mod, "create_authenticated_youtube_clients", return_value=SimpleNamespace(youtube=yt)),
             patch.object(mod, "log_quota") as quota_mock,
             patch.object(mod.time, "sleep"),
         ):

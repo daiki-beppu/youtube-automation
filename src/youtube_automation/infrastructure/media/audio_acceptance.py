@@ -9,8 +9,8 @@ import subprocess
 from pathlib import Path
 
 from youtube_automation.core.errors import ValidationError
+from youtube_automation.core.redaction import redact_sensitive_data
 from youtube_automation.domains.media.acceptance import AudioMeasurement
-from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
 from youtube_automation.infrastructure.media.probe import DEFAULT_FFPROBE_TIMEOUT_SECONDS
 
 _FFMPEG_JSON_OBJECT = re.compile(r"\{[^{}]*\}", re.DOTALL)

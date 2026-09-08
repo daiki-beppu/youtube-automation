@@ -408,3 +408,36 @@ def test_r2_small_push_keeps_the_managed_transfer_path(tmp_path: Path) -> None:
 
     assert client.create_calls == 0
     assert client.uploaded_parts == []
+
+
+@pytest.mark.parametrize("repeat_token", [False, True])
+def test_r2_retained_bytes_paginates_and_rejects_repeated_token(repeat_token: bool) -> None:
+    class PaginatedClient(FakeS3Client):
+        def list_objects_v2(
+            self,
+            *,
+            Bucket: str,
+            Prefix: str,
+            ContinuationToken: str | None = None,
+        ) -> dict[str, object]:
+            assert Bucket == "media-handoffs"
+            assert Prefix == "automation/v1/"
+            if ContinuationToken is None:
+                return {
+                    "Contents": [{"Key": Prefix + "one.bin", "Size": 3}],
+                    "IsTruncated": True,
+                    "NextContinuationToken": "page-two",
+                }
+            assert ContinuationToken == "page-two"
+            return {
+                "Contents": [{"Key": Prefix + "two.bin", "Size": 6}],
+                "IsTruncated": repeat_token,
+                "NextContinuationToken": "page-two",
+            }
+
+    store = R2MediaStore(_config(), client=PaginatedClient(), transfer_config=object())
+    if repeat_token:
+        with pytest.raises(MediaStoreError, match="capacity pagination が不正"):
+            store.retained_bytes()
+    else:
+        assert store.retained_bytes() == 9

@@ -12,13 +12,12 @@ import json
 import logging
 import sys
 from datetime import datetime
-from pathlib import Path
 from typing import Dict, List, Optional
 
 import pandas as pd
 
 from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.core.channel_context import channel_dir as _channel_dir
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.analytics.analysis.launch_curve_analyzer import (
     compute_benchmark,
@@ -28,25 +27,9 @@ from youtube_automation.infrastructure.analytics.launch_curve_data import (
     build_launch_curve_frame,
     load_latest_daily_snapshot,
 )
+from youtube_automation.infrastructure.analytics.launch_curve_data import load_video_metadata as _load_video_meta
 
 logger = logging.getLogger(__name__)
-
-
-def _load_video_meta(channel_dir: Path) -> dict:
-    """data/ 配下の最新 analytics_data_*.json から video meta を抽出する"""
-    candidates = sorted((channel_dir / "data").glob("analytics_data_*.json"))
-    if not candidates:
-        raise ConfigError("analytics_data_*.json が見つかりません。先に `yt-analytics` を実行してください。")
-    with open(candidates[-1], encoding="utf-8") as f:
-        data = json.load(f)
-
-    meta = {}
-    video_analytics = data.get("video_analytics", {}) or {}
-    for vid, v in video_analytics.items():
-        pub = v.get("published_at")
-        if vid and pub:
-            meta[vid] = {"title": v.get("title", ""), "published_at": pub}
-    return meta
 
 
 def _build_analysis(

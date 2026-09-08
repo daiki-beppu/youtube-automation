@@ -320,9 +320,7 @@ class CTRAnalyticsMixin:
 
         for video in videos:
             collection = video["collection_type"]
-            if collection not in collection_performance:
-                collection_performance[collection] = []
-            collection_performance[collection].append(video)
+            collection_performance.setdefault(collection, []).append(video)
 
         return {
             collection: self._calculate_collection_stats(vids) for collection, vids in collection_performance.items()

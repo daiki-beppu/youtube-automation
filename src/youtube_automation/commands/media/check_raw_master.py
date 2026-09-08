@@ -27,16 +27,14 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from youtube_automation.commands._shared.arguments import add_optional_collection_argument
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ValidationError, WorkflowStateError, WorkflowStateSectionTypeError
+from youtube_automation.domains.collections.paths import CollectionPaths, resolve_collection_dir
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.media.loudness_receipt import resolve_max_deviation_lu, validate_loudness_receipt
-from youtube_automation.infrastructure.media.collection_paths import (
-    CollectionPaths,
-    resolve_collection_dir,
-)
 
 # 判定結果の status 値。
 STATUS_CONSISTENT = "consistent"
@@ -189,11 +187,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="workflow-state.json::assets.raw_master と 01-master/ 実ファイルの整合チェック",
     )
-    parser.add_argument(
-        "collection",
-        nargs="?",
-        help="コレクションディレクトリ (省略時は CWD)",
-    )
+    add_optional_collection_argument(parser)
     parser.add_argument(
         "--apply",
         action="store_true",

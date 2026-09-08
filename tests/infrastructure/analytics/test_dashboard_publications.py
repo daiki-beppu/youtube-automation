@@ -6,7 +6,7 @@ from typing import is_typeddict
 
 import pytest
 
-from youtube_automation.infrastructure.analytics import dashboard_publications
+from youtube_automation.infrastructure import filesystem
 from youtube_automation.infrastructure.analytics.dashboard_publications import (
     DashboardPublications,
     build_dashboard_publications,
@@ -99,7 +99,7 @@ def test_save_dashboard_publications_replaces_with_complete_json(
         assert json.loads(observed_temporary.read_text(encoding="utf-8")) == payload
         real_replace(source, target)
 
-    monkeypatch.setattr(dashboard_publications.os, "replace", inspect_then_replace)
+    monkeypatch.setattr(filesystem.os, "replace", inspect_then_replace)
 
     save_dashboard_publications(destination, payload)
 
@@ -121,7 +121,7 @@ def test_save_dashboard_publications_preserves_destination_and_cleans_temp_on_re
         observed_temporary = Path(source)
         raise OSError("injected replace failure")
 
-    monkeypatch.setattr(dashboard_publications.os, "replace", fail_replace)
+    monkeypatch.setattr(filesystem.os, "replace", fail_replace)
 
     with pytest.raises(OSError, match="injected replace failure"):
         save_dashboard_publications(destination, {"replacement": True})

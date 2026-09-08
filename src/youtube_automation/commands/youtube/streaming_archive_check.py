@@ -20,7 +20,7 @@ import logging
 import sys
 from datetime import date, datetime, timezone
 
-from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 from youtube_automation.infrastructure.secrets import get_secret
 from youtube_automation.infrastructure.youtube.notification import NotificationError, notify

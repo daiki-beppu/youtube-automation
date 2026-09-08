@@ -9,8 +9,8 @@ from youtube_automation.application.documents.migration import (
     MarkdownMigrationDecision,
     write_operational_document,
 )
+from youtube_automation.domains.analytics.video_analysis import VIDEO_ANALYSIS_DIRNAME, VideoAnalysisReport
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
-from youtube_automation.infrastructure.media.video_analyzer import VIDEO_ANALYSIS_DIRNAME, VideoAnalysisReport
 
 
 def write_video_analysis_report(

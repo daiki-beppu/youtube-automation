@@ -8,9 +8,10 @@ import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Never
 
-from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.domains.collections.paths import CollectionPaths
 
 _GALLERY_RELATIVE_PATH = Path("assets/thumbnail-gallery")
 _THUMBNAIL_SUFFIXES = (".jpg", ".png")
@@ -39,22 +40,23 @@ class ThumbnailArchiveUpdate:
 
         if not self._gallery_existed:
             gallery = self.target.parent
-            try:
-                if gallery.is_dir() and not any(gallery.iterdir()):
-                    gallery.rmdir()
-            except OSError as exc:
-                errors.append(f"{gallery}: {exc}")
+            _remove_empty_archive_directory(gallery, errors)
 
             if not self._assets_existed:
                 assets = gallery.parent
-                try:
-                    if assets.is_dir() and not any(assets.iterdir()):
-                        assets.rmdir()
-                except OSError as exc:
-                    errors.append(f"{assets}: {exc}")
+                _remove_empty_archive_directory(assets, errors)
 
         if errors:
             raise ValidationError(f"サムネイルアーカイブを復元できません: {'; '.join(errors)}")
+
+
+def _remove_empty_archive_directory(path: Path, errors: list[str]) -> None:
+    """Remove a newly created empty directory and retain any recovery diagnostic."""
+    try:
+        if path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
+    except OSError as exc:
+        errors.append(f"{path}: {exc}")
 
 
 def _archive_enabled(config: Mapping[str, object]) -> bool:
@@ -118,6 +120,32 @@ def _capture_original_files(paths: tuple[Path, ...]) -> dict[Path, bytes | None]
         raise ValidationError(f"サムネイルアーカイブのバックアップを読み込めません: {exc}") from exc
 
 
+def _raise_archive_failure(
+    source: Path, target: Path, temporary: Path | None, update: ThumbnailArchiveUpdate, exc: OSError
+) -> Never:
+    """Restore a failed archive and report the original and recovery errors."""
+    cleanup_error = None
+    if temporary is not None:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError as temporary_cleanup_exc:
+            cleanup_error = temporary_cleanup_exc
+    try:
+        update.rollback()
+    except ValidationError as rollback_exc:
+        cleanup_detail = f"; {cleanup_error}" if cleanup_error is not None else ""
+        raise ValidationError(
+            f"承認済みサムネイルをアーカイブできず、元の状態も復元できません: "
+            f"{source} -> {target}: {exc}{cleanup_detail}; {rollback_exc}"
+        ) from rollback_exc
+    if cleanup_error is not None:
+        raise ValidationError(
+            f"承認済みサムネイルをアーカイブできず、一時ファイルも削除できません: "
+            f"{source} -> {target}: {exc}; {cleanup_error}"
+        ) from cleanup_error
+    raise ValidationError(f"承認済みサムネイルをアーカイブできません: {source} -> {target}: {exc}") from exc
+
+
 def archive_approved_thumbnail_transaction(
     collection: Path,
     *,
@@ -159,26 +187,7 @@ def archive_approved_thumbnail_transaction(
         os.replace(temporary, target)
         temporary = None
     except OSError as exc:
-        cleanup_error = None
-        if temporary is not None:
-            try:
-                temporary.unlink(missing_ok=True)
-            except OSError as temporary_cleanup_exc:
-                cleanup_error = temporary_cleanup_exc
-        try:
-            update.rollback()
-        except ValidationError as rollback_exc:
-            cleanup_detail = f"; {cleanup_error}" if cleanup_error is not None else ""
-            raise ValidationError(
-                f"承認済みサムネイルをアーカイブできず、元の状態も復元できません: "
-                f"{source} -> {target}: {exc}{cleanup_detail}; {rollback_exc}"
-            ) from rollback_exc
-        if cleanup_error is not None:
-            raise ValidationError(
-                f"承認済みサムネイルをアーカイブできず、一時ファイルも削除できません: "
-                f"{source} -> {target}: {exc}; {cleanup_error}"
-            ) from cleanup_error
-        raise ValidationError(f"承認済みサムネイルをアーカイブできません: {source} -> {target}: {exc}") from exc
+        _raise_archive_failure(source, target, temporary, update, exc)
     return update
 
 

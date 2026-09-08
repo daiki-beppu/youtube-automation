@@ -9,8 +9,8 @@ import pytest
 from youtube_automation.commands.media import check_raw_master, master_adjust
 from youtube_automation.commands.media.master_adjust import adjust_master, build_filter
 from youtube_automation.core.errors import ValidationError
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.media.audio_adjustments import replace_master_adjustments
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 
 def _settings(*, gain: float = -2.0) -> dict[str, object]:

@@ -27,12 +27,13 @@ import logging
 import sys
 from pathlib import Path
 
-from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.configuration import load_config
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import AutomationError, ConfigError, ValidationError
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.metadata import format_scene_title_violations, validate_scene_phrases
-from youtube_automation.domains.uploads.preflight import requires_scene_phrases
+from youtube_automation.domains.metadata.titles import requires_scene_phrases
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,17 @@ def _strip_fence(text: str) -> str:
     return text.strip()
 
 
+def _parse_translations_json(translations_json: str) -> dict[str, object]:
+    """Read a generated translation object and preserve JSON-specific diagnostics."""
+    try:
+        payload = json.loads(_strip_fence(translations_json))
+    except json.JSONDecodeError as exc:
+        raise ValidationError(f"scene_phrases 翻訳 JSON をパースできません: {exc.msg}") from exc
+    if not isinstance(payload, dict):
+        raise ValidationError("scene_phrases 翻訳 JSON は object でなければなりません")
+    return payload
+
+
 def translate_phrase(
     en_phrase: str,
     target_langs: list[str],
@@ -104,12 +116,7 @@ def translate_phrase(
     if not targets:
         return {}
 
-    try:
-        payload = json.loads(_strip_fence(translations_json))
-    except json.JSONDecodeError as exc:
-        raise ValidationError(f"scene_phrases 翻訳 JSON をパースできません: {exc.msg}") from exc
-    if not isinstance(payload, dict):
-        raise ValidationError("scene_phrases 翻訳 JSON は object でなければなりません")
+    payload = _parse_translations_json(translations_json)
 
     missing = [lang for lang in targets if lang not in payload]
     if missing:
@@ -119,13 +126,17 @@ def translate_phrase(
             f"Claude Agent には次のプロンプトで再生成させてください:\n{prompt}"
         )
     translations: dict[str, str] = {}
-    invalid = [lang for lang in targets if not isinstance(payload[lang], str) or not payload[lang].strip()]
+    invalid: list[str] = []
+    for lang in targets:
+        value = payload[lang]
+        if isinstance(value, str) and (translated := value.strip()):
+            translations[lang] = translated
+        else:
+            invalid.append(lang)
     if invalid:
         raise ValidationError(
             f"scene_phrases 翻訳 JSON の各言語値は非空文字列でなければなりません: invalid_languages={invalid}"
         )
-    for lang in targets:
-        translations[lang] = payload[lang].strip()
     return translations
 
 

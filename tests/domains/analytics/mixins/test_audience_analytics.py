@@ -11,6 +11,7 @@ import pytest
 
 from youtube_automation.core.errors import YouTubeAPIError
 from youtube_automation.domains.analytics.mixins.audience_analytics import AudienceAnalyticsMixin
+from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
 
 
 class StubCollector(AudienceAnalyticsMixin):
@@ -22,9 +23,15 @@ class StubCollector(AudienceAnalyticsMixin):
         pass
 
 
-@pytest.fixture
-def collector():
-    return StubCollector()
+@pytest.fixture(params=["mixin", "collector"])
+def collector(request, tmp_path):
+    if request.param == "mixin":
+        return StubCollector()
+    instance = YouTubeAnalyticsCollector(
+        youtube_client=MagicMock(), analytics_client=MagicMock(), reporting_client=MagicMock(), channel_root=tmp_path
+    )
+    instance.channel_id = "UC_TEST"
+    return instance
 
 
 class TestGetDeviceAnalytics:
@@ -175,3 +182,28 @@ class TestGetSubscribedStatusAnalytics:
         assert result["statuses"] == {}
         assert result["total_views"] == 0
         assert str(error) in result["error"]
+
+
+@pytest.mark.parametrize(
+    ("method", "key", "dimension", "extra"),
+    [
+        ("get_subscribed_status_analytics", "statuses", "subscribedStatus", []),
+        ("get_device_analytics", "devices", "deviceType", []),
+        ("get_country_analytics", "countries", "country", [7]),
+    ],
+)
+def test_category_overwrite_recomputes_shares_from_final_metrics(collector, method, key, dimension, extra):
+    collector.analytics_service.query.return_value = {
+        "rows": [["A", 100, 20, 30, *extra], ["B", 30, 40, 50, *extra], ["A", 10, 60, 70, *extra]]
+    }
+    result = getattr(collector, method)("2026-08-01", "2026-08-31")
+    assert result["total_views"] == 40
+    assert result[key]["A"] == {
+        "views": 10,
+        "watch_time_minutes": 60,
+        "avg_view_duration": 70,
+        **({"subscribers_gained": 7} if extra else {}),
+        "view_share_percent": 25.0,
+    }
+    assert result[key]["B"]["view_share_percent"] == 75.0
+    assert collector.analytics_service.query.call_args.kwargs["dimensions"] == dimension

@@ -7,6 +7,7 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
+from youtube_automation.application.youtube_auth import create_authenticated_youtube_clients
 from youtube_automation.core.errors import AutomationError, ValidationError
 from youtube_automation.domains.documents.video_description import read_video_description_document
 from youtube_automation.domains.media.captions import (
@@ -18,7 +19,6 @@ from youtube_automation.domains.media.captions import (
 )
 from youtube_automation.domains.suno.lyrics import load_suno_lyrics_entries
 from youtube_automation.infrastructure.captions_adapter import upload_caption
-from youtube_automation.infrastructure.google.youtube import create_authenticated_youtube_clients
 
 
 def _load_lyrics(path: Path) -> list[str]:

@@ -19,6 +19,42 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _require_analytics_result(result: dict, context: str) -> dict:
+    """Promote a required report's embedded API failure to the collection boundary."""
+    if "error" in result:
+        raise YouTubeAPIError(f"{context}: {result['error']}")
+    return result
+
+
+def _require_retention_results(retention: list[dict]) -> list[dict]:
+    """Require every retention result to succeed before publishing the collected data."""
+    retention_errors = [item["error"] for item in retention if "error" in item]
+    if retention_errors:
+        raise YouTubeAPIError(f"視聴維持率分析収集失敗: {retention_errors[0]}")
+    return retention
+
+
+def _daily_row_metrics(row: list) -> Dict:
+    """Read required daily metrics and default only the optional trailing columns."""
+    required = (
+        "date",
+        "views",
+        "watch_time",
+        "avg_duration",
+        "subscribers_gained",
+        "subscribers_lost",
+        "likes",
+        "dislikes",
+        "comments",
+        "shares",
+    )
+    optional = ("avg_view_percentage", "card_impressions", "card_clicks", "card_click_rate")
+    metrics = {field: row[index] for index, field in enumerate(required)}
+    metrics.update(dict.fromkeys(optional, 0))
+    metrics.update(zip(optional, row[10:14], strict=False))
+    return metrics
+
+
 class ChannelAnalyticsMixin:
     """チャンネル全体の統計データ取得・処理"""
 
@@ -172,9 +208,9 @@ class ChannelAnalyticsMixin:
                 basic_data["playlist_analytics"] = self.get_playlist_analytics(start_date, end_date)
 
                 logger.info("オーディエンス分析収集中...")
-                subscribed_status = self.get_subscribed_status_analytics(start_date, end_date)
-                if "error" in subscribed_status:
-                    raise YouTubeAPIError(f"登録ステータス分析取得失敗: {subscribed_status['error']}")
+                subscribed_status = _require_analytics_result(
+                    self.get_subscribed_status_analytics(start_date, end_date), "登録ステータス分析取得失敗"
+                )
                 basic_data["audience"] = {
                     "by_device": self.get_device_analytics(start_date, end_date),
                     "by_subscribed_status": subscribed_status,
@@ -183,17 +219,15 @@ class ChannelAnalyticsMixin:
             # full: + retention + country
             if depth == "full":
                 logger.info("地域別分析収集中...")
-                by_country = self.get_country_analytics(start_date, end_date)
-                if "error" in by_country:
-                    raise YouTubeAPIError(f"地域別分析収集失敗: {by_country['error']}")
+                by_country = _require_analytics_result(
+                    self.get_country_analytics(start_date, end_date), "地域別分析収集失敗"
+                )
                 basic_data["audience"]["by_country"] = by_country
 
                 logger.info("視聴維持率分析収集中...")
-                retention = self.get_retention_summary(start_date, end_date, top_n=10)
-                retention_errors = [item["error"] for item in retention if "error" in item]
-                if retention_errors:
-                    raise YouTubeAPIError(f"視聴維持率分析収集失敗: {retention_errors[0]}")
-                basic_data["retention"] = retention
+                basic_data["retention"] = _require_retention_results(
+                    self.get_retention_summary(start_date, end_date, top_n=10)
+                )
 
             # サマリー
             basic_data["summary"] = {
@@ -216,30 +250,7 @@ class ChannelAnalyticsMixin:
 
     def _process_daily_data(self, response: Dict) -> list:
         """日別データ処理"""
-        daily_data = []
-
-        if "rows" in response:
-            for row in response["rows"]:
-                daily_data.append(
-                    {
-                        "date": row[0],
-                        "views": row[1],
-                        "watch_time": row[2],
-                        "avg_duration": row[3],
-                        "subscribers_gained": row[4],
-                        "subscribers_lost": row[5],
-                        "likes": row[6],
-                        "dislikes": row[7],
-                        "comments": row[8],
-                        "shares": row[9],
-                        "avg_view_percentage": row[10] if len(row) > 10 else 0,
-                        "card_impressions": row[11] if len(row) > 11 else 0,
-                        "card_clicks": row[12] if len(row) > 12 else 0,
-                        "card_click_rate": row[13] if len(row) > 13 else 0,
-                    }
-                )
-
-        return daily_data
+        return [_daily_row_metrics(row) for row in response.get("rows", [])]
 
     def _calculate_summary_stats(self, main_response: Dict) -> Dict:
         """サマリー統計計算"""
@@ -256,16 +267,15 @@ class ChannelAnalyticsMixin:
         if "rows" in main_response:
             view_percentages = []
             for row in main_response["rows"]:
-                summary["total_views"] += row[1]
-                summary["total_watch_time"] += row[2]
-                summary["net_subscribers"] += row[4] - row[5]
-                summary["total_engagement"] += row[6] + row[8] + row[9]
-                if len(row) > 10 and row[10]:
-                    view_percentages.append(row[10])
-                if len(row) > 11:
-                    summary["total_card_impressions"] += row[11]
-                if len(row) > 12:
-                    summary["total_card_clicks"] += row[12]
+                metrics = _daily_row_metrics(row)
+                summary["total_views"] += metrics["views"]
+                summary["total_watch_time"] += metrics["watch_time"]
+                summary["net_subscribers"] += metrics["subscribers_gained"] - metrics["subscribers_lost"]
+                summary["total_engagement"] += metrics["likes"] + metrics["comments"] + metrics["shares"]
+                if metrics["avg_view_percentage"]:
+                    view_percentages.append(metrics["avg_view_percentage"])
+                summary["total_card_impressions"] += metrics["card_impressions"]
+                summary["total_card_clicks"] += metrics["card_clicks"]
 
             if view_percentages:
                 summary["avg_view_percentage"] = sum(view_percentages) / len(view_percentages)

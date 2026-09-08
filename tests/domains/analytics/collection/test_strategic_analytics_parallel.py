@@ -22,6 +22,7 @@ from youtube_automation.domains.analytics.collection.strategic_analytics import 
     _MAX_WORKERS,
     StrategicAnalyticsMixin,
 )
+from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
 
 # get_video_analytics_by_id が返す Analytics 結果（views を視聴回数として差別化）
 _ANALYTICS_BY_ID: Dict[str, Dict] = {
@@ -35,7 +36,7 @@ def _video_meta(video_id: str, title: str) -> Dict:
     return {"video_id": video_id, "title": title, "published_at": "2026-01-01T00:00:00Z"}
 
 
-class _StubCollector(StrategicAnalyticsMixin):
+class _StubInputs:
     """並列化ヘルパー検証用のスタブコレクター"""
 
     def __init__(self) -> None:
@@ -72,9 +73,17 @@ class _StubCollector(StrategicAnalyticsMixin):
         return _ANALYTICS_BY_ID[video_id]
 
 
-@pytest.fixture
-def collector() -> _StubCollector:
-    return _StubCollector()
+class _StubCollector(_StubInputs, StrategicAnalyticsMixin):
+    pass
+
+
+class _ServiceCollector(_StubInputs, YouTubeAnalyticsCollector):
+    pass
+
+
+@pytest.fixture(params=[_StubCollector, _ServiceCollector], ids=["mixin", "service"])
+def collector(request) -> _StubInputs:
+    return request.param()
 
 
 class TestMaxWorkersConstant:
@@ -84,7 +93,7 @@ class TestMaxWorkersConstant:
 
 
 class TestFetchVideosAnalyticsParallel:
-    def test_merges_video_meta_with_analytics(self, collector: _StubCollector) -> None:
+    def test_merges_video_meta_with_analytics(self, collector: _StubInputs) -> None:
         """動画 meta と Analytics 結果が dict マージされる"""
         videos = [_video_meta("VID_A", "Title A")]
 
@@ -97,7 +106,7 @@ class TestFetchVideosAnalyticsParallel:
         assert result[0]["likes"] == 10
         assert result[0]["subscriber_conversion_rate"] == 1.0
 
-    def test_all_videos_returned_regardless_of_completion_order(self, collector: _StubCollector) -> None:
+    def test_all_videos_returned_regardless_of_completion_order(self, collector: _StubInputs) -> None:
         """worker の完了順に関わらず全動画が結果に含まれる"""
         videos = [
             _video_meta("VID_A", "A"),
@@ -110,7 +119,7 @@ class TestFetchVideosAnalyticsParallel:
         assert {r["video_id"] for r in result} == {"VID_A", "VID_B", "VID_C"}
 
     def test_worker_exception_is_logged_and_skipped(
-        self, collector: _StubCollector, caplog: pytest.LogCaptureFixture
+        self, collector: _StubInputs, caplog: pytest.LogCaptureFixture
     ) -> None:
         """worker 内で予期せぬ例外が起きた動画はスキップして残りを返す"""
         collector._raise_for = {"VID_B"}
@@ -127,7 +136,7 @@ class TestFetchVideosAnalyticsParallel:
         assert returned_ids == {"VID_A", "VID_C"}
         assert any("VID_B" in rec.message for rec in caplog.records)
 
-    def test_empty_video_list_returns_empty(self, collector: _StubCollector) -> None:
+    def test_empty_video_list_returns_empty(self, collector: _StubInputs) -> None:
         """空リスト入力で空リスト返却・get_video_analytics_by_id 呼び出しなし"""
         result = collector._fetch_videos_analytics_parallel([], "2026-01-01", "2026-04-01", "test.section")
 
@@ -136,7 +145,7 @@ class TestFetchVideosAnalyticsParallel:
 
 
 class TestGetAllVideoAnalyticsParallel:
-    def test_sort_by_views_desc(self, collector: _StubCollector) -> None:
+    def test_sort_by_views_desc(self, collector: _StubInputs) -> None:
         """`get_all_video_analytics` は views 降順でソートして返す"""
         collector._all_videos = [
             _video_meta("VID_A", "A"),  # views=100
@@ -149,7 +158,7 @@ class TestGetAllVideoAnalyticsParallel:
         assert [r["video_id"] for r in result] == ["VID_B", "VID_C", "VID_A"]
         assert [r["subscriber_conversion_rate"] for r in result] == [1.0, 1.0, 1.0]
 
-    def test_empty_all_videos_returns_empty(self, collector: _StubCollector) -> None:
+    def test_empty_all_videos_returns_empty(self, collector: _StubInputs) -> None:
         """`get_all_channel_videos` が空なら早期リターン"""
         collector._all_videos = []
 
@@ -160,7 +169,7 @@ class TestGetAllVideoAnalyticsParallel:
 
 
 class TestGetRecentVideoAnalyticsParallel:
-    def test_sort_by_views_desc(self, collector: _StubCollector) -> None:
+    def test_sort_by_views_desc(self, collector: _StubInputs) -> None:
         """`get_recent_video_analytics` は views 降順でソートして返す"""
         collector._recent_videos = [
             _video_meta("VID_A", "A"),  # views=100
@@ -172,7 +181,7 @@ class TestGetRecentVideoAnalyticsParallel:
         assert [r["video_id"] for r in result] == ["VID_B", "VID_A"]
         assert [r["subscriber_conversion_rate"] for r in result] == [1.0, 1.0]
 
-    def test_empty_recent_videos_returns_empty(self, collector: _StubCollector) -> None:
+    def test_empty_recent_videos_returns_empty(self, collector: _StubInputs) -> None:
         """`get_recent_videos` が空なら早期リターン"""
         collector._recent_videos = []
 
@@ -183,7 +192,7 @@ class TestGetRecentVideoAnalyticsParallel:
 
 
 class TestSubscriberConversionRanking:
-    def test_combined_analytics_adds_conversion_rate(self, collector: _StubCollector) -> None:
+    def test_combined_analytics_adds_conversion_rate(self, collector: _StubInputs) -> None:
         """統合取得の公開メソッドが上位動画へ転換率を付与する。"""
         collector._all_videos = [_video_meta("VID_A", "A")]
         collector.analytics_service.query.return_value = {"rows": [["VID_A", 200, 1000, 120, 10, 0, 1, 2, 6]]}
@@ -198,7 +207,7 @@ class TestSubscriberConversionRanking:
         assert result["top_videos"][0]["views"] == 200
         assert result["top_videos"][0]["subscriber_conversion_rate"] == 3.0
 
-    def test_top_video_analytics_adds_conversion_rate(self, collector: _StubCollector) -> None:
+    def test_top_video_analytics_adds_conversion_rate(self, collector: _StubInputs) -> None:
         """上位動画取得の公開メソッドが転換率を付与する。"""
         collector.analytics_service.query.return_value = {"rows": [["VID_A", 200, 1000, 120, 10, 0, 1, 2, 6]]}
 
@@ -217,9 +226,7 @@ class TestCombinedAndBatchBoundaries:
     def _row(video_id: str, views: int) -> list:
         return [video_id, views, 1000, 120, 10, 0, 1, 2, 1]
 
-    def test_combined_excludes_recent_video_already_in_top_and_reports_statistics(
-        self, collector: _StubCollector
-    ) -> None:
+    def test_combined_excludes_recent_video_already_in_top_and_reports_statistics(self, collector: _StubInputs) -> None:
         collector._all_videos = [
             _video_meta("VID_A", "recent top") | {"published_at": "2099-01-01T00:00:00Z"},
             _video_meta("VID_B", "recent outside top") | {"published_at": "2099-01-01T00:00:00Z"},
@@ -241,7 +248,7 @@ class TestCombinedAndBatchBoundaries:
         assert collector._call_log == ["VID_B"]
 
     @pytest.mark.parametrize("response", [{}, {"rows": []}], ids=["missing-rows", "empty-rows"])
-    def test_combined_stops_cleanly_when_batch_has_no_rows(self, collector: _StubCollector, response) -> None:
+    def test_combined_stops_cleanly_when_batch_has_no_rows(self, collector: _StubInputs, response) -> None:
         collector._all_videos = [_video_meta("VID_A", "old") | {"published_at": "2000-01-01T00:00:00Z"}]
         collector.analytics_service.query.return_value = response
 
@@ -252,7 +259,7 @@ class TestCombinedAndBatchBoundaries:
         assert result["statistics"]["total_analyzed"] == 0
         collector.analytics_service.query.assert_called_once()
 
-    def test_top_batches_use_next_start_index_and_stop_on_short_final_page(self, collector: _StubCollector) -> None:
+    def test_top_batches_use_next_start_index_and_stop_on_short_final_page(self, collector: _StubInputs) -> None:
         first = [self._row(f"VID_{index}", 100 - index) for index in range(10)]
         second = [self._row("VID_10", 10), self._row("VID_11", 9)]
         collector.analytics_service.query.side_effect = [{"rows": first}, {"rows": second}]
@@ -264,7 +271,7 @@ class TestCombinedAndBatchBoundaries:
         assert [call.kwargs["startIndex"] for call in calls] == [1, 11]
         assert [call.kwargs["maxResults"] for call in calls] == [10, 10]
 
-    def test_top_returns_partial_result_after_api_failure(self, collector: _StubCollector) -> None:
+    def test_top_returns_partial_result_after_api_failure(self, collector: _StubInputs) -> None:
         first = [self._row(f"VID_{index}", 100 - index) for index in range(10)]
         collector.analytics_service.query.side_effect = [{"rows": first}, YouTubeAPIError("boom")]
 
@@ -273,7 +280,7 @@ class TestCombinedAndBatchBoundaries:
         assert len(result) == 10
         assert collector.analytics_service.query.call_count == 2
 
-    def test_unknown_mode_returns_empty_mode_envelope(self, collector: _StubCollector) -> None:
+    def test_unknown_mode_returns_empty_mode_envelope(self, collector: _StubInputs) -> None:
         result = collector.get_strategic_video_analytics("2026-01-01", "2026-04-01", mode="unknown")
 
         assert result == {
@@ -295,7 +302,7 @@ class TestCombinedAndBatchBoundaries:
         ],
     )
     def test_all_modes_add_conversion_rate_and_ranking(
-        self, collector: _StubCollector, monkeypatch: pytest.MonkeyPatch, mode: str, method_name: str, result_key: str
+        self, collector: _StubInputs, monkeypatch: pytest.MonkeyPatch, mode: str, method_name: str, result_key: str
     ) -> None:
         """各取得モードが転換率を動画へ付与し、率降順ランキングを返す"""
         videos = [
@@ -344,3 +351,28 @@ class TestCombinedAndBatchBoundaries:
             "subscribers_gained": 5,
             "subscriber_conversion_rate": 10.0,
         }
+
+
+@pytest.mark.parametrize("combined", [False, True])
+@pytest.mark.parametrize("optional_count", range(6))
+def test_ranked_rows_preserve_optional_metrics_and_description(
+    collector: _StubInputs, monkeypatch, combined: bool, optional_count: int
+) -> None:
+    collector._all_videos = [_video_meta("VID_A", "A")]
+    optional_values = [11, 12, 13, 14, 15]
+    collector.analytics_service.query.return_value = {
+        "rows": [["VID_A", 100, 200, 300, *optional_values[:optional_count]]]
+    }
+    monkeypatch.setattr(collector, "_get_video_details", lambda ids: {"VID_A": {"description": "x" * 101}})
+
+    if combined:
+        result = collector.get_combined_analytics("2026-01-01", "2026-04-01", top_count=1)["top_videos"]
+    else:
+        result = collector.get_top_video_analytics("2026-01-01", "2026-04-01", top_count=1)
+
+    video = result[0]
+    fields = ["likes", "dislikes", "comments", "shares", "subscribers_gained"]
+    assert [video[field] for field in fields] == optional_values[:optional_count] + [0] * (5 - optional_count)
+    assert video["description"] == "x" * 100 + "..."
+    assert video["title"] == "Unknown"
+    assert ("is_recent" in video) is combined

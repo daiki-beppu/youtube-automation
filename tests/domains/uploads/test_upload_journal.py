@@ -45,6 +45,48 @@ def test_each_write_reloads_and_preserves_concurrent_fields(tmp_path: Path) -> N
     assert persisted["concurrent_writer"] == {"keep": True}
 
 
+def test_explicit_session_clear_removes_only_the_resume_token(tmp_path: Path) -> None:
+    journal = UploadJournal(tmp_path / "collection")
+    attempt = journal.begin("complete_collection")
+    attempt.record_session("https://upload.example/session")
+    attempt.fail("retry later")
+
+    attempt.record_session(None)
+
+    assert attempt.resume_uri is None
+    assert journal.status(attempt.kind).status == "in_progress"
+    persisted = json.loads(journal.path.read_text())[attempt.kind]
+    assert persisted["journal_error"] == "retry later"
+
+
+def test_completion_ignores_absent_optional_metadata_and_preserves_other_fields(tmp_path: Path) -> None:
+    journal = UploadJournal(tmp_path / "collection")
+    attempt = journal.begin("complete_collection")
+    attempt.complete({"video_id": "first", "video_url": "https://youtu.be/first", "upload_source": "existing"})
+    attempt.record_session("https://upload.example/session")
+
+    attempt.complete({"video_id": "second", "video_url": None})
+
+    persisted = json.loads(journal.path.read_text())[attempt.kind]
+    assert persisted["video_id"] == "second"
+    assert persisted["video_url"] == "https://youtu.be/first"
+    assert persisted["upload_source"] == "existing"
+    assert persisted["journal_status"] == "completed"
+    assert "resume_session_uri" not in persisted
+
+
+@pytest.mark.parametrize(("method", "value"), [("record_session", 123), ("complete", {}), ("fail", "")])
+def test_invalid_transition_does_not_write(tmp_path: Path, method: str, value: object) -> None:
+    journal = UploadJournal(tmp_path / "collection")
+    attempt = journal.begin("complete_collection")
+    before = journal.path.read_bytes()
+
+    with pytest.raises(TypeError):
+        getattr(attempt, method)(value)
+
+    assert journal.path.read_bytes() == before
+
+
 def test_corrupt_journal_is_quarantined_and_never_looks_absent(tmp_path: Path) -> None:
     journal = UploadJournal(tmp_path / "collection")
     journal.path.parent.mkdir(parents=True)

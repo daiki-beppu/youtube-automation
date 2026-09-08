@@ -273,6 +273,42 @@ def test_collection_plan_uses_schema_label_and_group_order_across_navigation_com
     assert html.index(f">{selected_title}</a>") < html.index(f">{titles[0]}</a>")
 
 
+def test_overlapping_card_groups_claim_entries_once_and_keep_unmatched_input_order() -> None:
+    schema = {
+        "properties": {
+            "entries": {
+                "x-view": {
+                    "presentation": "cards",
+                    "labelField": "title",
+                    "itemGroups": [
+                        {"title": "First", "match": {"property": "kind", "values": ["x"]}},
+                        {"title": "Second", "match": {"property": "kind", "values": ["x", "y"]}},
+                        {"title": "Empty", "match": {"property": "kind", "values": ["x"]}},
+                    ],
+                },
+                "items": {"properties": {"title": {}, "kind": {}}},
+            }
+        }
+    }
+    entries = [
+        {"title": "Unmatched A", "kind": "z"},
+        {"title": "Second A", "kind": "y"},
+        {"title": "First A", "kind": "x"},
+        {"title": "Unmatched B", "kind": "z"},
+        {"title": "First B", "kind": "x"},
+    ]
+
+    html = render_schema_document({"entries": entries}, schema)
+
+    expected = ["First A", "First B", "Second A", "Unmatched A", "Unmatched B"]
+    card_positions = [html.index(f"<h3>{label}</h3>") for label in expected]
+    navigation_positions = [html.index(f">{label}</a>") for label in expected]
+    assert card_positions == sorted(card_positions)
+    assert navigation_positions == sorted(navigation_positions)
+    assert all(html.count(f"<h3>{label}</h3>") == 1 for label in expected)
+    assert "<h3>Empty</h3>" not in html
+
+
 def test_music_prompt_fixture_renders_style_as_copyable_content() -> None:
     fixture = FIXTURES_DIR / "documents" / "music-prompt.json"
     document = json.loads(fixture.read_text(encoding="utf-8"))
@@ -614,6 +650,22 @@ def test_same_document_schema_and_resources_are_byte_stable() -> None:
 def test_generated_html_validator_rejects_executable_or_external_content(html: str) -> None:
     with pytest.raises(DocumentRenderError):
         validate_generated_html(html)
+
+
+@pytest.mark.parametrize("attribute", ["http-equiv", 'http-equiv=""'])
+def test_generated_html_validator_rejects_csp_meta_without_directive(attribute: str) -> None:
+    html = render_schema_document({"summary": "Ready", "rows": []}, _view_schema())
+    html = html.replace('http-equiv="Content-Security-Policy"', attribute)
+
+    with pytest.raises(DocumentRenderError, match="document/CSP/data"):
+        validate_generated_html(html)
+
+
+def test_generated_html_validator_accepts_unrelated_valueless_meta() -> None:
+    html = render_schema_document({"summary": "Ready", "rows": []}, _view_schema())
+    html = html.replace("</head>", "<meta http-equiv></head>")
+
+    validate_generated_html(html)
 
 
 @pytest.mark.parametrize(

@@ -19,7 +19,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.core.channel_context import channel_dir as _channel_dir
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.thumbnail.correlation import (
     MIN_SAMPLES_DEFAULT,

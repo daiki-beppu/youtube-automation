@@ -22,7 +22,7 @@ import datetime
 import sys
 from pathlib import Path
 
-from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 from youtube_automation.infrastructure.media.probe import probe_bitrate
 from youtube_automation.infrastructure.secrets import get_secret

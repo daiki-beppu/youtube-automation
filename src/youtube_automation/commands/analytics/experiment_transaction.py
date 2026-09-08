@@ -16,7 +16,8 @@ from youtube_automation.core.errors import ValidationError
 JOURNAL_NAME = ".experiment-judge-transaction.json"
 
 
-def _bytes(path: Path) -> bytes:
+def read_jsonl_bytes(path: Path) -> bytes:
+    """存在しない JSONL は空として扱い、通常ファイルだけを読み込む。"""
     if not path.exists():
         return b""
     try:
@@ -149,11 +150,11 @@ def recover(journal_path: Path, expected_paths: tuple[Path, Path]) -> None:
             raise ValidationError(f"experiment judge journal の payload が不正です: {journal_path}") from error
         if _sha256(after) != record.get("after_sha256"):
             raise ValidationError(f"experiment judge journal の after hash が不正です: {destination}")
-        if _sha256(_bytes(destination)) not in {record.get("before_sha256"), record.get("after_sha256")}:
+        if _sha256(read_jsonl_bytes(destination)) not in {record.get("before_sha256"), record.get("after_sha256")}:
             raise ValidationError(f"experiment judge recovery conflict: {destination}")
         plans.append((destination, after))
     for destination, after in plans:
-        if _bytes(destination) == after:
+        if read_jsonl_bytes(destination) == after:
             continue
         temporary = _temp_file(destination, after)
         try:

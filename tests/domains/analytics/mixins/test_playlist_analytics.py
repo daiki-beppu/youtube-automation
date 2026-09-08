@@ -20,9 +20,15 @@ class StubCollector(PlaylistAnalyticsMixin):
         pass
 
 
-@pytest.fixture
-def collector():
-    return StubCollector()
+@pytest.fixture(params=["mixin", "collector"])
+def collector(request, tmp_path):
+    if request.param == "mixin":
+        return StubCollector()
+    instance = YouTubeAnalyticsCollector(
+        youtube_client=MagicMock(), analytics_client=MagicMock(), reporting_client=MagicMock(), channel_root=tmp_path
+    )
+    instance.channel_id = "UC_TEST"
+    return instance
 
 
 class TestGetPlaylistAnalytics:

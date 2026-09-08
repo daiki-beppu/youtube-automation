@@ -16,7 +16,7 @@ SETUP_REFERENCES = REPO_ROOT / ".claude" / "skills" / "setup" / "references"
 
 SETUP_ASSET_SHA256 = {
     "claude-md-template.md": "64882d3cbe6c1d69c982f723d2a62bf67a88aa6895dddc79b75ce3c45857bbdd",
-    "config-generation-rules.md": "81ceb69aada93c6f0b1b2ba3d1538469fefc1609fda5c1ac56d13e22406ee8ec",
+    "config-generation-rules.md": "fc35adf5602d8998a065cf14c2b3e851ef655df996a880d5c69607ce279977b7",
     "config-template/analytics.json": "4344ad8d4c9a1c81958b721eb3d999172f14f71f17d863a1708492ce687b68d2",
     "config-template/audio.json": "c55033dc448cb91fe3cdb47e20f220c5879c05f95855d918a8e72297a5f20a43",
     "config-template/content.json": "5a60fc3327bb2cca1daa5da3744dc218495f3f0f304aebdad41fd2ba32d1bed0",
@@ -25,10 +25,10 @@ SETUP_ASSET_SHA256 = {
     "config-template/skills/thumbnail.yaml": "d13c92a2f44730b62da29f92c38a9e6df11488929fd77c16fb880418725e3991",
     "config-template/youtube.json": "849f4b0912cb7be3d1cc92b7607d355e856b5af3e9e85db0449fabdf1713bb6c",
     "directory-structure.md": "d8590189cf8929b968b4f1169b723cc0ed71e0be06dbd57cc3ed405967bc4e14",
-    "fetch_branding_snapshot.py": "3f7ecd1eb902ee8ae1b4002f23d6d3c7ed793d93200d87cc11777b55745a51a3",
+    "fetch_branding_snapshot.py": "6cb89a136372c98289eec3cb0990ea1dcc220667696ed0938eae6dcff6e393e2",
     "generate_image.py": "537257487c8cf1b5828ddeae85ff329326d4961b6ce90bd7d1f8a16c8fa684c6",
     "schedule-template.json": "2e950062bef269cea670d219024528e06079697997f9c59f244cebdf6a6f3026",
-    "verification.md": "4ce440663e0faf0f1e5916920486f9e62c3ed0a3ab86624c189ebbe19cd5d8f1",
+    "verification.md": "8857792d8baf5a15792bd2e53fe626d45239b0d00e2d105058e3760827cc155c",
 }
 STRATEGY_ASSET_SHA256 = {
     "desire-vocabulary.md": "d6a2a6eda7597b9aa66f0b140a42834807374cc80a313c9b8edb8114f3126388",

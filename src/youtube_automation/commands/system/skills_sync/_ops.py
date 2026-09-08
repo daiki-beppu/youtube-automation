@@ -223,6 +223,11 @@ def _ensure_agents_skills_symlink(target_dir: Path, *, force: bool, dry_run: boo
     if dry_run:
         return "linked"
 
+    return _create_agents_skills_link(link)
+
+
+def _create_agents_skills_link(link: Path) -> str:
+    """Create the link while distinguishing permissions from unsupported symlinks."""
     try:
         link.parent.mkdir(parents=True, exist_ok=True)
     except PermissionError:

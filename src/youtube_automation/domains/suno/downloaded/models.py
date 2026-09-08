@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import urllib.parse
+from abc import abstractmethod
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -20,6 +21,7 @@ DOWNLOADED_ROUTE_SUFFIX = "/downloaded"
 
 
 class PromptEntriesReader(Protocol):
+    @abstractmethod
     def __call__(self, collection_dir: Path) -> Sequence[object]: ...
 
 
@@ -30,6 +32,7 @@ class SunoConfig(Protocol):
 
 
 class SunoModeInferer(Protocol):
+    @abstractmethod
     def __call__(self, genre_line: str) -> str: ...
 
 
@@ -59,6 +62,13 @@ class DownloadedPayload:
     download_path: str | None = None
 
 
+def _nonnegative_file_count(value: object, field: str) -> int:
+    """Validate the integer counts accepted by a completed download notification."""
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise DownloadedPayloadError(f"{field} must be a non-negative integer")
+    return value
+
+
 def parse_downloaded_payload(payload: object) -> DownloadedPayload:
     if not isinstance(payload, dict):
         raise DownloadedPayloadError("payload must be an object")
@@ -71,16 +81,13 @@ def parse_downloaded_payload(payload: object) -> DownloadedPayload:
 
     if file_count is None or not fmt:
         raise DownloadedPayloadError("file_count and format are required")
-    if not isinstance(file_count, int) or isinstance(file_count, bool) or file_count < 0:
-        raise DownloadedPayloadError("file_count must be a non-negative integer")
+    file_count = _nonnegative_file_count(file_count, "file_count")
     if not isinstance(fmt, str) or fmt not in _VALID_DOWNLOAD_FORMATS:
         raise DownloadedPayloadError("format is invalid")
     if file_count > 0 and download_path is None:
         raise DownloadedPayloadError("download_path is required when file_count is positive")
-    if expected_file_count is not None and (
-        not isinstance(expected_file_count, int) or isinstance(expected_file_count, bool) or expected_file_count < 0
-    ):
-        raise DownloadedPayloadError("expected_file_count must be a non-negative integer")
+    if expected_file_count is not None:
+        expected_file_count = _nonnegative_file_count(expected_file_count, "expected_file_count")
     if download_path is not None:
         if not isinstance(download_path, str):
             raise DownloadedPayloadError("download_path must be a string")

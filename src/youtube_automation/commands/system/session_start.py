@@ -80,6 +80,17 @@ def _followup_actions(root: Path, apply_output: str) -> list[str]:
     return actions
 
 
+def _report_update_followups(root: Path, output: str) -> None:
+    """Report a successful update and any required migration or rendering actions."""
+    print(f"{_PREFIX} upstream への追従と commit が完了しました")
+    try:
+        actions = _followup_actions(root, output)
+    except (OSError, subprocess.TimeoutExpired):
+        actions = ["更新後の migrate / render 検査に失敗しました。手動で確認してください"]
+    if actions:
+        print(f"{_PREFIX} 要対応: {', '.join(actions)}")
+
+
 def _run(_: argparse.Namespace) -> int:
     if (
         os.environ.get("YOUTUBE_AUTOMATION_DISABLE_SESSION_UPDATE") == "1"
@@ -123,13 +134,7 @@ def _run(_: argparse.Namespace) -> int:
                     print(f"{_PREFIX} 追従に失敗しました")
                 print(f"{_PREFIX} 復旧: uv run yt-automation-update apply --commit")
                 return 0
-            print(f"{_PREFIX} upstream への追従と commit が完了しました")
-            try:
-                actions = _followup_actions(root, output)
-            except (OSError, subprocess.TimeoutExpired):
-                actions = ["更新後の migrate / render 検査に失敗しました。手動で確認してください"]
-            if actions:
-                print(f"{_PREFIX} 要対応: {', '.join(actions)}")
+            _report_update_followups(root, output)
     except (ConfigError, OSError, subprocess.TimeoutExpired):
         return 0
     return 0

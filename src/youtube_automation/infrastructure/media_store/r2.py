@@ -7,14 +7,15 @@ import json
 import os
 import re
 import tempfile
+from abc import abstractmethod
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, Protocol, cast
 
 from youtube_automation.core.errors import ConfigError, MediaStoreError
+from youtube_automation.core.redaction import redact_sensitive_data
 from youtube_automation.domains.media_store import MediaKey, MediaObjectMetadata
-from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
 from youtube_automation.infrastructure.file_lock import file_lock
 from youtube_automation.infrastructure.media_store._files import (
     atomic_destination,
@@ -36,6 +37,7 @@ _MULTIPART_CHECKPOINT_VERSION = 1
 
 
 class _S3Client(Protocol):
+    @abstractmethod
     def upload_fileobj(
         self,
         file_object: BinaryIO,
@@ -46,6 +48,7 @@ class _S3Client(Protocol):
         Config: object,
     ) -> None: ...
 
+    @abstractmethod
     def download_fileobj(
         self,
         bucket: str,
@@ -55,10 +58,13 @@ class _S3Client(Protocol):
         Config: object,
     ) -> None: ...
 
+    @abstractmethod
     def head_object(self, *, Bucket: str, Key: str) -> dict[str, object]: ...
 
+    @abstractmethod
     def create_multipart_upload(self, *, Bucket: str, Key: str, Metadata: dict[str, str]) -> dict[str, object]: ...
 
+    @abstractmethod
     def upload_part(
         self,
         *,
@@ -69,6 +75,7 @@ class _S3Client(Protocol):
         Body: bytes,
     ) -> dict[str, object]: ...
 
+    @abstractmethod
     def list_parts(
         self,
         *,
@@ -78,6 +85,7 @@ class _S3Client(Protocol):
         PartNumberMarker: int | None = None,
     ) -> dict[str, object]: ...
 
+    @abstractmethod
     def complete_multipart_upload(
         self,
         *,
@@ -87,8 +95,10 @@ class _S3Client(Protocol):
         MultipartUpload: dict[str, object],
     ) -> dict[str, object]: ...
 
+    @abstractmethod
     def abort_multipart_upload(self, *, Bucket: str, Key: str, UploadId: str) -> None: ...
 
+    @abstractmethod
     def list_objects_v2(
         self,
         *,
@@ -472,22 +482,7 @@ class R2MediaStore:
                     UploadId=checkpoint.upload_id,
                     PartNumberMarker=marker,
                 )
-            raw_parts = response.get("Parts", [])
-            if not isinstance(raw_parts, list):
-                raise MediaStoreError("R2 multipart parts 応答が不正です")
-            for raw_part in raw_parts:
-                if not isinstance(raw_part, dict):
-                    raise MediaStoreError("R2 multipart part 応答が不正です")
-                number = raw_part.get("PartNumber")
-                etag = raw_part.get("ETag")
-                part_bytes = raw_part.get("Size")
-                if not isinstance(number, int) or not isinstance(etag, str) or not isinstance(part_bytes, int):
-                    raise MediaStoreError("R2 multipart part 応答が不正です")
-                expected_size = min(checkpoint.part_size, size - (number - 1) * checkpoint.part_size)
-                if number < 1 or expected_size <= 0:
-                    raise MediaStoreError("R2 multipart part 番号が不正です")
-                if part_bytes == expected_size:
-                    completed[number] = etag
+            completed.update(_completed_parts_on_page(response, checkpoint=checkpoint, size=size))
             if response.get("IsTruncated") is not True:
                 return completed
             next_marker = response.get("NextPartNumberMarker")
@@ -580,23 +575,7 @@ class R2MediaStore:
                         Prefix=prefix,
                         ContinuationToken=continuation,
                     )
-                contents = response.get("Contents", [])
-                if not isinstance(contents, list):
-                    raise MediaStoreError("R2 retained capacity 応答が不正です")
-                for item in contents:
-                    if not isinstance(item, dict):
-                        raise MediaStoreError("R2 retained capacity object が不正です")
-                    key = item.get("Key")
-                    size = item.get("Size")
-                    if (
-                        not isinstance(key, str)
-                        or not key.startswith(prefix)
-                        or not isinstance(size, int)
-                        or isinstance(size, bool)
-                        or size < 0
-                    ):
-                        raise MediaStoreError("R2 retained capacity object が不正です")
-                    total += size
+                total += _retained_bytes_on_page(response, prefix=prefix)
                 if response.get("IsTruncated") is not True:
                     return total
                 next_continuation = response.get("NextContinuationToken")
@@ -607,3 +586,48 @@ class R2MediaStore:
             raise
         except Exception as exc:
             raise self._error("retained capacity", exc) from exc
+
+
+def _completed_parts_on_page(
+    response: dict[str, object], *, checkpoint: _MultipartCheckpoint, size: int
+) -> dict[int, str]:
+    completed: dict[int, str] = {}
+    raw_parts = response.get("Parts", [])
+    if not isinstance(raw_parts, list):
+        raise MediaStoreError("R2 multipart parts 応答が不正です")
+    for raw_part in raw_parts:
+        if not isinstance(raw_part, dict):
+            raise MediaStoreError("R2 multipart part 応答が不正です")
+        number = raw_part.get("PartNumber")
+        etag = raw_part.get("ETag")
+        part_bytes = raw_part.get("Size")
+        if not isinstance(number, int) or not isinstance(etag, str) or not isinstance(part_bytes, int):
+            raise MediaStoreError("R2 multipart part 応答が不正です")
+        expected_size = min(checkpoint.part_size, size - (number - 1) * checkpoint.part_size)
+        if number < 1 or expected_size <= 0:
+            raise MediaStoreError("R2 multipart part 番号が不正です")
+        if part_bytes == expected_size:
+            completed[number] = etag
+    return completed
+
+
+def _retained_bytes_on_page(response: dict[str, object], *, prefix: str) -> int:
+    total = 0
+    contents = response.get("Contents", [])
+    if not isinstance(contents, list):
+        raise MediaStoreError("R2 retained capacity 応答が不正です")
+    for item in contents:
+        if not isinstance(item, dict):
+            raise MediaStoreError("R2 retained capacity object が不正です")
+        key = item.get("Key")
+        size = item.get("Size")
+        if (
+            not isinstance(key, str)
+            or not key.startswith(prefix)
+            or not isinstance(size, int)
+            or isinstance(size, bool)
+            or size < 0
+        ):
+            raise MediaStoreError("R2 retained capacity object が不正です")
+        total += size
+    return total

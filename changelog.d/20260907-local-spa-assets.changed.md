@@ -1,0 +1,1 @@
+- dashboard と audio studio の静的ファイル配信をローカルサーバー基盤へ共通化し、パス拒否・SPA fallback・各画面の応答ヘッダーを維持しました。

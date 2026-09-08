@@ -4,6 +4,7 @@ import pytest
 
 from youtube_automation.core.errors import YouTubeAPIError
 from youtube_automation.domains.analytics.mixins.video_daily_analytics import VideoDailyAnalyticsMixin
+from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
 
 
 class DummyCollector(VideoDailyAnalyticsMixin):
@@ -12,7 +13,21 @@ class DummyCollector(VideoDailyAnalyticsMixin):
         self.channel_id = "UC_TEST"
 
 
-def test_get_video_daily_analytics_parses_views_only_rows():
+@pytest.fixture(params=["mixin", "collector"])
+def collector_factory(request, tmp_path):
+    def create(client):
+        if request.param == "mixin":
+            return DummyCollector(client)
+        instance = YouTubeAnalyticsCollector(
+            youtube_client=MagicMock(), analytics_client=client, reporting_client=MagicMock(), channel_root=tmp_path
+        )
+        instance.channel_id = "UC_TEST"
+        return instance
+
+    return create
+
+
+def test_get_video_daily_analytics_parses_views_only_rows(collector_factory):
     """YouTube Analytics API 仕様上、dimensions=video,day では
     videoThumbnailImpressions* が取得不可のため、views のみを扱う。
     """
@@ -24,7 +39,7 @@ def test_get_video_daily_analytics_parses_views_only_rows():
             ["vid_B", "2026-04-01", 200],
         ],
     }
-    collector = DummyCollector(mock_service)
+    collector = collector_factory(mock_service)
     result = collector.get_video_daily_analytics("2026-04-01", "2026-04-02", video_ids=["vid_A", "vid_B"])
     assert len(result) == 3
     assert result[0] == {
@@ -35,11 +50,11 @@ def test_get_video_daily_analytics_parses_views_only_rows():
     assert result[2]["video_id"] == "vid_B"
 
 
-def test_get_video_daily_analytics_query_uses_engaged_views_metric_only():
+def test_get_video_daily_analytics_query_uses_engaged_views_metric_only(collector_factory):
     """クエリ送信時に videoThumbnailImpressions* が含まれないことを検証。"""
     mock_service = MagicMock()
     mock_service.query.return_value = {"rows": []}
-    collector = DummyCollector(mock_service)
+    collector = collector_factory(mock_service)
     collector.get_video_daily_analytics("2026-04-01", "2026-04-02")
 
     # reports().query(...) の最後の呼び出しを取得
@@ -56,10 +71,10 @@ def test_get_video_daily_analytics_query_uses_engaged_views_metric_only():
         ([], None),
     ],
 )
-def test_get_video_daily_analytics_filter_boundary(video_ids, expected_filter):
+def test_get_video_daily_analytics_filter_boundary(collector_factory, video_ids, expected_filter):
     mock_service = MagicMock()
     mock_service.query.return_value = {}
-    collector = DummyCollector(mock_service)
+    collector = collector_factory(mock_service)
 
     result = collector.get_video_daily_analytics("2026-04-01", "2026-04-02", video_ids=video_ids)
 
@@ -77,10 +92,22 @@ def test_parse_video_daily_rows_ignores_short_rows():
     ) == [{"video_id": "vid_B", "date": "2026-04-02", "views": 10}]
 
 
-def test_get_video_daily_analytics_converts_permanent_http_error():
+def test_get_video_daily_analytics_converts_permanent_http_error(collector_factory):
     mock_service = MagicMock()
     mock_service.query.side_effect = YouTubeAPIError("metric not found", status_code=400)
-    collector = DummyCollector(mock_service)
+    collector = collector_factory(mock_service)
     with pytest.raises(YouTubeAPIError) as raised:
         collector.get_video_daily_analytics("2026-04-01", "2026-04-01", video_ids=["vid_A"])
     assert raised.value.status_code == 400
+
+
+def test_video_daily_preserves_instance_parser_override(collector_factory):
+    client = MagicMock()
+    response = {"rows": [["video", "2026-01-01", 10]]}
+    client.query.return_value = response
+    collector = collector_factory(client)
+    converted = [{"custom": "row"}]
+    collector._parse_video_daily_rows = MagicMock(return_value=converted)
+
+    assert collector.get_video_daily_analytics("2026-01-01", "2026-01-02") is converted
+    collector._parse_video_daily_rows.assert_called_once_with(response)

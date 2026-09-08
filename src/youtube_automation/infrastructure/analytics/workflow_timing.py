@@ -7,6 +7,7 @@ import json
 import math
 import sys
 import time
+from abc import abstractmethod
 from functools import cache
 from importlib.resources import as_file, files
 from pathlib import Path
@@ -26,10 +27,13 @@ class _TimingUnavailableError(ValueError):
 class _TimingRunner(Protocol):
     NoActiveCollectionError: type[ValueError]
 
+    @abstractmethod
     def read_history(self, root: Path) -> dict[str, object]: ...
 
+    @abstractmethod
     def select_collection(self, root: Path, requested: str | None = None) -> Path: ...
 
+    @abstractmethod
     def summarize_time_savings(
         self,
         history: dict[str, object],

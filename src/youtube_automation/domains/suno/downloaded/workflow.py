@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.suno.downloaded.models import (

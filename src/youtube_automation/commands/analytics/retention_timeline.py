@@ -9,7 +9,7 @@ import logging
 import re
 from pathlib import Path
 
-from youtube_automation.configuration import channel_dir
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.infrastructure.analytics.retention_timeline import (
     DEFAULT_DROP_THRESHOLD,

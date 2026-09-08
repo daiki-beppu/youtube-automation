@@ -4,7 +4,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.configuration import load_config
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.domains.uploads.preflight import check_collection
 
 

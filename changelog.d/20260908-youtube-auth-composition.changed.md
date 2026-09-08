@@ -1,0 +1,1 @@
+- チャンネル設定付き OAuth 表示と認証済みクライアント生成を application.youtube_auth に移し、認証・Google API の基盤処理から設定依存を解消。CLI の表示名、設定エラー時の代替名、非対話認証を維持。

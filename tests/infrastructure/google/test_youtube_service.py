@@ -5,12 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from youtube_automation.application.youtube_auth import create_readonly_youtube_clients
 from youtube_automation.core.errors import ValidationError
-from youtube_automation.infrastructure.google.youtube import (
-    YouTubeClients,
-    create_readonly_youtube_clients,
-    validate_youtube_response_items,
-)
+from youtube_automation.infrastructure.google.youtube import YouTubeClients, validate_youtube_response_items
 
 
 def _handler(*, youtube=None):
@@ -44,7 +41,7 @@ def test_full_and_readonly_services_are_cached_independently():
 
 def test_readonly_factory_disables_interactive_browser_auth():
     readonly_handler = MagicMock()
-    with patch("youtube_automation.infrastructure.auth.youtube.YouTubeOAuthHandler") as handler_class:
+    with patch("youtube_automation.application.youtube_auth.YouTubeOAuthHandler") as handler_class:
         handler_class.create_readonly.return_value = readonly_handler
 
         clients = create_readonly_youtube_clients()

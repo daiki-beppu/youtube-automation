@@ -3,23 +3,36 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import TypeVar
 
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
-from youtube_automation.core.errors import ValidationError
-from youtube_automation.infrastructure.retry import execute_with_retry
+from youtube_automation.core.errors import ValidationError, YouTubeAPIError
+from youtube_automation.infrastructure.retry import ExecutableRequest, execute_with_retry
 
-
-def create_authenticated_youtube_clients() -> "YouTubeClients":
-    from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
-
-    return YouTubeClients(full_handler=YouTubeOAuthHandler())
+T = TypeVar("T")
 
 
-def create_readonly_youtube_clients() -> "YouTubeClients":
-    from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+def execute_metered_request(
+    request: ExecutableRequest[T],
+    *,
+    on_finish: Callable[[], None],
+    error_context: str | None = None,
+) -> T:
+    """Execute once and record consumption even when the request fails.
 
-    return YouTubeClients(readonly_handler=YouTubeOAuthHandler.create_readonly(interactive=False))
+    A supplied context converts Google HTTP failures to domain errors. Without
+    one, preserve the original exception for the caller's error boundary.
+    """
+    try:
+        return request.execute()
+    except HttpError as error:
+        if error_context is None:
+            raise
+        raise YouTubeAPIError.from_http_error(error, error_context) from error
+    finally:
+        on_finish()
 
 
 def execute_youtube_request(request, context: str, *, on_attempt: Callable[[], None] | None = None):

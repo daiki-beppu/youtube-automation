@@ -27,6 +27,17 @@ class _BrokerServer(ThreadingHTTPServer):
     def __init__(self, owner: "SelectionBroker") -> None:
         super().__init__(("127.0.0.1", 0), _SelectionHandler)
         self.owner = owner
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        self._thread = threading.Thread(target=self.serve_forever, name="review-selection-broker", daemon=True)
+        self._thread.start()
+
+    def close(self) -> None:
+        self.shutdown()
+        self.server_close()
+        if self._thread is not None:
+            self._thread.join(timeout=2)
 
 
 class _SelectionHandler(BaseHTTPRequestHandler):
@@ -42,6 +53,17 @@ class _SelectionHandler(BaseHTTPRequestHandler):
         return
 
 
+def _parse_selection_form(raw: bytes) -> tuple[str, str]:
+    """Decode the two single-valued fields accepted by the selection protocol."""
+    try:
+        fields = parse_qs(raw.decode("ascii"), strict_parsing=True)
+    except (UnicodeDecodeError, ValueError) as error:
+        raise ValueError("invalid form body") from error
+    if set(fields) != {"candidate_id", "artifact_digest"} or any(len(values) != 1 for values in fields.values()):
+        raise ValueError("invalid form fields")
+    return fields["candidate_id"][0], fields["artifact_digest"][0]
+
+
 class SelectionBroker:
     """Bind only loopback and accept one validated candidate selection."""
 
@@ -49,11 +71,8 @@ class SelectionBroker:
         self.manifest = manifest
         self._now = now or (lambda: datetime.now(UTC))
         self._selection: BrokerSelection | None = None
-        self._consumed = False
-        self._event = threading.Event()
-        self._lock = threading.Lock()
+        self._condition = threading.Condition()
         self._server = _BrokerServer(self)
-        self._thread: threading.Thread | None = None
 
     @property
     def port(self) -> int:
@@ -72,25 +91,21 @@ class SelectionBroker:
         return f"http://{self.host_header}{self.selection_path}"
 
     def __enter__(self) -> "SelectionBroker":
-        self._thread = threading.Thread(target=self._server.serve_forever, name="review-selection-broker", daemon=True)
-        self._thread.start()
+        self._server.start()
         return self
 
     def __exit__(self, _type: object, _value: object, _traceback: object) -> None:
         self.close()
 
     def close(self) -> None:
-        self._server.shutdown()
-        self._server.server_close()
-        if self._thread is not None:
-            self._thread.join(timeout=2)
+        self._server.close()
 
     def wait(self, *, timeout: float) -> BrokerSelection:
-        if not self._event.wait(timeout):
-            raise ReviewError("Web選択がtimeoutしました。再実行するか --transport terminal を明示してください")
-        if self._selection is None:
-            raise ReviewError("Web選択を受け取れませんでした")
-        return self._selection
+        with self._condition:
+            if not self._condition.wait_for(lambda: self._selection is not None, timeout=timeout):
+                raise ReviewError("Web選択がtimeoutしました。再実行するか --transport terminal を明示してください")
+            assert self._selection is not None
+            return self._selection
 
     def _handle(self, handler: BaseHTTPRequestHandler) -> None:
         if handler.path != self.selection_path:
@@ -110,23 +125,26 @@ class SelectionBroker:
         if length < 1 or length > _MAX_BODY_BYTES:
             self._respond(handler, 413 if length > _MAX_BODY_BYTES else 400, "invalid body size")
             return
-        with self._lock:
-            if self._consumed:
-                self._respond(handler, 409, "token already consumed")
-                return
-            raw = handler.rfile.read(length)
-            try:
-                fields = parse_qs(raw.decode("ascii"), strict_parsing=True)
-            except (UnicodeDecodeError, ValueError):
-                self._respond(handler, 400, "invalid form body")
-                return
-            if set(fields) != {"candidate_id", "artifact_digest"} or any(
-                len(values) != 1 for values in fields.values()
-            ):
-                self._respond(handler, 400, "invalid form fields")
-                return
-            candidate_id = fields["candidate_id"][0]
-            artifact_digest = fields["artifact_digest"][0]
+        with self._condition:
+            consumed = self._selection is not None
+        if consumed:
+            self._respond(handler, 409, "token already consumed")
+            return
+        # Network I/O must not hold the condition used by timed selection waiters.
+        raw = handler.rfile.read(length)
+        try:
+            candidate_id, artifact_digest = _parse_selection_form(raw)
+        except ValueError as error:
+            self._respond(handler, 400, str(error))
+            return
+        status, message = self._accept_selection(candidate_id, artifact_digest)
+        self._respond(handler, status, message)
+
+    def _accept_selection(self, candidate_id: str, artifact_digest: str) -> tuple[int, str]:
+        """Validate and publish one selection atomically, waking every waiter."""
+        with self._condition:
+            if self._selection is not None:
+                return 409, "token already consumed"
             try:
                 candidate = self.manifest.validate_selection(
                     token=self.manifest.token,
@@ -137,12 +155,10 @@ class SelectionBroker:
             except ReviewSelectionError as exc:
                 message = str(exc)
                 status = 410 if "期限" in message else 409 if "digest" in message else 400
-                self._respond(handler, status, "selection rejected")
-                return
-            self._consumed = True
+                return status, "selection rejected"
             self._selection = BrokerSelection(candidate_id=candidate.id, artifact_digest=artifact_digest)
-            self._event.set()
-            self._respond(handler, 200, "selection accepted; you may close this tab")
+            self._condition.notify_all()
+            return 200, "selection accepted; you may close this tab"
 
     @staticmethod
     def _respond(handler: BaseHTTPRequestHandler, status: int, message: str) -> None:

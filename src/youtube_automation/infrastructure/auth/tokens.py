@@ -1,13 +1,13 @@
 """OAuth credential loading, refresh, and persistence boundary."""
 
-import os
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 from google.auth.exceptions import RefreshError, TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
+
+from youtube_automation.infrastructure.filesystem import write_file_text_atomically
 
 
 def token_path(auth_dir: Path, filename: str = "token.json") -> Path:
@@ -32,24 +32,7 @@ def load_credentials(path: Path, scopes: list[str] | None = None) -> Credentials
 
 def save_credentials(path: Path, credentials: Credentials) -> None:
     """Atomically persist credentials with mode ``0o600``."""
-    temporary_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            encoding="utf-8",
-            dir=path.parent,
-            prefix=f".{path.name}.",
-            delete=False,
-        ) as temporary:
-            temporary.write(credentials.to_json())
-            temporary.flush()
-            os.fsync(temporary.fileno())
-            temporary_path = Path(temporary.name)
-        temporary_path.chmod(0o600)
-        os.replace(temporary_path, path)
-    finally:
-        if temporary_path is not None and temporary_path.exists():
-            temporary_path.unlink()
+    write_file_text_atomically(path, credentials.to_json(), mode=0o600)
 
 
 def load_refreshable_credentials(path: Path) -> OAuthCredentialState:

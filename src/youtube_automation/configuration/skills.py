@@ -31,7 +31,7 @@ from typing import Any, Final, NamedTuple
 
 import yaml
 
-from youtube_automation.configuration import channel_dir as configured_channel_dir
+from youtube_automation.core.channel_context import channel_dir as configured_channel_dir
 from youtube_automation.core.errors import ConfigError
 
 _cache: dict[str, dict[str, Any]] = {}

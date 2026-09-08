@@ -27,8 +27,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from youtube_automation.application.youtube_auth import create_authenticated_youtube_clients
 from youtube_automation.configuration import ChannelConfig, load_config
-from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.core.channel_context import channel_dir as _channel_dir
 from youtube_automation.core.errors import ConfigError, YouTubeAPIError
 from youtube_automation.domains.youtube.channel_settings import (
     build_update_body,
@@ -38,8 +39,6 @@ from youtube_automation.domains.youtube.channel_settings import (
     verify_channel_id,
 )
 from youtube_automation.infrastructure import cost_tracker
-from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
-from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +84,7 @@ def _cmd_diff(args: argparse.Namespace) -> int:
     config = load_config()
     local_channel, local_loc = _load_local(config, include_localizations=not args.no_localizations)
 
-    youtube = YouTubeClients(full_handler=YouTubeOAuthHandler()).youtube
+    youtube = create_authenticated_youtube_clients().youtube
     remote_raw = fetch_channel(youtube)
     remote_channel, remote_loc = parse_api_response(remote_raw)
     if args.no_localizations:
@@ -102,7 +101,7 @@ def _cmd_push(args: argparse.Namespace) -> int:
     config = load_config()
     local_channel, local_loc = _load_local(config, include_localizations=not args.no_localizations)
 
-    youtube = YouTubeClients(full_handler=YouTubeOAuthHandler()).youtube
+    youtube = create_authenticated_youtube_clients().youtube
     remote_raw = fetch_channel(youtube)
     remote_channel, remote_loc = parse_api_response(remote_raw)
     if args.no_localizations:
@@ -160,7 +159,7 @@ def _cmd_pull(args: argparse.Namespace) -> int:
     config = load_config()
     local_channel, local_loc = _load_local(config, include_localizations=not args.no_localizations)
 
-    youtube = YouTubeClients(full_handler=YouTubeOAuthHandler()).youtube
+    youtube = create_authenticated_youtube_clients().youtube
     remote_raw = fetch_channel(youtube)
     remote_channel, remote_loc = parse_api_response(remote_raw)
     if args.no_localizations:

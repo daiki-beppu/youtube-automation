@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import math
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -13,6 +13,7 @@ from typing import cast
 import yaml
 
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.domains.suno.config import check_suno_genre_line_char_limit
 from youtube_automation.domains.suno.downloaded.models import (
     DOCUMENTATION_DIRNAME,
     SUNO_LYRICS_JSON_FILENAME,
@@ -21,7 +22,6 @@ from youtube_automation.domains.suno.downloaded.models import (
     SunoConfig,
     SunoModeInferer,
 )
-from youtube_automation.domains.uploads.preflight import check_suno_genre_line_char_limit
 
 SECTION_TAG_RE = re.compile(r"\[[A-Za-z][A-Za-z0-9 -]*\]")
 INSTRUMENTAL_TAG_RE = re.compile(r"\[Instrumental\]", re.IGNORECASE)
@@ -283,31 +283,36 @@ def load_pattern_contract(
 
 
 def load_prompt_entries(prompts_path: Path) -> tuple[ArtifactEntries, list[str]]:
-    raw, issues = _load_json(prompts_path, SUNO_PROMPTS_JSON_FILENAME)
-    if raw is None:
-        return ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[]), issues
-    if isinstance(raw, Mapping):
-        raw_entries = raw.get("entries")
-        if not isinstance(raw_entries, list):
-            issues.append(f"{SUNO_PROMPTS_JSON_FILENAME} root mapping must contain list field 'entries'")
-            return ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[]), issues
-        raw = raw_entries
-    if not isinstance(raw, list):
-        issues.append(f"{SUNO_PROMPTS_JSON_FILENAME} root must be a list of entries or mapping with 'entries'")
-        return ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[]), issues
-    entries, entry_issues = _prompt_entries_from_json_list(raw)
-    issues.extend(entry_issues)
-    return entries, issues
+    return _load_artifact_entries(
+        prompts_path, SUNO_PROMPTS_JSON_FILENAME, _prompt_entries_from_json_list, wrapped_entries=True
+    )
 
 
 def load_lyric_entries(lyrics_path: Path) -> tuple[ArtifactEntries, list[str]]:
-    raw, issues = _load_json(lyrics_path, SUNO_LYRICS_JSON_FILENAME)
+    return _load_artifact_entries(lyrics_path, SUNO_LYRICS_JSON_FILENAME, _lyric_entries_from_json_list)
+
+
+def _load_artifact_entries(
+    path: Path,
+    filename: str,
+    parse_entries: Callable[[list[object]], tuple[ArtifactEntries, list[str]]],
+    *,
+    wrapped_entries: bool = False,
+) -> tuple[ArtifactEntries, list[str]]:
+    raw, issues = _load_json(path, filename)
+    empty = ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[])
     if raw is None:
-        return ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[]), issues
+        return empty, issues
+    if wrapped_entries and isinstance(raw, Mapping):
+        raw = raw.get("entries")
+        if not isinstance(raw, list):
+            issues.append(f"{filename} root mapping must contain list field 'entries'")
+            return empty, issues
     if not isinstance(raw, list):
-        issues.append(f"{SUNO_LYRICS_JSON_FILENAME} root must be a list of entries")
-        return ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[]), issues
-    entries, entry_issues = _lyric_entries_from_json_list(raw)
+        expected = "a list of entries or mapping with 'entries'" if wrapped_entries else "a list of entries"
+        issues.append(f"{filename} root must be {expected}")
+        return empty, issues
+    entries, entry_issues = parse_entries(raw)
     issues.extend(entry_issues)
     return entries, issues
 
@@ -431,115 +436,95 @@ def _resolve_tracks_per_collection(
     )
 
 
-def _prompt_entries_from_json_list(raw: list[object]) -> tuple[ArtifactEntries, list[str]]:
+def _collect_artifact_entries(
+    raw: list[object],
+    source_name: str,
+    read_entry: Callable[[Mapping[str, object], int], tuple[ArtifactEntries, list[str]]],
+) -> tuple[ArtifactEntries, list[str]]:
+    """Collect validated entries in source order, retaining every diagnostic."""
     names: list[str] = []
     lyrics_by_name: dict[str, str] = {}
     lyrics_entries: list[ArtifactLyrics] = []
     issues: list[str] = []
     for index, item in enumerate(raw, 1):
         if not isinstance(item, Mapping):
-            issues.append(f"{SUNO_PROMPTS_JSON_FILENAME} entry {index} must be an object")
+            issues.append(f"{source_name} entry {index} must be an object")
             continue
-        entry, entry_issues = _prompt_entry_from_mapping(item, index)
+        entry, entry_issues = read_entry(item, index)
         names.extend(entry.names)
         lyrics_by_name.update(entry.lyrics_by_name)
         lyrics_entries.extend(entry.lyrics_entries)
         issues.extend(entry_issues)
 
+    return ArtifactEntries(names=names, lyrics_by_name=lyrics_by_name, lyrics_entries=lyrics_entries), issues
+
+
+def _prompt_entries_from_json_list(raw: list[object]) -> tuple[ArtifactEntries, list[str]]:
+    entry, issues = _collect_artifact_entries(raw, SUNO_PROMPTS_JSON_FILENAME, _prompt_entry_from_mapping)
     duplicate_issue = unique_entry_names_issue(
         source_name=SUNO_PROMPTS_JSON_FILENAME,
-        entry_names=names,
+        entry_names=entry.names,
         label="prompt entry names",
     )
     if duplicate_issue is not None:
         issues.append(duplicate_issue)
-    return ArtifactEntries(names=names, lyrics_by_name=lyrics_by_name, lyrics_entries=lyrics_entries), issues
+    return entry, issues
 
 
 def _prompt_entry_from_mapping(
     item: Mapping[str, object],
     index: int,
 ) -> tuple[ArtifactEntries, list[str]]:
-    issues: list[str] = []
+    return _named_lyrics_entry(item, index, SUNO_PROMPTS_JSON_FILENAME, require_style=True, trim_lyrics=False)
+
+
+def _named_lyrics_entry(
+    item: Mapping[str, object],
+    index: int,
+    source_name: str,
+    *,
+    require_style: bool,
+    trim_lyrics: bool,
+) -> tuple[ArtifactEntries, list[str]]:
+    """Read a named lyric entry, preserving each artifact's validation and whitespace policy."""
     name = item.get("name")
-    style = item.get("style")
-    lyrics = item.get("lyrics")
     if not isinstance(name, str) or not name.strip():
         return ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[]), [
-            f"{SUNO_PROMPTS_JSON_FILENAME} entry {index}.name must be a non-empty string"
+            f"{source_name} entry {index}.name must be a non-empty string"
         ]
-    issue = surrounding_whitespace_issue(
-        source_name=SUNO_PROMPTS_JSON_FILENAME,
-        field_path=f"entry {index}.name",
-        value=name,
-    )
+    issues: list[str] = []
+    issue = surrounding_whitespace_issue(source_name=source_name, field_path=f"entry {index}.name", value=name)
     if issue is not None:
         issues.append(issue)
-    if not isinstance(style, str) or not style.strip():
-        issues.append(f"{SUNO_PROMPTS_JSON_FILENAME} entry '{name}' style must be a non-empty string")
-    if isinstance(lyrics, str):
-        entry = ArtifactEntries(
-            names=[name],
-            lyrics_by_name={name: lyrics},
-            lyrics_entries=[ArtifactLyrics(name=name, lyrics=lyrics)],
-        )
-    else:
-        issues.append(f"{SUNO_PROMPTS_JSON_FILENAME} entry '{name}' lyrics must be a string")
-        entry = ArtifactEntries(names=[name], lyrics_by_name={}, lyrics_entries=[])
-    return entry, issues
+    if require_style:
+        style = item.get("style")
+        if not isinstance(style, str) or not style.strip():
+            issues.append(f"{source_name} entry '{name}' style must be a non-empty string")
+    lyrics = item.get("lyrics")
+    if not isinstance(lyrics, str):
+        issues.append(f"{source_name} entry '{name}' lyrics must be a string")
+        return ArtifactEntries(names=[name], lyrics_by_name={}, lyrics_entries=[]), issues
+    lyrics = lyrics.rstrip() if trim_lyrics else lyrics
+    return ArtifactEntries(
+        names=[name],
+        lyrics_by_name={name: lyrics},
+        lyrics_entries=[ArtifactLyrics(name=name, lyrics=lyrics)],
+    ), issues
 
 
 def _lyric_entries_from_json_list(raw: list[object]) -> tuple[ArtifactEntries, list[str]]:
-    names: list[str] = []
-    lyrics_by_name: dict[str, str] = {}
-    lyrics_entries: list[ArtifactLyrics] = []
-    issues: list[str] = []
-    for index, item in enumerate(raw, 1):
-        if not isinstance(item, Mapping):
-            issues.append(f"{SUNO_LYRICS_JSON_FILENAME} entry {index} must be an object")
-            continue
-        entry, entry_issues = _lyric_entry_from_mapping(item, index)
-        names.extend(entry.names)
-        lyrics_by_name.update(entry.lyrics_by_name)
-        lyrics_entries.extend(entry.lyrics_entries)
-        issues.extend(entry_issues)
-
-    duplicates = duplicated_names(names)
+    entry, issues = _collect_artifact_entries(raw, SUNO_LYRICS_JSON_FILENAME, _lyric_entry_from_mapping)
+    duplicates = duplicated_names(entry.names)
     if duplicates:
         issues.append(f"{SUNO_LYRICS_JSON_FILENAME} duplicated lyrics entry names: {', '.join(duplicates)}")
-    return ArtifactEntries(names=names, lyrics_by_name=lyrics_by_name, lyrics_entries=lyrics_entries), issues
+    return entry, issues
 
 
 def _lyric_entry_from_mapping(
     item: Mapping[str, object],
     index: int,
 ) -> tuple[ArtifactEntries, list[str]]:
-    issues: list[str] = []
-    name = item.get("name")
-    lyrics = item.get("lyrics")
-    if not isinstance(name, str) or not name.strip():
-        return ArtifactEntries(names=[], lyrics_by_name={}, lyrics_entries=[]), [
-            f"{SUNO_LYRICS_JSON_FILENAME} entry {index}.name must be a non-empty string"
-        ]
-    issue = surrounding_whitespace_issue(
-        source_name=SUNO_LYRICS_JSON_FILENAME,
-        field_path=f"entry {index}.name",
-        value=name,
-    )
-    if issue is not None:
-        issues.append(issue)
-    if not isinstance(lyrics, str):
-        issues.append(f"{SUNO_LYRICS_JSON_FILENAME} entry '{name}' lyrics must be a string")
-        return ArtifactEntries(names=[name], lyrics_by_name={}, lyrics_entries=[]), issues
-    normalized_lyrics = lyrics.rstrip()
-    return (
-        ArtifactEntries(
-            names=[name],
-            lyrics_by_name={name: normalized_lyrics},
-            lyrics_entries=[ArtifactLyrics(name=name, lyrics=normalized_lyrics)],
-        ),
-        issues,
-    )
+    return _named_lyrics_entry(item, index, SUNO_LYRICS_JSON_FILENAME, require_style=False, trim_lyrics=True)
 
 
 def verify_suno_collection(

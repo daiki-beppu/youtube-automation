@@ -6,8 +6,8 @@
 
 from __future__ import annotations
 
-import io
 import time
+from typing import TYPE_CHECKING
 
 from youtube_automation.domains.media.image import (
     RETRY_BACKOFF,
@@ -17,8 +17,39 @@ from youtube_automation.domains.media.image import (
 )
 from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.infrastructure.media.genai_client import create_global_genai_client
-from youtube_automation.infrastructure.media.image_provider.composition import log_image_cost, persist_image
+from youtube_automation.infrastructure.media.image_provider.composition import log_image_cost, persist_image_bytes
 from youtube_automation.infrastructure.media.image_provider.config import GeminiConfig
+
+if TYPE_CHECKING:
+    from google.genai import types
+
+
+def _request_contents(req: ImageGenerationRequest, *, variation_guard_enabled: bool) -> list[str | types.Part]:
+    """Build ordered reference parts and the prompt with the configured variation guard."""
+    from google.genai import types
+
+    references = list(req.references)
+    if references:
+        contents: list[str | types.Part] = []
+        for ref in references:
+            ref_bytes = ref.read_bytes()
+            mime = "image/jpeg" if ref.suffix.lower() in (".jpg", ".jpeg") else "image/png"
+            contents.append(types.Part.from_bytes(data=ref_bytes, mime_type=mime))
+        if variation_guard_enabled:
+            variation_guard = (
+                "IMPORTANT: The reference image(s) above are for style and composition guidance ONLY. "
+                "Create an ORIGINAL image inspired by the reference — do NOT reproduce, copy, or closely "
+                "replicate the reference. Change the subject, colors, specific elements, and details "
+                "while keeping the general mood and layout style. The output must be clearly distinct "
+                "from the reference.\n\n"
+            )
+            contents.append(variation_guard + req.prompt)
+        else:
+            contents.append(req.prompt)
+    else:
+        contents = [req.prompt]
+
+    return contents
 
 
 class GeminiImageProvider:
@@ -34,7 +65,6 @@ class GeminiImageProvider:
     def generate(self, req: ImageGenerationRequest) -> ImageGenerationResult:
         """req に従って画像を生成して保存する。成功時は ImageGenerationResult.success=True。"""
         from google.genai import types
-        from PIL import Image as PILImage
 
         client = create_global_genai_client()
         model = self._config.model
@@ -42,25 +72,7 @@ class GeminiImageProvider:
         aspect_ratio = req.aspect_ratio
         references = list(req.references)
 
-        if references:
-            contents = []
-            for ref in references:
-                ref_bytes = ref.read_bytes()
-                mime = "image/jpeg" if ref.suffix.lower() in (".jpg", ".jpeg") else "image/png"
-                contents.append(types.Part.from_bytes(data=ref_bytes, mime_type=mime))
-            if self._config.variation_guard_enabled:
-                variation_guard = (
-                    "IMPORTANT: The reference image(s) above are for style and composition guidance ONLY. "
-                    "Create an ORIGINAL image inspired by the reference — do NOT reproduce, copy, or closely "
-                    "replicate the reference. Change the subject, colors, specific elements, and details "
-                    "while keeping the general mood and layout style. The output must be clearly distinct "
-                    "from the reference.\n\n"
-                )
-                contents.append(variation_guard + req.prompt)
-            else:
-                contents.append(req.prompt)
-        else:
-            contents = [req.prompt]
+        contents = _request_contents(req, variation_guard_enabled=self._config.variation_guard_enabled)
 
         save_as_png = req.output_path.suffix.lower() == ".png"
 
@@ -85,8 +97,8 @@ class GeminiImageProvider:
 
                 for part in response.parts:
                     if part.inline_data is not None:
-                        saved_path = persist_image(
-                            PILImage.open(io.BytesIO(part.inline_data.data)),
+                        saved_path = persist_image_bytes(
+                            part.inline_data.data,
                             req.output_path,
                             save_as_png=save_as_png,
                         )

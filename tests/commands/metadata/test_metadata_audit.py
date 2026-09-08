@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tests.helpers.video_description import write_video_description_pair
+from youtube_automation.commands.metadata import metadata_audit
 from youtube_automation.commands.metadata.metadata_audit import audit_local, audit_remote
 
 _ZH_ISSUE_TOKEN = "zh codes"  # `metadata_audit.py` のエラー文言 "YT zh codes are ..." に対応
@@ -351,3 +352,25 @@ class TestRemoteChapterMaxSkillConfig:
 
         assert result["BROKEN"] == ["YT snippet missing or not an object"]
         assert result["VALID"] == []
+
+
+@pytest.mark.parametrize(("strict", "expected_status"), [(False, 0), (True, 1)])
+def test_cli_aggregates_local_and_remote_issues(tmp_path, monkeypatch, capsys, strict, expected_status):
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    config = SimpleNamespace(localizations=SimpleNamespace(supported_languages=["ja"]))
+    monkeypatch.setattr(metadata_audit, "load_config", lambda: config)
+    monkeypatch.setattr(metadata_audit, "_selected_collections", lambda _: [first, second])
+    monkeypatch.setattr(metadata_audit, "_collections_dir", lambda: tmp_path)
+    monkeypatch.setattr(metadata_audit, "audit_local", lambda col, _: ["local issue"] if col == first else [])
+    monkeypatch.setattr(metadata_audit, "collect_video_ids", lambda _: {"v1": "first", "v2": "second"})
+    monkeypatch.setattr(metadata_audit, "audit_remote", lambda _: {"v2": ["remote one", "remote two"]})
+    args = metadata_audit.build_parser().parse_args(["--strict"] if strict else [])
+
+    assert metadata_audit.run(args) == expected_status
+    output = capsys.readouterr().out
+    assert "❌ first\n   - local issue\n✅ second" in output
+    assert "✅ v1  first\n❌ v2  second\n   - remote one\n   - remote two" in output
+    assert "━━━ 3 issue(s) found ━━━" in output

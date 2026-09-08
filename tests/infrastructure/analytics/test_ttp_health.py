@@ -286,3 +286,27 @@ def test_main_emits_pretty_json(tmp_path, monkeypatch, capsys) -> None:
     output = capsys.readouterr().out
     assert json.loads(output) == {"status": "unavailable", "reason": "no_benchmark_json"}
     assert output.startswith('{\n  "status"')
+
+
+def test_multiple_insufficiencies_preserve_diagnostic_order() -> None:
+    result = _channel_result(_benchmark([_video("invalid", 100)], latest="invalid", oldest="invalid", complete=False))
+
+    assert result["status"] == "insufficient_data"
+    assert result["days_since_last_upload"] is None
+    assert result["alerts"] == []
+    assert [item["kind"] for item in result["insufficiencies"]] == [
+        "invalid_upload_date",
+        "invalid_latest_upload_at",
+        "incomplete_window_coverage",
+    ]
+
+
+def test_empty_scan_reports_missing_uploads_before_missing_prior_window() -> None:
+    result = _channel_result(_benchmark([], complete=True))
+
+    assert result["status"] == "insufficient_data"
+    assert result["days_since_last_upload"] is None
+    assert [item["kind"] for item in result["insufficiencies"]] == [
+        "no_scanned_uploads",
+        "no_prior_window_uploads",
+    ]

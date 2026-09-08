@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
@@ -29,7 +30,6 @@ from youtube_automation.domains.uploads.playlist_resolution import (
     categorizing_playlist_keys,
     validate_playlist_keys,
 )
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 # --- パス解決 ---
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -148,7 +148,8 @@ def _resolve_playlist_argument(config, args) -> list[str] | None:
 
 
 def main():
-    from youtube_automation.configuration import channel_dir, load_config
+    from youtube_automation.configuration import load_config
+    from youtube_automation.core.channel_context import channel_dir
 
     parser = argparse.ArgumentParser(description="コレクションディレクトリと workflow-state.json を初期化")
     parser.add_argument("collection_name", help="コレクション表示名")

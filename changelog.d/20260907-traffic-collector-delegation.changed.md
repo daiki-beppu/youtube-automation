@@ -1,0 +1,1 @@
+- AnalyticsCollector の流入元分析を多重継承から明示的な query client 委譲へ変更し、既存 mixin API と失敗時の結果形式を維持しました。

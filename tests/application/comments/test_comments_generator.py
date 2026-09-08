@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from youtube_automation.application.comments.generator import GeminiGenerator, ReplyContext
+from youtube_automation.application.comments.generator import GeminiGenerator, ReplyContext, ReplyGenerator
 from youtube_automation.application.comments.prompt_safety import viewer_payload_json
 from youtube_automation.core.errors import GeneratorError
 
@@ -258,3 +258,11 @@ def test_viewer_payload_json_preserves_unicode_and_escapes_closing_tag():
     assert "café" in payload
     assert "</viewer_comment_json>" not in payload
     assert "<\\/viewer_comment_json>" in payload
+
+
+def test_reply_generator_requires_generate_for_explicit_implementation() -> None:
+    class IncompleteGenerator(ReplyGenerator):
+        pass
+
+    with pytest.raises(TypeError, match="generate"):
+        IncompleteGenerator()

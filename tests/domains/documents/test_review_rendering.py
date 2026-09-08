@@ -3,6 +3,9 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
+from youtube_automation.core.errors import DocumentRenderError
 from youtube_automation.domains.documents.review import ReviewCandidate, SelectionManifest
 from youtube_automation.domains.documents.review_rendering import render_review_html, validate_review_html
 
@@ -190,3 +193,33 @@ def test_video_and_text_candidates_keep_the_same_comparison_hierarchy(tmp_path: 
     assert html.count("確認項目") == 2
     assert "静かな夜" in html
     assert "button:focus-visible" in html
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement", "message"),
+    [
+        ('name="candidate_id" value="candidate"', 'name="candidate_id" value="unapproved"', "候補allowlist"),
+        ('action="{endpoint}"', 'action="http://127.0.0.1:43211/select/other"', "loopback endpoint"),
+        (
+            'name="artifact_digest" value="' + "a" * 64 + '"',
+            'name="artifact_digest" value="' + "c" * 64 + '"',
+            "artifact digest",
+        ),
+    ],
+)
+def test_review_rejects_tampered_selection_controls(original: str, replacement: str, message: str) -> None:
+    manifest = SelectionManifest.create(
+        artifact="plan",
+        artifact_digest="a" * 64,
+        candidates=(ReviewCandidate("candidate", "Candidate", "b" * 64),),
+        now=datetime(2026, 8, 16, tzinfo=UTC),
+        lifetime=timedelta(minutes=5),
+    )
+    endpoint = f"http://127.0.0.1:43210/select/{manifest.token}"
+    html = render_review_html(manifest, endpoint=endpoint, media={})
+    original = original.format(endpoint=endpoint)
+    assert html.count(original) == 1
+    tampered = html.replace(original, replacement, 1)
+
+    with pytest.raises(DocumentRenderError, match=message):
+        validate_review_html(tampered, manifest=manifest, endpoint=endpoint, media={})

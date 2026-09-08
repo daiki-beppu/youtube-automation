@@ -354,8 +354,6 @@ def _build_variation_sequence(pools: Mapping[str, list[str]]) -> list[str]:
 
 
 def _resolve_style_variation(raw: object, *, banned_artists: list[str] | None = None) -> ResolvedStyleVariation:
-    if raw is None:
-        raise ConfigError("suno.style_variation は mapping である必要があります: None")
     if not isinstance(raw, Mapping):
         raise ConfigError(f"suno.style_variation は mapping である必要があります: {raw!r}")
 
@@ -364,8 +362,6 @@ def _resolve_style_variation(raw: object, *, banned_artists: list[str] | None = 
         raise ConfigError(f"suno.style_variation.enabled は bool である必要があります: {enabled!r}")
 
     pools_raw = raw.get("pools", {})
-    if pools_raw is None:
-        raise ConfigError("suno.style_variation.pools は mapping である必要があります: None")
     if not isinstance(pools_raw, Mapping):
         raise ConfigError(f"suno.style_variation.pools は mapping である必要があります: {pools_raw!r}")
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 import pytest
+from requests.exceptions import Timeout
 
 from tests.helpers.paths import FIXTURES_DIR
 from youtube_automation.core.errors import ConfigError, ValidationError, YouTubeAPIError
@@ -210,6 +211,7 @@ def test_download_report_csv_returns_text(monkeypatch):
 
     assert "video_thumbnail_impressions" in text
     fake_session.get.assert_called_once_with("https://example.com/x.csv", timeout=(5, 60))
+    fake_session.close.assert_called_once_with()
 
 
 def test_download_report_csv_raises_on_http_error(monkeypatch):
@@ -225,6 +227,23 @@ def test_download_report_csv_raises_on_http_error(monkeypatch):
     client = ReportingAPIClient(MagicMock(), credentials=MagicMock())
     with pytest.raises(YouTubeAPIError):
         client.download_report_csv("https://example.com/x.csv")
+    fake_session.close.assert_called_once_with()
+
+
+@pytest.mark.parametrize("failure", ["timeout", "invalid_utf8"])
+def test_download_report_csv_closes_session_after_failure(monkeypatch, failure):
+    session = MagicMock()
+    if failure == "timeout":
+        session.get.side_effect = Timeout("download timed out")
+        expected_error = YouTubeAPIError
+    else:
+        session.get.return_value = MagicMock(status_code=200, content=b"\xff")
+        expected_error = UnicodeDecodeError
+    monkeypatch.setattr("youtube_automation.infrastructure.youtube.reporting_api.AuthorizedSession", lambda *_: session)
+    client = ReportingAPIClient(MagicMock(), credentials=MagicMock())
+    with pytest.raises(expected_error):
+        client.download_report_csv("https://example.com/x.csv")
+    session.close.assert_called_once_with()
 
 
 # ---------------------------------------------------------------------------
@@ -422,3 +441,27 @@ def test_mixin_returns_summary_on_success():
 
     summary = _C().get_reporting_impressions_summary(days=7)
     assert summary == {"aggregated_ctr_percentage": 4.2}
+
+
+@pytest.mark.parametrize("failure", [None, "api", "unexpected"])
+def test_collector_delegates_reporting_with_the_existing_failure_boundary(tmp_path, failure) -> None:
+    from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
+
+    client = MagicMock()
+    summary = {"aggregated_ctr_percentage": 4.2}
+    client.collect_impressions_summary.return_value = summary
+    if failure == "api":
+        client.collect_impressions_summary.side_effect = YouTubeAPIError("unavailable")
+    elif failure == "unexpected":
+        client.collect_impressions_summary.side_effect = RuntimeError("unexpected")
+    collector = YouTubeAnalyticsCollector(
+        youtube_client=MagicMock(), analytics_client=MagicMock(), reporting_client=client, channel_root=tmp_path
+    )
+
+    if failure == "unexpected":
+        with pytest.raises(RuntimeError, match="unexpected"):
+            collector.get_reporting_impressions_summary(days=14)
+    else:
+        result = collector.get_reporting_impressions_summary(days=14)
+        assert result is (None if failure else summary)
+    client.collect_impressions_summary.assert_called_once_with(days=14)

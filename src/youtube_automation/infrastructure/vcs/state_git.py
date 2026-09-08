@@ -76,6 +76,13 @@ def _regular_file(path: Path, *, label: str) -> None:
         raise ConfigError(f"{label} が存在しません: {path}")
 
 
+def _append_existing_control_file(discovered: list[Path], path: Path, *, label: str) -> None:
+    """Include an existing control file only after rejecting symlinks and non-files."""
+    if path.exists() or path.is_symlink():
+        _regular_file(path, label=label)
+        discovered.append(path)
+
+
 def _collection_control_files(channel_dir: Path) -> list[Path]:
     discovered: list[Path] = []
     try:
@@ -93,16 +100,12 @@ def _collection_control_files(channel_dir: Path) -> list[Path]:
             raise ConfigError(f"collections 配下に symlink は使えません: {symlink}")
     for record in records:
         state = record.directory / "workflow-state.json"
-        if state.exists() or state.is_symlink():
-            _regular_file(state, label="workflow-state.json")
-            discovered.append(state)
+        _append_existing_control_file(discovered, state, label="workflow-state.json")
         documentation = record.directory / "20-documentation"
         if documentation.is_symlink():
             raise ConfigError(f"20-documentation に symlink は使えません: {documentation}")
         tracking = documentation / "upload_tracking.json"
-        if tracking.exists() or tracking.is_symlink():
-            _regular_file(tracking, label="upload_tracking.json")
-            discovered.append(tracking)
+        _append_existing_control_file(discovered, tracking, label="upload_tracking.json")
     return discovered
 
 
@@ -110,9 +113,7 @@ def _discover_control_files(channel_dir: Path) -> tuple[Path, ...]:
     discovered = _collection_control_files(channel_dir)
     for name in _ROOT_HISTORY_NAMES:
         path = channel_dir / name
-        if path.exists() or path.is_symlink():
-            _regular_file(path, label=name)
-            discovered.append(path)
+        _append_existing_control_file(discovered, path, label=name)
     return tuple(sorted(discovered))
 
 

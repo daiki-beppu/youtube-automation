@@ -120,28 +120,21 @@ def _completed_stages(root: Path, collection: Path, state: WorkflowState) -> fro
     if assets is None:
         raise ValueError("assets must be an object")
 
-    completed: set[str] = set()
-    if phase != "planning":
-        completed.add("企画")
-    if _file_asset_present(assets.raw_master):
-        completed.add("音源生成")
-    if _file_asset_present(assets.master_audio) or (
-        _skip_manual_mastering(root) and _file_asset_present(assets.raw_master)
-    ):
-        completed.add("マスター化")
-    if _file_asset_present(assets.master_video):
-        completed.add("動画化")
-    if state.thumbnail_approved:
-        completed.add("サムネイル")
-    if phase == "complete":
-        completed.add("アップロード")
-
-    video_id = _video_id(state)
-    if _publish_followup_complete(root, collection, video_id):
-        completed.add("公開後処理")
-    if _analysis_complete(root, _publish_date(state)):
-        completed.add("分析")
-    return frozenset(completed)
+    criteria = (
+        ("企画", phase != "planning"),
+        ("音源生成", _file_asset_present(assets.raw_master)),
+        (
+            "マスター化",
+            _file_asset_present(assets.master_audio)
+            or (_skip_manual_mastering(root) and _file_asset_present(assets.raw_master)),
+        ),
+        ("動画化", _file_asset_present(assets.master_video)),
+        ("サムネイル", state.thumbnail_approved),
+        ("アップロード", phase == "complete"),
+        ("公開後処理", _publish_followup_complete(root, collection, _video_id(state))),
+        ("分析", _analysis_complete(root, _publish_date(state))),
+    )
+    return frozenset(stage for stage, complete in criteria if complete)
 
 
 def load_progress_snapshot(cwd: str | None, command: str | None) -> ProgressSnapshot | None:

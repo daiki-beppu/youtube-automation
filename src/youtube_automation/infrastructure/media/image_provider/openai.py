@@ -9,9 +9,9 @@ from __future__ import annotations
 
 import base64
 import contextlib
-import io
 import time
 import warnings
+from pathlib import Path
 
 from openai import OpenAI
 
@@ -23,7 +23,7 @@ from youtube_automation.domains.media.image import (
     ImageGenerationResult,
 )
 from youtube_automation.infrastructure import cost_tracker
-from youtube_automation.infrastructure.media.image_provider.composition import log_image_cost, persist_image
+from youtube_automation.infrastructure.media.image_provider.composition import log_image_cost, persist_image_bytes
 from youtube_automation.infrastructure.media.image_provider.config import (
     OPENAI_SUPPORTED_ASPECT_RATIOS,
     OpenAIConfig,
@@ -58,7 +58,6 @@ class OpenAIImageProvider:
 
     def generate(self, req: ImageGenerationRequest) -> ImageGenerationResult:
         """req に従って画像を生成して保存する。"""
-        from PIL import Image as PILImage
 
         if req.aspect_ratio not in _ASPECT_RATIO_TO_SIZE:
             raise ConfigError(
@@ -83,32 +82,13 @@ class OpenAIImageProvider:
                     ref_label = f" + 参照画像={names}"
                 print(f"  [Submit] モデル={model} size={size} quality={quality}{ref_label}")
 
-                if references:
-                    with contextlib.ExitStack() as stack:
-                        image_files = [stack.enter_context(ref.open("rb")) for ref in references]
-                        response = client.images.edit(
-                            model=model,
-                            image=image_files,
-                            prompt=req.prompt,
-                            size=size,
-                            quality=quality,
-                            n=n,
-                        )
-                else:
-                    response = client.images.generate(
-                        model=model,
-                        prompt=req.prompt,
-                        size=size,
-                        quality=quality,
-                        n=n,
-                    )
-
-                payload = _decode_first_image(response)
+                payload = _request_image_payload(
+                    client, references, model=model, prompt=req.prompt, size=size, quality=quality, n=n
+                )
                 if payload is None:
                     print("  [Retry]  画像なしレスポンス")
                 else:
-                    pil_image = PILImage.open(io.BytesIO(payload))
-                    saved_path = persist_image(pil_image, req.output_path, save_as_png=save_as_png)
+                    saved_path = persist_image_bytes(payload, req.output_path, save_as_png=save_as_png)
                     entry = log_image_cost(
                         model=model,
                         image_size=quality,  # OpenAI は quality で課金階層が決まる（メタ情報として記録）
@@ -132,6 +112,28 @@ class OpenAIImageProvider:
                 time.sleep(backoff)
 
         return ImageGenerationResult(success=False, saved_path=None)
+
+
+def _request_image_payload(
+    client: OpenAI,
+    references: list[Path],
+    *,
+    model: str,
+    prompt: str,
+    size: str,
+    quality: str,
+    n: int,
+) -> bytes | None:
+    """Choose the image endpoint and keep reference files open only during the edit call."""
+    if references:
+        with contextlib.ExitStack() as stack:
+            image_files = [stack.enter_context(ref.open("rb")) for ref in references]
+            response = client.images.edit(
+                model=model, image=image_files, prompt=prompt, size=size, quality=quality, n=n
+            )
+    else:
+        response = client.images.generate(model=model, prompt=prompt, size=size, quality=quality, n=n)
+    return _decode_first_image(response)
 
 
 def _decode_first_image(response) -> bytes | None:

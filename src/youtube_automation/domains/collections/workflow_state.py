@@ -563,6 +563,12 @@ class HumanTasksState(_ObjectSection):
         task["completed_at"] = completed_at
 
 
+def _validate_object_section(key: str, value: JSONValue) -> None:
+    """Keep the same known-section type contract for loading and assignment."""
+    if key in _KNOWN_OBJECT_SECTIONS and not isinstance(value, dict):
+        raise WorkflowStateSectionTypeError(key)
+
+
 class WorkflowState(MutableMapping[str, JSONValue]):
     """既知 section を型付きで扱い、未知キーも保持する document object。"""
 
@@ -574,8 +580,7 @@ class WorkflowState(MutableMapping[str, JSONValue]):
         return deepcopy(self._data[key])
 
     def __setitem__(self, key: str, value: JSONValue) -> None:
-        if key in _KNOWN_OBJECT_SECTIONS and not isinstance(value, dict):
-            raise WorkflowStateSectionTypeError(key)
+        _validate_object_section(key, value)
         self._data[key] = deepcopy(value)
 
     def __delitem__(self, key: str) -> None:
@@ -589,8 +594,7 @@ class WorkflowState(MutableMapping[str, JSONValue]):
 
     def _validate_object_sections(self) -> None:
         for key in _KNOWN_OBJECT_SECTIONS & self._data.keys():
-            if not isinstance(self._data[key], dict):
-                raise WorkflowStateSectionTypeError(key)
+            _validate_object_section(key, self._data[key])
         planning = self.planning
         if planning is not None:
             _music = planning.music
@@ -799,14 +803,14 @@ class WorkflowState(MutableMapping[str, JSONValue]):
         assert isinstance(human_tasks, dict)
         HumanTasksState(human_tasks).record_distrokid_submission(completed_at)
 
-    def record_cloud_handoff(
+    def validate_cloud_handoff(
         self,
         *,
         point: HandoffPoint,
         manifest_key: str,
         root_sha256: str,
     ) -> None:
-        """Suno DL完了markerを記録し、工程所有権をcloudへ一方向遷移する。"""
+        """Validate a cloud handoff transition without changing the document."""
 
         _validate_handoff_reference(point, manifest_key, root_sha256)
         existing = self.handoff
@@ -832,6 +836,19 @@ class WorkflowState(MutableMapping[str, JSONValue]):
             if any(value is not None for value in known):
                 raise WorkflowStateError("workflow-state handoff already records a different manifest")
 
+    def record_cloud_handoff(
+        self,
+        *,
+        point: HandoffPoint,
+        manifest_key: str,
+        root_sha256: str,
+    ) -> None:
+        """Suno DL完了markerを記録し、工程所有権をcloudへ一方向遷移する。"""
+
+        self.validate_cloud_handoff(point=point, manifest_key=manifest_key, root_sha256=root_sha256)
+        if self.phase == "cloud_owned":
+            return
+
         handoff = self._data.setdefault("handoff", {})
         assert isinstance(handoff, dict)
         handoff.update(
@@ -845,30 +862,29 @@ class WorkflowState(MutableMapping[str, JSONValue]):
         self.phase = "cloud_owned"
 
     def set_thumbnail_approved(self, approved: bool) -> None:
-        if not isinstance(approved, bool):
-            raise WorkflowStateError("workflow-state.json::assets.thumbnail must be a boolean")
-        assets = self._data.setdefault("assets", {})
-        assert isinstance(assets, dict)
-        AssetsState(assets).thumbnail = approved
-
-        legacy = self._data.get("thumbnail")
-        if isinstance(legacy, dict):
-            legacy.pop("approved", None)
-            if not legacy:
-                del self._data["thumbnail"]
+        self._set_asset_completion("thumbnail", approved, "approved")
 
     def set_description_generated(self, generated: bool) -> None:
-        if not isinstance(generated, bool):
-            raise WorkflowStateError("workflow-state.json::assets.description must be a boolean")
+        self._set_asset_completion("description", generated, "generated")
+
+    def _set_asset_completion(
+        self,
+        key: Literal["thumbnail", "description"],
+        value: bool,
+        legacy_field: Literal["approved", "generated"],
+    ) -> None:
+        """Persist completion in assets and retire its legacy field atomically."""
+        if not isinstance(value, bool):
+            raise WorkflowStateError(f"workflow-state.json::assets.{key} must be a boolean")
         assets = self._data.setdefault("assets", {})
         assert isinstance(assets, dict)
-        AssetsState(assets).description = generated
+        AssetsState(assets).set_known(key, value)
 
-        legacy = self._data.get("description")
+        legacy = self._data.get(key)
         if isinstance(legacy, dict):
-            legacy.pop("generated", None)
+            legacy.pop(legacy_field, None)
             if not legacy:
-                del self._data["description"]
+                del self._data[key]
 
     def set_planning_known(self, key: PlanningKey, value: JSONValue) -> None:
         planning = self._data.setdefault("planning", {})

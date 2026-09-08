@@ -8,39 +8,24 @@ Phase 1 の日次データと config/channel/content.json::tags.themes を組み
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
-from pathlib import Path
 
-from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.commands._shared.cli_harness import print_json_or_text_report, run_cli
 from youtube_automation.configuration import load_config
+from youtube_automation.core.channel_context import channel_dir as _channel_dir
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.infrastructure.analytics.launch_curve_data import (
     build_launch_curve_frame,
     load_latest_daily_snapshot,
 )
+from youtube_automation.infrastructure.analytics.launch_curve_data import load_video_metadata as _load_video_meta
 from youtube_automation.infrastructure.analytics.theme_performance import (
     analyze_theme_performance,
     classify_videos_by_theme,
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _load_video_meta(channel_dir: Path) -> dict:
-    candidates = sorted((channel_dir / "data").glob("analytics_data_*.json"))
-    if not candidates:
-        raise ConfigError("analytics_data_*.json が見つかりません。先に `yt-analytics` を実行してください。")
-    with open(candidates[-1], encoding="utf-8") as f:
-        data = json.load(f)
-    meta = {}
-    for vid, v in (data.get("video_analytics") or {}).items():
-        pub = v.get("published_at")
-        if vid and pub:
-            meta[vid] = {"title": v.get("title", ""), "published_at": pub}
-    return meta
 
 
 def _print_text_summary(analysis: dict) -> None:
@@ -93,10 +78,7 @@ def run(args: argparse.Namespace) -> int:
         theme_video_map = classify_videos_by_theme(meta, theme_keywords)
         analysis = analyze_theme_performance(df, theme_video_map, peak_days=peak_days)
 
-        if args.text:
-            _print_text_summary(analysis)
-        else:
-            print(json.dumps(analysis, ensure_ascii=False, indent=2))
+        print_json_or_text_report(analysis, text=args.text, render_text=_print_text_summary)
         return 0
 
     except ConfigError as e:

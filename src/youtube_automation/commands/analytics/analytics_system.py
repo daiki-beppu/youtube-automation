@@ -15,11 +15,12 @@ from typing import Any
 
 from googleapiclient.errors import HttpError
 
-from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
+from youtube_automation.configuration import load_config
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import AuthError, ConfigError, YouTubeAPIError
 from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
 from youtube_automation.infrastructure.analytics_adapter import AnalyticsAdapter, YouTubeDataAdapter
-from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 from youtube_automation.infrastructure.youtube.reporting_api import ReportingAPIClient
 
@@ -43,16 +44,128 @@ def _save_dated_analytics_json(
     return file_path
 
 
+def _build_collector(clients: YouTubeClients, channel_root: Path) -> YouTubeAnalyticsCollector:
+    """認証済みクライアント群を、収集処理が使うドメインの port に接続する。"""
+    reporting = ReportingAPIClient(
+        clients.reporting,
+        credentials=clients.credentials_readonly,
+    )
+    return YouTubeAnalyticsCollector(
+        youtube_client=YouTubeDataAdapter(clients.youtube_readonly, retry_requests=True),
+        analytics_client=AnalyticsAdapter(clients.analytics, retry_requests=True),
+        reporting_client=reporting,
+        channel_root=channel_root,
+    )
+
+
+def _collect_daily_video_data(collector: YouTubeAnalyticsCollector, start_date: datetime, end_date: datetime) -> None:
+    """Collect optional daily video rows while retaining fail-soft diagnostics."""
+    # 動画×日次データ（launch curve 分析用）
+    try:
+        video_list = collector.get_all_channel_videos()
+        video_ids = [v["video_id"] for v in video_list]
+        daily_rows = collector.get_video_daily_analytics(
+            start_date.strftime("%Y-%m-%d"),
+            end_date.strftime("%Y-%m-%d"),
+            video_ids=video_ids,
+        )
+        _save_dated_analytics_json(
+            "daily_per_video",
+            start_date,
+            end_date,
+            {
+                "start_date": start_date.strftime("%Y-%m-%d"),
+                "end_date": end_date.strftime("%Y-%m-%d"),
+                "video_ids": video_ids,
+                "rows": daily_rows,
+            },
+            "動画×日次データ",
+        )
+    except HttpError as e:
+        api_err = YouTubeAPIError.from_http_error(e, "動画×日次データ取得")
+        logger.warning(
+            "⚠️ 動画×日次データ取得失敗（続行）: %s (status=%s)",
+            api_err,
+            api_err.status_code,
+            exc_info=True,
+        )
+    except YouTubeAPIError as e:
+        logger.warning("⚠️ 動画×日次データ取得失敗（続行）: %s", e, exc_info=True)
+    except (OSError, ValueError, KeyError) as e:
+        logger.warning("⚠️ 動画×日次データ処理失敗（続行）: %s", e, exc_info=True)
+
+
+def _collect_period_analytics(
+    collector: YouTubeAnalyticsCollector,
+    *,
+    days: int,
+    save_data: bool,
+    include_reporting: bool,
+    depth: str,
+) -> dict | None:
+    """Collect and persist one period using an already initialized analytics collector."""
+    logger.info(f"📊 過去{days}日間のアナリティクスデータ収集中...")
+
+    try:
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=days)
+
+        analytics_data = collector.collect_basic_analytics(
+            start_date=start_date.strftime("%Y-%m-%d"),
+            end_date=end_date.strftime("%Y-%m-%d"),
+            depth=depth,
+        )
+
+        if include_reporting:
+            logger.info("📊 Reporting API による impressions / CTR 取得中...")
+            summary = collector.get_reporting_impressions_summary(days=days)
+            if summary is not None:
+                analytics_data["reporting_api"] = {"impressions_summary": summary}
+                if save_data:
+                    _save_dated_analytics_json(
+                        "reporting_api",
+                        start_date,
+                        end_date,
+                        summary,
+                        "Reporting API impressions/CTR",
+                    )
+            else:
+                logger.warning("⚠️ Reporting API データ取得失敗（続行）")
+
+        if save_data:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            data_file = channel_dir() / "data" / f"analytics_data_{timestamp}.json"
+            data_file.parent.mkdir(exist_ok=True)
+
+            with open(data_file, "w", encoding="utf-8") as f:
+                json.dump(analytics_data, f, ensure_ascii=False, indent=2)
+            logger.info(f"💾 データ保存完了: {data_file}")
+
+            _collect_daily_video_data(collector, start_date, end_date)
+
+        logger.info("✅ アナリティクスデータ収集完了")
+        return analytics_data
+
+    except HttpError as e:
+        api_err = YouTubeAPIError.from_http_error(e, "アナリティクス収集")
+        logger.exception("❌ データ収集 API エラー: %s (status=%s)", api_err, api_err.status_code)
+        return None
+    except (YouTubeAPIError, ConfigError, OSError, ValueError, KeyError) as e:
+        logger.exception("❌ データ収集エラー: %s", e)
+        return None
+
+
 class AnalyticsSystem:
     """YouTube Analytics データ収集システム"""
 
-    def __init__(self):
+    def __init__(self, *, collector_factory=None):
         """システム初期化"""
         config = load_config()
         logger.info(f"🎵 {config.meta.channel_name} - Analytics System v1.0")
 
         self._readonly_handler = None
         self._clients = None
+        self._collector_factory = collector_factory if collector_factory is not None else _build_collector
         self.collector = None
         self.authenticated = False
 
@@ -60,16 +173,7 @@ class AnalyticsSystem:
         """認証済みの read-only client を collector に接続する。"""
         if self._clients is None:
             raise ConfigError("read-only YouTube clients are not initialized")
-        reporting = ReportingAPIClient(
-            self._clients.reporting,
-            credentials=self._clients.credentials_readonly,
-        )
-        self.collector = YouTubeAnalyticsCollector(
-            youtube_client=YouTubeDataAdapter(self._clients.youtube_readonly, retry_requests=True),
-            analytics_client=AnalyticsAdapter(self._clients.analytics, retry_requests=True),
-            reporting_client=reporting,
-            channel_root=channel_dir(),
-        )
+        self.collector = self._collector_factory(self._clients, channel_dir())
         self.collector.initialize()
 
     def authenticate(self, force_reauth=False):
@@ -119,87 +223,9 @@ class AnalyticsSystem:
             logger.error("❌ 認証が必要です。先に authenticate() を実行してください。")
             return None
 
-        logger.info(f"📊 過去{days}日間のアナリティクスデータ収集中...")
-
-        try:
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=days)
-
-            analytics_data = self.collector.collect_basic_analytics(
-                start_date=start_date.strftime("%Y-%m-%d"),
-                end_date=end_date.strftime("%Y-%m-%d"),
-                depth=depth,
-            )
-
-            if include_reporting:
-                logger.info("📊 Reporting API による impressions / CTR 取得中...")
-                summary = self.collector.get_reporting_impressions_summary(days=days)
-                if summary is not None:
-                    analytics_data["reporting_api"] = {"impressions_summary": summary}
-                    if save_data:
-                        _save_dated_analytics_json(
-                            "reporting_api",
-                            start_date,
-                            end_date,
-                            summary,
-                            "Reporting API impressions/CTR",
-                        )
-                else:
-                    logger.warning("⚠️ Reporting API データ取得失敗（続行）")
-
-            if save_data:
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                data_file = channel_dir() / "data" / f"analytics_data_{timestamp}.json"
-                data_file.parent.mkdir(exist_ok=True)
-
-                with open(data_file, "w", encoding="utf-8") as f:
-                    json.dump(analytics_data, f, ensure_ascii=False, indent=2)
-                logger.info(f"💾 データ保存完了: {data_file}")
-
-                # 動画×日次データ（launch curve 分析用）
-                try:
-                    video_list = self.collector.get_all_channel_videos()
-                    video_ids = [v["video_id"] for v in video_list]
-                    daily_rows = self.collector.get_video_daily_analytics(
-                        start_date.strftime("%Y-%m-%d"),
-                        end_date.strftime("%Y-%m-%d"),
-                        video_ids=video_ids,
-                    )
-                    _save_dated_analytics_json(
-                        "daily_per_video",
-                        start_date,
-                        end_date,
-                        {
-                            "start_date": start_date.strftime("%Y-%m-%d"),
-                            "end_date": end_date.strftime("%Y-%m-%d"),
-                            "video_ids": video_ids,
-                            "rows": daily_rows,
-                        },
-                        "動画×日次データ",
-                    )
-                except HttpError as e:
-                    api_err = YouTubeAPIError.from_http_error(e, "動画×日次データ取得")
-                    logger.warning(
-                        "⚠️ 動画×日次データ取得失敗（続行）: %s (status=%s)",
-                        api_err,
-                        api_err.status_code,
-                        exc_info=True,
-                    )
-                except YouTubeAPIError as e:
-                    logger.warning("⚠️ 動画×日次データ取得失敗（続行）: %s", e, exc_info=True)
-                except (OSError, ValueError, KeyError) as e:
-                    logger.warning("⚠️ 動画×日次データ処理失敗（続行）: %s", e, exc_info=True)
-
-            logger.info("✅ アナリティクスデータ収集完了")
-            return analytics_data
-
-        except HttpError as e:
-            api_err = YouTubeAPIError.from_http_error(e, "アナリティクス収集")
-            logger.exception("❌ データ収集 API エラー: %s (status=%s)", api_err, api_err.status_code)
-            return None
-        except (YouTubeAPIError, ConfigError, OSError, ValueError, KeyError) as e:
-            logger.exception("❌ データ収集エラー: %s", e)
-            return None
+        return _collect_period_analytics(
+            self.collector, days=days, save_data=save_data, include_reporting=include_reporting, depth=depth
+        )
 
     def run_data_collection(self, days=30, include_reporting=False, depth="standard"):
         """

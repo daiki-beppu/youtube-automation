@@ -188,10 +188,8 @@ def _receipt_measurements(
     return measurements
 
 
-def validate_loudness_receipt(collection_dir: Path, receipt_path: Path, max_lu: float) -> dict[str, object]:
-    """Validate schema, collection, inputs, threshold, measurements, and verdict."""
-    collection = collection_dir.resolve()
-    payload = _load_receipt(receipt_path)
+def _validate_receipt_context(payload: Mapping[str, object], collection: Path, max_lu: float) -> None:
+    """Require the recorded scan to match the target and current loudness policy."""
     if payload.get("schema_version") != RECEIPT_SCHEMA_VERSION:
         raise ValidationError("loudness receipt の schema_version が未対応です")
     if payload.get("collection") != collection.name:
@@ -206,6 +204,13 @@ def validate_loudness_receipt(collection_dir: Path, receipt_path: Path, max_lu: 
     receipt_max_lu = _finite_number(payload.get("max_deviation_lu"), "max_deviation_lu")
     if receipt_max_lu != max_lu:
         raise ValidationError("loudness receipt の適用閾値が現在の設定と一致しません")
+
+
+def validate_loudness_receipt(collection_dir: Path, receipt_path: Path, max_lu: float) -> dict[str, object]:
+    """Validate schema, collection, inputs, threshold, measurements, and verdict."""
+    collection = collection_dir.resolve()
+    payload = _load_receipt(receipt_path)
+    _validate_receipt_context(payload, collection, max_lu)
     current_files = collect_audio_files(collection)
     if payload.get("track_count") != len(current_files):
         raise ValidationError("loudness receipt の track_count が現在の入力と一致しません")

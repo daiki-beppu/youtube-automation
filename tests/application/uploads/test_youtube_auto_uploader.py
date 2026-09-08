@@ -1,0 +1,1883 @@
+"""YouTubeAutoUploader のユニットテスト
+
+テスト対象: `youtube_automation.application.uploads.youtube.YouTubeAutoUploader`
+
+issue #381 (P0-5) で追加される以下の振る舞いを検証する:
+
+1. resume kwargs (`resume_session_uri`, `on_session_uri_changed`, `on_upload_complete`)
+   が `upload_video` / `upload_collection` / `_upload_complete_collection` を透過して
+   `YouTubeUploadCore.upload_video` まで届くこと
+2. `DedupSearch` が own channel 内の同タイトル動画を検出すること
+   （fail-open: HttpError 時は None を返して upload 続行を許す）
+3. `_upload_complete_collection` が publish 直前に dedup 検索を実行し、hit 時は
+   `upload_video` を呼ばずに既存 video_id / video_url を採用すること
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import sys
+from datetime import datetime
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+
+import pytest
+from googleapiclient.errors import HttpError
+from httplib2 import Response
+
+from tests.helpers.paths import REPO_ROOT
+from tests.helpers.video_description import write_video_description_pair
+from youtube_automation.core.errors import ValidationError
+
+sys.path.insert(0, str(REPO_ROOT))
+
+
+@pytest.fixture(autouse=True)
+def _mock_complete_collection_master_duration(monkeypatch):
+    monkeypatch.setattr(
+        "youtube_automation.domains.uploads._complete_collection_strategy.probe_duration",
+        lambda _: 10 * 3600 + 32 * 60,
+    )
+    monkeypatch.setattr(
+        "youtube_automation.application.uploads.preflight.probe_duration",
+        lambda _: 10 * 3600 + 32 * 60,
+    )
+
+
+def test_main_without_action_prints_usage(monkeypatch, capsys):
+    from youtube_automation.commands.uploads import youtube_auto_uploader
+
+    monkeypatch.setattr(sys, "argv", ["yt-upload-auto"])
+    with (
+        patch("youtube_automation.commands.uploads.youtube_auto_uploader.YouTubeAutoUploader") as uploader_cls,
+    ):
+        youtube_auto_uploader.main()
+
+    uploader_cls.return_value.initialize.assert_called_once_with()
+    assert "使用法:" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# ヘルパー
+# ---------------------------------------------------------------------------
+
+
+_SESS_PREV = "https://upload.googleapis.com/SESS_PREV"
+
+
+def _make_http_error(status: int, message: bytes = b"error") -> HttpError:
+    resp = Response({"status": status})
+    return HttpError(resp, message)
+
+
+def test_batch_upload_failure_does_not_expose_exception_text(tmp_path, caplog):
+    """batch 結果・ログへ AutomationError の本文を転送しない."""
+    from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+    from youtube_automation.core.errors import AutomationError
+
+    ready = tmp_path / "ready"
+    ready.mkdir()
+    (ready / "collection").mkdir()
+    uploader = object.__new__(YouTubeAutoUploader)
+    uploader.collections_root = tmp_path
+    canary = "access-token-domain-canary"
+    uploader.upload_collection = MagicMock(side_effect=AutomationError(canary))
+
+    with patch(
+        "youtube_automation.application.uploads.youtube.load_config",
+        return_value=SimpleNamespace(meta=SimpleNamespace(channel_name="test")),
+    ):
+        result = uploader.process_collections_directory(["ready"])
+
+    assert result["results"] == [{"collection_name": "collection", "error": "collection processing failed"}]
+    result_entry = result["results"][0]
+    assert result_entry["error"] == "collection processing failed"
+    error_messages = [record.getMessage() for record in caplog.records if record.levelno >= logging.ERROR]
+    assert error_messages == ["❌ コレクション処理エラー: collection"]
+    assert all(canary not in message for message in error_messages)
+
+
+def _make_metadata(title: str = "Rainy Jazz") -> dict:
+    """`upload_video` (YouTubeAutoUploader 版) が受理するメタデータ最小セット."""
+    return {
+        "title": title,
+        "description": "desc",
+        "tags": ["t1"],
+        "category_id": "10",
+        "language": "en",
+        "privacy_status": "private",
+    }
+
+
+def _youtube_service_with_authenticated_channel(channel_id: str | None) -> MagicMock:
+    youtube = MagicMock()
+    items = [] if channel_id is None else [{"id": channel_id}]
+    youtube.channels.return_value.list.return_value.execute.return_value = {"items": items}
+    return youtube
+
+
+class TestUploadChannelIdentityPreflight:
+    def test_rejects_mismatched_authenticated_channel_before_metadata_preflight(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+        from youtube_automation.core.errors import ConfigError
+        from youtube_automation.infrastructure.google.youtube import YouTubeClients
+
+        youtube = _youtube_service_with_authenticated_channel("UC_TOKEN_OWNER")
+        preflight_checker = MagicMock()
+        uploader = YouTubeAutoUploader(
+            collections_root=str(tmp_path),
+            youtube_clients=YouTubeClients(full_handler=SimpleNamespace(get_youtube_service=lambda: youtube)),
+            preflight_checker=preflight_checker,
+        )
+
+        with (
+            patch("youtube_automation.application.uploads.youtube.ensure_collection_preflight"),
+            patch(
+                "youtube_automation.application.uploads.youtube.load_config",
+                return_value=SimpleNamespace(meta=SimpleNamespace(channel_id="UC_CONFIGURED")),
+            ),
+            pytest.raises(ConfigError, match="channel_id mismatch"),
+        ):
+            uploader.preflight_check(tmp_path / "collection")
+
+        youtube.channels.return_value.list.assert_called_once_with(part="id", mine=True)
+        preflight_checker.check.assert_not_called()
+        youtube.videos.return_value.insert.assert_not_called()
+
+    def test_matching_authenticated_channel_continues_metadata_preflight(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+        from youtube_automation.infrastructure.google.youtube import YouTubeClients
+
+        youtube = _youtube_service_with_authenticated_channel("UC_CONFIGURED")
+        preflight_checker = MagicMock()
+        uploader = YouTubeAutoUploader(
+            collections_root=str(tmp_path),
+            youtube_clients=YouTubeClients(full_handler=SimpleNamespace(get_youtube_service=lambda: youtube)),
+            preflight_checker=preflight_checker,
+        )
+        collection = tmp_path / "collection"
+
+        with (
+            patch("youtube_automation.application.uploads.youtube.ensure_collection_preflight"),
+            patch(
+                "youtube_automation.application.uploads.youtube.load_config",
+                return_value=SimpleNamespace(meta=SimpleNamespace(channel_id="UC_CONFIGURED")),
+            ),
+        ):
+            uploader.preflight_check(collection)
+
+        preflight_checker.check.assert_called_once_with(collection)
+
+    def test_rejects_empty_authenticated_channel_response(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+        from youtube_automation.core.errors import YouTubeAPIError
+        from youtube_automation.infrastructure.google.youtube import YouTubeClients
+
+        youtube = _youtube_service_with_authenticated_channel(None)
+        preflight_checker = MagicMock()
+        uploader = YouTubeAutoUploader(
+            collections_root=str(tmp_path),
+            youtube_clients=YouTubeClients(full_handler=SimpleNamespace(get_youtube_service=lambda: youtube)),
+            preflight_checker=preflight_checker,
+        )
+
+        with (
+            patch("youtube_automation.application.uploads.youtube.ensure_collection_preflight"),
+            patch(
+                "youtube_automation.application.uploads.youtube.load_config",
+                return_value=SimpleNamespace(meta=SimpleNamespace(channel_id="UC_CONFIGURED")),
+            ),
+            pytest.raises(YouTubeAPIError, match="authenticated user has no YouTube channel"),
+        ):
+            uploader.preflight_check(tmp_path / "collection")
+
+        preflight_checker.check.assert_not_called()
+
+
+def _make_preflight_config(supported_languages: list[str]) -> SimpleNamespace:
+    return SimpleNamespace(
+        audio=SimpleNamespace(
+            chapter_max=100,
+            target_duration_min=None,
+            target_duration_max=None,
+        ),
+        content=SimpleNamespace(
+            tags=SimpleNamespace(
+                min_count=None,
+                for_collection=lambda _name: ["fallback"],
+            ),
+            # ` | ` を使わない鋳型 → タイトル鋳型準拠チェックは自動スキップ (#602)
+            title=SimpleNamespace(
+                template="{style} {theme} for {activity}",
+                template_check={},
+            ),
+        ),
+        localizations=SimpleNamespace(supported_languages=supported_languages),
+        # 分類プレイリスト（auto_add 以外）を持たないチャンネル → 未割り当て検出は対象外 (#4346)
+        playlists=SimpleNamespace(items={}),
+    )
+
+
+def _write_preflight_collection(tmp_path: Path, scene_languages: list[str]) -> Path:
+    col_dir = tmp_path / "20990101-foo-collection"
+    doc_dir = col_dir / "20-documentation"
+    doc_dir.mkdir(parents=True)
+    write_video_description_pair(
+        doc_dir,
+        title="Rainy Jazz for Focus",
+        description="00:00 Opening Rain\n10:00 Warm Desk Light\n20:00 Last Train Home",
+        tags=["rainy jazz", "focus music", "night study"],
+    )
+    scene_phrases = {lang: {"title": f"title-{lang}"} for lang in scene_languages}
+    (col_dir / "workflow-state.json").write_text(
+        json.dumps({"scene_phrases": scene_phrases}),
+        encoding="utf-8",
+    )
+    master_dir = col_dir / "01-master"
+    master_dir.mkdir()
+    (master_dir / "master.mp4").write_bytes(b"probe is mocked")
+    (col_dir / "02-Individual-music").mkdir()
+    (col_dir / "10-assets").mkdir()
+    return col_dir
+
+
+# ---------------------------------------------------------------------------
+# Issue #587: preflight localization quality gates
+# ---------------------------------------------------------------------------
+
+
+class TestPreflightLocalizationLanguages:
+    def test_should_pass_when_supported_scene_languages_are_present(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import PreflightChecker
+
+        col_dir = _write_preflight_collection(tmp_path, ["en", "ja"])
+        checker = PreflightChecker(tmp_path, config_loader=lambda: _make_preflight_config(["ja", "en"]))
+
+        checker.check(col_dir)
+
+    def test_should_pass_when_required_high_cpm_languages_are_present(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import PreflightChecker
+
+        col_dir = _write_preflight_collection(tmp_path, ["en", "ja", "de"])
+        checker = PreflightChecker(tmp_path, config_loader=lambda: _make_preflight_config(["ja", "en", "de"]))
+
+        checker.check(col_dir)
+
+    def test_should_warn_and_continue_when_low_cpm_language_is_present(self, tmp_path, caplog):
+        from youtube_automation.application.uploads.youtube import PreflightChecker
+
+        col_dir = _write_preflight_collection(tmp_path, ["en", "ja", "de", "ko"])
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_preflight_config(["ja", "en", "de", "ko"]),
+        )
+
+        with caplog.at_level(logging.WARNING):
+            checker.check(col_dir)
+
+        assert any("ko" in rec.message for rec in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Issue #602: preflight タイトル鋳型準拠ゲート
+# ---------------------------------------------------------------------------
+
+
+def _make_title_template_config(supported_languages: list[str]) -> SimpleNamespace:
+    cfg = _make_preflight_config(supported_languages)
+    # ` | ` 鋳型 + 核語彙を持つチャンネル（soulful-grooves 想定）に差し替え
+    cfg.content.title = SimpleNamespace(
+        template="{adjective} Soul/Funk {noun} | {hours} Hours of {mood}",
+        template_check={"core_vocabulary": ["Soul", "Funk"]},
+    )
+    return cfg
+
+
+def _write_title_collection(
+    tmp_path: Path,
+    title: str,
+    *,
+    status: str = "ready",
+    title_template_check: dict[str, object] | None = None,
+) -> Path:
+    col_dir = tmp_path / status / "20990101-foo-collection"
+    doc_dir = col_dir / "20-documentation"
+    doc_dir.mkdir(parents=True)
+    write_video_description_pair(
+        doc_dir,
+        title=title,
+        description="00:00 Opening Groove\n10:00 Midnight Funk\n20:00 Last Call Soul",
+        tags=["soul funk", "retro groove", "study music"],
+    )
+    scene_phrases = {lang: {"title": f"title-{lang}"} for lang in ["en", "ja", "de"]}
+    workflow_state: dict[str, object] = {"scene_phrases": scene_phrases}
+    if title_template_check is not None:
+        workflow_state["title_template_check"] = title_template_check
+    (col_dir / "workflow-state.json").write_text(
+        json.dumps(workflow_state),
+        encoding="utf-8",
+    )
+    master_dir = col_dir / "01-master"
+    master_dir.mkdir()
+    (master_dir / "master.mp4").write_bytes(b"probe is mocked")
+    (col_dir / "02-Individual-music").mkdir()
+    (col_dir / "10-assets").mkdir()
+    return col_dir
+
+
+def _write_live_title(tmp_path: Path, slug: str, title: str) -> None:
+    doc_dir = tmp_path / "live" / slug / "20-documentation"
+    doc_dir.mkdir(parents=True)
+    write_video_description_pair(doc_dir, title=title)
+
+
+class TestPreflightTitleTemplateCompliance:
+    """#602: 鋳型逸脱・巻数表記・RHS 重複を preflight で block する."""
+
+    def test_should_fail_on_volume_and_rhs_duplicate(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import PreflightChecker
+
+        _write_live_title(
+            tmp_path,
+            "20250101-vol1",
+            "Pure Soul & Funk Infinity | 3 Hours of Soulful Retro Funk Grooves",
+        )
+        col_dir = _write_title_collection(
+            tmp_path,
+            "Funky Spirit Vol.2 | 3 Hours of Soulful Retro Funk Grooves",
+        )
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_title_template_config(["ja", "en", "de"]),
+        )
+
+        with pytest.raises(ValidationError, match="タイトル鋳型違反"):
+            checker.check(col_dir)
+
+    def test_should_pass_on_compliant_title(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import PreflightChecker
+
+        _write_live_title(
+            tmp_path,
+            "20250101-vol1",
+            "Pure Soul & Funk Infinity | 3 Hours of Soulful Retro Funk Grooves",
+        )
+        col_dir = _write_title_collection(
+            tmp_path,
+            "Bright Funk & Soul Spirit | 3 Hours of Feel-Good Retro Grooves",
+        )
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_title_template_config(["ja", "en", "de"]),
+        )
+
+        checker.check(col_dir)
+
+    def test_should_allow_opted_in_volume_without_disabling_default_detection(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import PreflightChecker
+
+        opted_in_collection = _write_title_collection(
+            tmp_path,
+            "Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves",
+            status="opted-in",
+            title_template_check={"allow_volume_patterns": True},
+        )
+        default_collection = _write_title_collection(
+            tmp_path,
+            "Funky Soul Spirit Vol.3 | 3 Hours of Feel-Good Retro Grooves",
+            status="default",
+        )
+        false_collection = _write_title_collection(
+            tmp_path,
+            "Funky Soul Spirit Vol.4 | 3 Hours of Feel-Good Retro Grooves",
+            status="false",
+            title_template_check={"allow_volume_patterns": False},
+        )
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_title_template_config(["ja", "en", "de"]),
+        )
+
+        checker.check(opted_in_collection)
+        with pytest.raises(ValidationError, match="巻数表記を検出"):
+            checker.check(default_collection)
+        with pytest.raises(ValidationError, match="巻数表記を検出"):
+            checker.check(false_collection)
+
+    def test_upload_collection_reaches_post_preflight_for_opted_in_volume(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import PreflightChecker, YouTubeAutoUploader
+
+        class PostPreflightReached(Exception):
+            pass
+
+        collection = _write_title_collection(
+            tmp_path,
+            "Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves",
+            title_template_check={"allow_volume_patterns": True},
+        )
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_title_template_config(["ja", "en", "de"]),
+        )
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path), preflight_checker=checker)
+
+        with (
+            patch.object(uploader, "_verify_authenticated_upload_channel"),
+            patch(
+                "youtube_automation.application.uploads.youtube.BAHMetadataGenerator",
+                side_effect=PostPreflightReached,
+            ),
+            pytest.raises(PostPreflightReached),
+        ):
+            uploader.upload_collection(collection)
+
+    def test_upload_collection_rejects_default_volume_before_metadata_generation(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import PreflightChecker, YouTubeAutoUploader
+
+        collection = _write_title_collection(
+            tmp_path,
+            "Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves",
+        )
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_title_template_config(["ja", "en", "de"]),
+        )
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path), preflight_checker=checker)
+
+        with (
+            patch.object(uploader, "_verify_authenticated_upload_channel"),
+            patch(
+                "youtube_automation.application.uploads.youtube.BAHMetadataGenerator",
+                side_effect=AssertionError("metadata generation must not run"),
+            ),
+            pytest.raises(ValidationError, match="巻数表記を検出"),
+        ):
+            uploader.upload_collection(collection)
+
+
+# ---------------------------------------------------------------------------
+# L3a: kwargs パススルー — upload_video → YouTubeUploadCore.upload_video
+# ---------------------------------------------------------------------------
+
+
+class TestUploadVideoForwarding:
+    """`YouTubeAutoUploader.upload_video` が resume kwargs をコアへ透過する."""
+
+    def test_should_forward_resume_kwargs_to_core_upload_video(self, tmp_path):
+        """resume kwargs 3 種が `super().upload_video()` に転送される."""
+        # Given
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        on_session = MagicMock()
+        on_complete = MagicMock()
+
+        with patch(
+            "youtube_automation.application.uploads.youtube.ResumableUploader.upload_video",
+            return_value="VID_FORWARDED",
+        ) as mock_core_upload:
+            # When
+            result = uploader.upload_video(
+                str(video),
+                _make_metadata(),
+                thumbnail_path=None,
+                resume_session_uri=_SESS_PREV,
+                on_session_uri_changed=on_session,
+                on_upload_complete=on_complete,
+            )
+
+        # Then
+        assert result == "VID_FORWARDED"
+        call_kwargs = mock_core_upload.call_args.kwargs
+        assert call_kwargs.get("resume_session_uri") == _SESS_PREV
+        assert call_kwargs.get("on_session_uri_changed") is on_session
+        assert call_kwargs.get("on_upload_complete") is on_complete
+
+    def test_should_declare_contains_synthetic_media_true(self, tmp_path):
+        """#603: AI 生成音楽を主軸とするため status.containsSyntheticMedia を true で申告する."""
+        # Given
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        with patch(
+            "youtube_automation.application.uploads.youtube.ResumableUploader.upload_video",
+            return_value="VID_SYNTHETIC",
+        ) as mock_core_upload:
+            # When
+            uploader.upload_video(str(video), _make_metadata())
+
+        # Then: super().upload_video(video_path, body, ...) の body[status] を検証
+        body = mock_core_upload.call_args.args[1]
+        assert body["status"]["containsSyntheticMedia"] is True
+
+    def test_should_default_self_declared_made_for_kids_false(self, tmp_path):
+        """#605: config 未設定時は selfDeclaredMadeForKids=False の現行挙動を維持する."""
+        # Given
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        with patch(
+            "youtube_automation.application.uploads.youtube.ResumableUploader.upload_video",
+            return_value="VID_KIDS",
+        ) as mock_core_upload:
+            # When
+            uploader.upload_video(str(video), _make_metadata())
+
+        # Then
+        body = mock_core_upload.call_args.args[1]
+        assert body["status"]["selfDeclaredMadeForKids"] is False
+
+    def test_should_resolve_synthetic_media_flags_from_config(self, tmp_path):
+        """#605: status フラグを config（youtube.api）から解決する."""
+        # Given
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        fake_config = SimpleNamespace(
+            youtube=SimpleNamespace(
+                api=SimpleNamespace(
+                    contains_synthetic_media=False,
+                    self_declared_made_for_kids=True,
+                )
+            )
+        )
+
+        with (
+            patch(
+                "youtube_automation.application.uploads.youtube.load_config",
+                return_value=fake_config,
+            ),
+            patch(
+                "youtube_automation.application.uploads.youtube.ResumableUploader.upload_video",
+                return_value="VID_CONFIG",
+            ) as mock_core_upload,
+        ):
+            # When
+            uploader.upload_video(str(video), _make_metadata())
+
+        # Then: config の値が status へ反映される
+        body = mock_core_upload.call_args.args[1]
+        assert body["status"]["containsSyntheticMedia"] is False
+        assert body["status"]["selfDeclaredMadeForKids"] is True
+
+    def test_should_default_resume_kwargs_to_none_when_omitted(self, tmp_path):
+        """resume kwargs を渡さなければコアにも None 相当が渡る（後方互換）."""
+        # Given
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        with patch(
+            "youtube_automation.application.uploads.youtube.ResumableUploader.upload_video",
+            return_value="VID_DEFAULT",
+        ) as mock_core_upload:
+            # When
+            uploader.upload_video(str(video), _make_metadata())
+
+        # Then: 旧署名互換 — kwargs を渡しても None、または kwargs に含まれず default が効く
+        call_kwargs = mock_core_upload.call_args.kwargs
+        assert call_kwargs.get("resume_session_uri") is None
+        assert call_kwargs.get("on_session_uri_changed") is None
+        assert call_kwargs.get("on_upload_complete") is None
+
+
+# ---------------------------------------------------------------------------
+# L3a: kwargs パススルー — upload_collection → _upload_complete_collection → upload_video
+# ---------------------------------------------------------------------------
+
+
+class TestUploadCollectionForwarding:
+    """`upload_collection` が resume kwargs を `_upload_complete_collection` まで透過."""
+
+    def test_should_forward_resume_kwargs_through_to_upload_complete_collection(self, tmp_path):
+        """`upload_collection(...)` の kwargs が `_upload_complete_collection` に届く."""
+        # Given
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        col_dir = tmp_path / "20990101-foo-collection"
+        col_dir.mkdir(parents=True)
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        on_session = MagicMock()
+        on_complete = MagicMock()
+
+        with (
+            patch("youtube_automation.application.uploads.youtube.ensure_collection_preflight") as skeleton_preflight,
+            patch.object(uploader, "_verify_authenticated_upload_channel"),
+            patch.object(uploader.preflight_checker, "check") as metadata_preflight,
+            patch.object(
+                uploader,
+                "_upload_complete_collection",
+                return_value={"video_id": "V", "video_url": "u", "title": "t", "file_path": "p"},
+            ) as mock_inner,
+            patch("youtube_automation.application.uploads.youtube.BAHMetadataGenerator") as mock_gen_cls,
+        ):
+            mock_gen_cls.return_value.collection_name = col_dir.name
+
+            # When
+            uploader.upload_collection(
+                str(col_dir),
+                publish_at=None,
+                resume_session_uri=_SESS_PREV,
+                on_session_uri_changed=on_session,
+                on_upload_complete=on_complete,
+            )
+
+        # Then
+        call_kwargs = mock_inner.call_args.kwargs
+        assert call_kwargs.get("resume_session_uri") == _SESS_PREV
+        assert call_kwargs.get("on_session_uri_changed") is on_session
+        assert call_kwargs.get("on_upload_complete") is on_complete
+        skeleton_preflight.assert_called_once_with(col_dir)
+        metadata_preflight.assert_called_once_with(col_dir)
+
+
+def test_uploader_delegates_complete_collection_to_injected_strategy(tmp_path):
+    from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+    strategy = MagicMock()
+    strategy.upload.return_value = {"video_id": "v1"}
+    uploader = YouTubeAutoUploader(collections_root=str(tmp_path), complete_collection_strategy=strategy)
+    collection = tmp_path / "collection"
+    metadata_generator = MagicMock()
+
+    assert uploader._upload_complete_collection(collection, metadata_generator) == {"video_id": "v1"}
+    strategy.upload.assert_called_once_with(
+        collection,
+        metadata_generator,
+        None,
+        resume_session_uri=None,
+        on_session_uri_changed=None,
+        on_upload_complete=None,
+    )
+
+    def test_should_forward_resume_kwargs_from_complete_collection_to_upload_video(self, tmp_path):
+        """`_upload_complete_collection` が `self.upload_video` に resume kwargs を渡す."""
+        # Given
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        col_dir = tmp_path / "20990101-foo-collection"
+        master_dir = col_dir / "01-master"
+        master_dir.mkdir(parents=True)
+        (master_dir / "video.mp4").write_bytes(b"\x00")
+        assets_dir = col_dir / "10-assets"
+        assets_dir.mkdir()
+        (assets_dir / "thumbnail.jpg").write_bytes(b"\x00")
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path), dedup_search=MagicMock())
+        on_session = MagicMock()
+        on_complete = MagicMock()
+
+        mock_gen = MagicMock()
+        mock_gen.generate_complete_collection_metadata.return_value = _make_metadata()
+
+        with (
+            patch.object(uploader.dedup_search, "find_existing_video_by_title", return_value=None),
+            patch.object(uploader, "upload_video", return_value="VID_INNER") as mock_upload_video,
+        ):
+            # When
+            uploader._upload_complete_collection(
+                col_dir,
+                mock_gen,
+                publish_at=None,
+                resume_session_uri=_SESS_PREV,
+                on_session_uri_changed=on_session,
+                on_upload_complete=on_complete,
+            )
+
+        # Then
+        call_kwargs = mock_upload_video.call_args.kwargs
+        assert call_kwargs.get("resume_session_uri") == _SESS_PREV
+        assert call_kwargs.get("on_session_uri_changed") is on_session
+        assert call_kwargs.get("on_upload_complete") is on_complete
+
+
+# ---------------------------------------------------------------------------
+# L3b: `DedupSearch.find_existing_video_by_title` 単体検証
+# ---------------------------------------------------------------------------
+
+
+class TestFindExistingVideoByTitle:
+    """publish 直前の同タイトル検索（dedup 安全網）の振る舞い."""
+
+    def _make_uploader_with_mock_youtube(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import DedupSearch
+
+        mock_youtube = MagicMock()
+        return DedupSearch(mock_youtube), mock_youtube
+
+    def test_should_return_video_info_when_exact_title_match_exists(self, tmp_path):
+        """plan 要件 #8 + #9: 完全一致 hit で video_id / video_url を返す."""
+        # Given
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}},
+            ]
+        }
+        mock_youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": "v9", "snippet": {"title": "Rainy Jazz"}, "status": {"uploadStatus": "processed"}},
+            ]
+        }
+
+        # When
+        result = uploader.find_existing_video_by_title("Rainy Jazz")
+
+        # Then
+        assert result == {
+            "video_id": "v9",
+            "video_url": "https://www.youtube.com/watch?v=v9",
+        }
+
+    def test_should_revalidate_exact_search_match_with_videos_list(self, tmp_path):
+        """search の完全一致候補は videos.list で再検証してから採用する."""
+        # Given
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}},
+            ]
+        }
+        mock_youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": "v9", "snippet": {"title": "Rainy Jazz"}, "status": {"uploadStatus": "processed"}},
+            ]
+        }
+
+        # When
+        uploader.find_existing_video_by_title("Rainy Jazz")
+
+        # Then
+        mock_youtube.videos.return_value.list.assert_called_once_with(id="v9", part="status,snippet")
+
+    def test_should_return_none_when_search_hit_no_longer_exists_in_videos_list(self, tmp_path):
+        """削除済み動画が search index に残っていても dedup hit にしない."""
+        # Given
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": {"videoId": "stale"}, "snippet": {"title": "Rainy Jazz"}},
+            ]
+        }
+        mock_youtube.videos.return_value.list.return_value.execute.return_value = {"items": []}
+
+        # When
+        result = uploader.find_existing_video_by_title("Rainy Jazz")
+
+        # Then
+        assert result is None
+
+    def test_should_return_none_when_videos_list_title_differs_from_search_hit(self, tmp_path):
+        """videos.list 側のタイトルが一致しない候補は採用しない."""
+        # Given
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}},
+            ]
+        }
+        mock_youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": "v9", "snippet": {"title": "Rainy Jazz Remastered"}, "status": {"uploadStatus": "processed"}},
+            ]
+        }
+
+        # When
+        result = uploader.find_existing_video_by_title("Rainy Jazz")
+
+        # Then
+        assert result is None
+
+    def test_should_return_none_when_videos_list_upload_status_is_not_reusable(self, tmp_path):
+        """videos.list 側の uploadStatus が failed の候補は採用しない."""
+        # Given
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}},
+            ]
+        }
+        mock_youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": "v9", "snippet": {"title": "Rainy Jazz"}, "status": {"uploadStatus": "failed"}},
+            ]
+        }
+
+        # When
+        result = uploader.find_existing_video_by_title("Rainy Jazz")
+
+        # Then
+        assert result is None
+
+    def test_should_call_youtube_search_with_for_mine_true_type_video(self, tmp_path):
+        """plan 要件 #8: search API は forMine=True / type=video / q=title で叩く."""
+        # Given
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {"items": []}
+
+        # When
+        uploader.find_existing_video_by_title("Rainy Jazz")
+
+        # Then
+        mock_youtube.search.return_value.list.assert_called_once()
+        call_kwargs = mock_youtube.search.return_value.list.call_args.kwargs
+        assert call_kwargs.get("forMine") is True
+        assert call_kwargs.get("type") == "video"
+        assert call_kwargs.get("q") == "Rainy Jazz"
+        assert call_kwargs.get("maxResults") == 10
+        assert call_kwargs.get("part") == "snippet"
+
+    def test_should_return_none_when_only_partial_title_matches_found(self, tmp_path):
+        """plan §149: 完全一致のみ採用。部分一致は None を返す."""
+        # Given
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": {"videoId": "v_other"}, "snippet": {"title": "Rainy Jazz Live"}},
+            ]
+        }
+
+        # When
+        result = uploader.find_existing_video_by_title("Rainy Jazz")
+
+        # Then
+        assert result is None
+
+    def test_should_skip_ghost_search_items_and_keep_valid_exact_match(self, tmp_path):
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": {"videoId": "ghost-no-snippet"}},
+                None,
+                {"id": {"videoId": "ghost-bad-snippet"}, "snippet": []},
+                {"id": {"videoId": "ghost-no-title"}, "snippet": {}},
+                {"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}},
+            ]
+        }
+        mock_youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": "v9", "snippet": {"title": "Rainy Jazz"}, "status": {"uploadStatus": "processed"}},
+            ]
+        }
+
+        result = uploader.find_existing_video_by_title("Rainy Jazz")
+
+        assert result == {
+            "video_id": "v9",
+            "video_url": "https://www.youtube.com/watch?v=v9",
+        }
+        mock_youtube.videos.return_value.list.assert_called_once_with(id="v9", part="status,snippet")
+
+    def test_should_return_none_when_all_search_items_are_ghosts(self, tmp_path):
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [
+                {"id": {"videoId": "ghost-no-snippet"}},
+                {"id": {"videoId": "ghost-no-title"}, "snippet": {}},
+            ]
+        }
+
+        result = uploader.find_existing_video_by_title("Rainy Jazz")
+
+        assert result is None
+        mock_youtube.videos.return_value.list.assert_not_called()
+
+    def test_should_return_none_when_search_returns_empty_items(self, tmp_path):
+        """検索結果が空なら None を返す."""
+        # Given
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {"items": []}
+
+        # When
+        result = uploader.find_existing_video_by_title("Rainy Jazz")
+
+        # Then
+        assert result is None
+
+    def test_should_fail_open_and_return_none_on_http_error(self, tmp_path, caplog):
+        """plan 要件 #10: search API エラーは fail-open（warning + None 返却）."""
+        # Given
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.side_effect = _make_http_error(500)
+
+        # When
+        with caplog.at_level(logging.WARNING):
+            result = uploader.find_existing_video_by_title("Rainy Jazz")
+
+        # Then
+        assert result is None
+        # warning が出ていること（メッセージ本文の厳密一致は強制しない）
+        assert any(rec.levelno == logging.WARNING for rec in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Issue #2057: dedup search の read preflight quota 記録
+# ---------------------------------------------------------------------------
+
+
+class TestDedupSearchQuotaRecording:
+    """重複検索 helper が実 request ごとに quota を記録すること."""
+
+    def _make_uploader_with_mock_youtube(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import DedupSearch
+
+        mock_youtube = MagicMock()
+        return DedupSearch(mock_youtube), mock_youtube
+
+    def _quota_calls(self, mock_log_quota) -> list[tuple[str, str, float]]:
+        return [(c.args[0], c.args[1], c.args[2]) for c in mock_log_quota.call_args_list]
+
+    def test_should_record_search_and_videos_quota_on_duplicate_hit(self, tmp_path):
+        """要件 1: search.list と videos.list の実 request ごとに quota が記録される."""
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [{"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}}]
+        }
+        mock_youtube.videos.return_value.list.return_value.execute.return_value = {
+            "items": [{"id": "v9", "snippet": {"title": "Rainy Jazz"}, "status": {"uploadStatus": "processed"}}]
+        }
+
+        with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota:
+            result = uploader.find_existing_video_by_title("Rainy Jazz")
+
+        assert result is not None
+        assert self._quota_calls(mock_log_quota) == [
+            ("youtube-data-api", "search.list", 1),
+            ("youtube-data-api", "videos.list", 1),
+        ]
+
+    def test_should_record_only_search_quota_when_no_exact_candidates(self, tmp_path):
+        """要件 4: 実行した read quota だけが記録される（videos.list 未実行なら未記録）."""
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {"items": []}
+
+        with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota:
+            result = uploader.find_existing_video_by_title("Rainy Jazz")
+
+        assert result is None
+        assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 1)]
+        mock_youtube.videos.return_value.list.assert_not_called()
+
+    def test_should_record_search_quota_and_fail_open_on_search_http_error(self, tmp_path, caplog):
+        """要件 3: API failure でも quota 記録後に既存 fail-open（None 返却）を維持する."""
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.side_effect = _make_http_error(500)
+
+        with (
+            patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota,
+            caplog.at_level(logging.WARNING),
+        ):
+            result = uploader.find_existing_video_by_title("Rainy Jazz")
+
+        assert result is None
+        assert self._quota_calls(mock_log_quota) == [
+            ("youtube-data-api", "search.list", 1),
+            ("youtube-data-api", "search.list", 1),
+            ("youtube-data-api", "search.list", 1),
+        ]
+        assert any(rec.levelno == logging.WARNING for rec in caplog.records)
+
+    def test_should_record_both_quotas_and_fail_open_on_videos_list_http_error(self, tmp_path, caplog):
+        """要件 3: videos.list 失敗時も両 request の quota 記録後に fail-open を維持する."""
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [{"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}}]
+        }
+        mock_youtube.videos.return_value.list.return_value.execute.side_effect = _make_http_error(500)
+
+        with (
+            patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota,
+            caplog.at_level(logging.WARNING),
+        ):
+            result = uploader.find_existing_video_by_title("Rainy Jazz")
+
+        assert result is None
+        assert self._quota_calls(mock_log_quota) == [
+            ("youtube-data-api", "search.list", 1),
+            ("youtube-data-api", "videos.list", 1),
+            ("youtube-data-api", "videos.list", 1),
+            ("youtube-data-api", "videos.list", 1),
+        ]
+        assert any(rec.levelno == logging.WARNING for rec in caplog.records)
+
+    def test_should_record_search_quota_for_each_retry_attempt(self, tmp_path, monkeypatch):
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        monkeypatch.setattr("youtube_automation.infrastructure.retry.time.sleep", lambda _: None)
+        request = mock_youtube.search.return_value.list.return_value
+        request.execute.side_effect = [
+            _make_http_error(503),
+            {"items": []},
+        ]
+
+        with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota:
+            assert uploader.find_existing_video_by_title("Rainy Jazz") is None
+
+        assert request.execute.call_count == 2
+        assert self._quota_calls(mock_log_quota) == [
+            ("youtube-data-api", "search.list", 1),
+            ("youtube-data-api", "search.list", 1),
+        ]
+
+    def test_should_record_videos_quota_for_each_retry_attempt(self, tmp_path, monkeypatch):
+        uploader, mock_youtube = self._make_uploader_with_mock_youtube(tmp_path)
+        monkeypatch.setattr("youtube_automation.infrastructure.retry.time.sleep", lambda _: None)
+        mock_youtube.search.return_value.list.return_value.execute.return_value = {
+            "items": [{"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}}]
+        }
+        request = mock_youtube.videos.return_value.list.return_value
+        request.execute.side_effect = [
+            _make_http_error(503),
+            {"items": [{"id": "v9", "snippet": {"title": "Rainy Jazz"}, "status": {"uploadStatus": "processed"}}]},
+        ]
+
+        with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota:
+            assert uploader.find_existing_video_by_title("Rainy Jazz") == {
+                "video_id": "v9",
+                "video_url": "https://www.youtube.com/watch?v=v9",
+            }
+
+        assert request.execute.call_count == 2
+        assert self._quota_calls(mock_log_quota) == [
+            ("youtube-data-api", "search.list", 1),
+            ("youtube-data-api", "videos.list", 1),
+            ("youtube-data-api", "videos.list", 1),
+        ]
+
+
+# ---------------------------------------------------------------------------
+# L3b: `_upload_complete_collection` の dedup 配線
+# ---------------------------------------------------------------------------
+
+
+class TestUploadCompleteCollectionDedup:
+    """publish 直前 dedup の skip / proceed / fail-open 分岐."""
+
+    def _setup(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        col_dir = tmp_path / "20990101-foo-collection"
+        master_dir = col_dir / "01-master"
+        master_dir.mkdir(parents=True)
+        (master_dir / "video.mp4").write_bytes(b"\x00")
+        assets_dir = col_dir / "10-assets"
+        assets_dir.mkdir()
+        (assets_dir / "thumbnail.jpg").write_bytes(b"\x00")
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path), dedup_search=MagicMock())
+        mock_gen = MagicMock()
+        mock_gen.generate_complete_collection_metadata.return_value = _make_metadata("Rainy Jazz")
+        return uploader, col_dir, mock_gen
+
+    def test_should_skip_upload_when_dedup_search_hits(self, tmp_path):
+        """plan 要件 #9: dedup hit 時は `upload_video` を呼ばず既存 video_id を採用."""
+        # Given
+        uploader, col_dir, mock_gen = self._setup(tmp_path)
+        existing = {"video_id": "v9", "video_url": "https://www.youtube.com/watch?v=v9"}
+
+        with (
+            patch.object(uploader.dedup_search, "find_existing_video_by_title", return_value=existing),
+            patch.object(uploader, "upload_video", return_value="SHOULD_NOT_BE_CALLED") as mock_upload_video,
+        ):
+            # When
+            result = uploader._upload_complete_collection(col_dir, mock_gen, publish_at=None)
+
+        # Then: upload_video は呼ばれず、既存 video_id を返す
+        mock_upload_video.assert_not_called()
+        assert result["video_id"] == "v9"
+        assert result["video_url"] == "https://www.youtube.com/watch?v=v9"
+        assert result["upload_source"] == "existing_video"
+        assert mock_gen.generate_complete_collection_metadata.call_args.kwargs["duration_seconds"] == (
+            10 * 3600 + 32 * 60
+        )
+
+    def test_should_proceed_with_upload_when_dedup_search_returns_none(self, tmp_path):
+        """dedup miss 時は通常通り `upload_video` を呼ぶ."""
+        # Given
+        uploader, col_dir, mock_gen = self._setup(tmp_path)
+
+        with (
+            patch.object(uploader.dedup_search, "find_existing_video_by_title", return_value=None),
+            patch.object(uploader, "upload_video", return_value="VID_NEW") as mock_upload_video,
+        ):
+            # When
+            result = uploader._upload_complete_collection(col_dir, mock_gen, publish_at=None)
+
+        # Then
+        mock_upload_video.assert_called_once()
+        assert result["video_id"] == "VID_NEW"
+        assert result["upload_source"] == "new_upload"
+
+    @pytest.mark.parametrize(
+        ("document_localizations", "expected_localizations"),
+        [
+            ({}, {"ja": {"title": "生成済みタイトル", "description": "生成済み概要"}}),
+            (
+                {"de": {"title": "Freigegebener Titel", "description": "Freigegebene Beschreibung"}},
+                {"de": {"title": "Freigegebener Titel", "description": "Freigegebene Beschreibung"}},
+            ),
+        ],
+    )
+    def test_prebuilt_localizations_override_generated_only_when_nonempty(
+        self,
+        tmp_path,
+        document_localizations,
+        expected_localizations,
+    ):
+        """空の文書値は生成済み翻訳を維持し、非空の文書値だけを最終値にする。"""
+        # Given
+        uploader, col_dir, mock_gen = self._setup(tmp_path)
+        generated_localizations = {"ja": {"title": "生成済みタイトル", "description": "生成済み概要"}}
+        mock_gen.generate_complete_collection_metadata.return_value = {
+            **_make_metadata("Generated Title"),
+            "localizations": generated_localizations,
+        }
+        documentation = col_dir / "20-documentation"
+        documentation.mkdir()
+        write_video_description_pair(
+            documentation,
+            title="Approved Title",
+            description="Approved description",
+            localizations=document_localizations,
+        )
+
+        with (
+            patch.object(uploader.dedup_search, "find_existing_video_by_title", return_value=None),
+            patch.object(uploader, "upload_video", return_value="VID_NEW") as mock_upload_video,
+        ):
+            # When
+            uploader._upload_complete_collection(col_dir, mock_gen, publish_at=None)
+
+        # Then
+        metadata = mock_upload_video.call_args.args[1]
+        assert metadata["localizations"] == expected_localizations
+
+    def test_workflow_state_master_video_wins_over_preview(self, tmp_path):
+        uploader, col_dir, mock_gen = self._setup(tmp_path)
+        preview = col_dir / "01-master" / "A-Preview.mp4"
+        master = col_dir / "01-master" / "Z-Master.mp4"
+        preview.write_bytes(b"preview")
+        master.write_bytes(b"master")
+        (col_dir / "workflow-state.json").write_text(
+            json.dumps({"assets": {"master_video": master.name}}), encoding="utf-8"
+        )
+
+        with (
+            patch.object(uploader.dedup_search, "find_existing_video_by_title", return_value=None),
+            patch.object(uploader, "upload_video", return_value="VID") as upload,
+        ):
+            uploader._upload_complete_collection(col_dir, mock_gen)
+
+        assert upload.call_args.args[0] == str(master)
+
+    def test_fallback_never_selects_preview(self, tmp_path):
+        uploader, col_dir, mock_gen = self._setup(tmp_path)
+        (col_dir / "01-master" / "video.mp4").unlink()
+        (col_dir / "01-master" / "A-Preview.mp4").write_bytes(b"preview")
+        master = col_dir / "01-master" / "Z-Master.mp4"
+        master.write_bytes(b"master")
+
+        with (
+            patch.object(uploader.dedup_search, "find_existing_video_by_title", return_value=None),
+            patch.object(uploader, "upload_video", return_value="VID") as upload,
+        ):
+            uploader._upload_complete_collection(col_dir, mock_gen)
+
+        assert upload.call_args.args[0] == str(master)
+
+    def test_prebuilt_upload_keeps_localization_timestamps_when_m4a_needs_probe_fallback(self, tmp_path, monkeypatch):
+        """#1323: prebuilt upload 経路でも `.m4a` fallback 後の timestamp を localizations に渡す."""
+        from youtube_automation.application.metadata import service as metadata_generator_module
+        from youtube_automation.application.metadata.service import BAHMetadataGenerator
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+        from youtube_automation.configuration import load_config
+
+        col_dir = tmp_path / "20990101-live-circuit-collection"
+        (col_dir / "01-master").mkdir(parents=True)
+        (col_dir / "01-master" / "video-master.mp4").write_bytes(b"\x00")
+        (col_dir / "02-Individual-music").mkdir()
+        (col_dir / "02-Individual-music" / "01-circuit-door.m4a").write_bytes(b"\x00")
+        (col_dir / "10-assets").mkdir()
+        (col_dir / "10-assets" / "thumbnail.jpg").write_bytes(b"\x00")
+        (col_dir / "20-documentation").mkdir()
+        config = load_config()
+        scene_phrases = {lang: f"quiet circuit room {lang}" for lang in config.localizations.supported_languages}
+        write_video_description_pair(
+            col_dir / "20-documentation",
+            title="Circuit Collection",
+            description="00:00 Curated Circuit Door",
+            tags=["circuit music", "focus music"],
+            localizations={
+                lang: {"title": f"Circuit Collection {lang}", "description": "00:00 Curated Circuit Door"}
+                for lang in config.localizations.supported_languages
+            },
+        )
+        (col_dir / "workflow-state.json").write_text(
+            json.dumps({"scene_phrases": scene_phrases}),
+            encoding="utf-8",
+        )
+
+        import subprocess as _subprocess
+
+        def mock_subprocess_run(cmd, **kwargs):
+            if cmd and cmd[0] == "afinfo":
+                raise _subprocess.CalledProcessError(1, "afinfo", "unsupported file")
+            raise AssertionError(f"unexpected subprocess call: {cmd}")
+
+        probe_calls: list[Path] = []
+
+        def fake_probe_duration(path: Path) -> float:
+            probe_calls.append(path)
+            return 121.9
+
+        monkeypatch.setattr(_subprocess, "run", mock_subprocess_run)
+        monkeypatch.setattr(metadata_generator_module, "probe_duration", fake_probe_duration)
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path), dedup_search=MagicMock())
+        metadata_gen = BAHMetadataGenerator(str(col_dir))
+        with (
+            patch.object(uploader.dedup_search, "find_existing_video_by_title", return_value=None),
+            patch.object(uploader, "upload_video", return_value="VID_NEW") as mock_upload_video,
+        ):
+            result = uploader._upload_complete_collection(col_dir, metadata_gen, publish_at=None)
+
+        assert result["video_id"] == "VID_NEW"
+        assert probe_calls == [col_dir / "02-Individual-music" / "01-circuit-door.m4a"]
+        metadata = mock_upload_video.call_args.args[1]
+        assert metadata["description"] == "00:00 Curated Circuit Door"
+        assert "localizations" in metadata
+        assert metadata["localizations"]
+        for loc in metadata["localizations"].values():
+            assert "00:00 Curated Circuit Door" in loc["description"]
+
+    def test_should_fail_loud_when_upload_thumbnail_missing(self, tmp_path):
+        """#1310: main.* は動画背景なので upload thumbnail 欠落を隠さない。"""
+        from youtube_automation.core.errors import ValidationError
+
+        uploader, col_dir, mock_gen = self._setup(tmp_path)
+        (col_dir / "10-assets" / "thumbnail.jpg").unlink()
+        (col_dir / "10-assets" / "main.png").write_bytes(b"textless-background")
+
+        with (
+            patch.object(uploader.dedup_search, "find_existing_video_by_title", return_value=None),
+            patch.object(uploader, "upload_video", return_value="SHOULD_NOT_BE_CALLED") as mock_upload_video,
+            pytest.raises(ValidationError, match="アップロード用サムネイルが見つかりません"),
+        ):
+            uploader._upload_complete_collection(col_dir, mock_gen, publish_at=None)
+
+        mock_upload_video.assert_not_called()
+
+    def test_should_fail_loud_when_upload_thumbnail_missing_even_if_dedup_hits(self, tmp_path):
+        """#1310: dedup existing-video 経路でも upload thumbnail 欠落を隠さない。"""
+        from youtube_automation.core.errors import ValidationError
+
+        uploader, col_dir, mock_gen = self._setup(tmp_path)
+        (col_dir / "10-assets" / "thumbnail.jpg").unlink()
+        (col_dir / "10-assets" / "main.png").write_bytes(b"textless-background")
+        existing = {"video_id": "v9", "video_url": "https://www.youtube.com/watch?v=v9"}
+
+        with (
+            patch.object(
+                uploader.dedup_search, "find_existing_video_by_title", return_value=existing
+            ) as mock_find_existing,
+            patch.object(uploader, "upload_video", return_value="SHOULD_NOT_BE_CALLED") as mock_upload_video,
+            pytest.raises(ValidationError, match="アップロード用サムネイルが見つかりません"),
+        ):
+            uploader._upload_complete_collection(col_dir, mock_gen, publish_at=None)
+
+        mock_find_existing.assert_not_called()
+        mock_upload_video.assert_not_called()
+
+    def test_should_proceed_with_upload_when_search_api_raises_http_error(self, tmp_path, caplog):
+        """plan 要件 #10: search API 自体が HttpError を投げたケースで fail-open で upload 続行."""
+        # Given
+        uploader, col_dir, mock_gen = self._setup(tmp_path)
+
+        # 実 youtube.search を HttpError で失敗させ、helper の重複検索
+        # の fail-open 経路（HttpError → warning + None 返却）を実コードで通す
+        mock_youtube = MagicMock()
+        mock_youtube.search.return_value.list.return_value.execute.side_effect = _make_http_error(500)
+        uploader.youtube = mock_youtube
+        from youtube_automation.application.uploads.youtube import DedupSearch
+
+        uploader._dedup_search = DedupSearch(mock_youtube)
+
+        with (
+            patch.object(uploader, "upload_video", return_value="VID_AFTER_FAILOPEN") as mock_upload_video,
+            caplog.at_level(logging.WARNING),
+        ):
+            # When
+            result = uploader._upload_complete_collection(col_dir, mock_gen, publish_at=None)
+
+        # Then: search API 失敗を warning で記録した上で upload は続行する
+        mock_youtube.search.return_value.list.assert_called_once()
+        mock_upload_video.assert_called_once()
+        assert result["video_id"] == "VID_AFTER_FAILOPEN"
+        assert any(rec.levelno == logging.WARNING for rec in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Issue #1052: post-upload manual checklist
+# ---------------------------------------------------------------------------
+
+
+class TestPostUploadManualChecklist:
+    """アップロード完了後に Studio 手動確認 checklist を表示する."""
+
+    def test_should_print_manual_checklist_for_new_upload(self, tmp_path, caplog):
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        results = {
+            "collection_name": "foo",
+            "collection_path": str(tmp_path / "foo"),
+            "duration": "0:01:00",
+            "start_time": datetime(2099, 1, 1, 9, 0, 0),
+            "complete_video": {
+                "video_id": "VID_NEW",
+                "video_url": "https://www.youtube.com/watch?v=VID_NEW",
+                "upload_source": "new_upload",
+            },
+        }
+
+        with caplog.at_level(logging.INFO):
+            uploader._print_upload_report(results)
+
+        messages = "\n".join(record.getMessage() for record in caplog.records)
+        assert "アップロード後の手動チェックリスト" in messages
+        assert "AI コンテンツの開示設定" in messages
+        assert "収益化が ON" in messages
+        assert "https://studio.youtube.com/video/VID_NEW/edit" in messages
+
+    def test_should_not_print_manual_checklist_for_existing_video_reuse(self, tmp_path, caplog):
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        results = {
+            "collection_name": "foo",
+            "collection_path": str(tmp_path / "foo"),
+            "duration": "0:01:00",
+            "start_time": datetime(2099, 1, 1, 9, 0, 0),
+            "complete_video": {
+                "video_id": "VID_EXISTING",
+                "video_url": "https://www.youtube.com/watch?v=VID_EXISTING",
+                "upload_source": "existing_video",
+            },
+        }
+
+        with caplog.at_level(logging.INFO):
+            uploader._print_upload_report(results)
+
+        messages = "\n".join(record.getMessage() for record in caplog.records)
+        assert "アップロード後の手動チェックリスト" not in messages
+
+
+# ---------------------------------------------------------------------------
+# Issue #1053: active channel visibility
+# ---------------------------------------------------------------------------
+
+
+class TestActiveChannelVisibility:
+    """誤投稿防止のため操作中チャンネルをログ表示する."""
+
+    def test_should_log_active_channel_identity(self, tmp_path, caplog):
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+        cfg = SimpleNamespace(
+            meta=SimpleNamespace(
+                channel_name="Rainy Jazz Night",
+                youtube_handle="@rainyjazz",
+                channel_id="UC123",
+            )
+        )
+
+        with (
+            patch("youtube_automation.application.uploads.youtube.load_config", return_value=cfg),
+            caplog.at_level(logging.INFO),
+        ):
+            uploader._log_active_channel()
+
+        messages = "\n".join(record.getMessage() for record in caplog.records)
+        assert "操作中チャンネル" in messages
+        assert "Rainy Jazz Night" in messages
+        assert "@rainyjazz" in messages
+        assert "UC123" in messages
+
+
+# ---------------------------------------------------------------------------
+# Issue #647: scheduled publish (status.publishAt) regression
+# ---------------------------------------------------------------------------
+
+
+class TestUploadVideoScheduledPublish:
+    """`upload_video` が publish_at を渡された時に正しく status.publishAt を構築する.
+
+    バグレポート（#647）: 予約投稿の設定をしても即時公開された FB の再発防止。
+    """
+
+    def test_should_set_publish_at_and_force_private_when_publish_at_provided(self, tmp_path):
+        """publish_at 指定時は status.publishAt と privacyStatus=private を必ず設定する."""
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        metadata = _make_metadata()
+        metadata["privacy_status"] = "public"  # ユーザーが間違って public を入れていても
+        metadata["publish_at"] = "2099-01-01T20:00:00+09:00"
+
+        with patch(
+            "youtube_automation.application.uploads.youtube.ResumableUploader.upload_video",
+            return_value="VID_SCHEDULED",
+        ) as mock_core_upload:
+            uploader.upload_video(str(video), metadata)
+
+        body = mock_core_upload.call_args.args[1]
+        # publishAt は API 仕様上 privacyStatus=private が必須
+        assert body["status"]["privacyStatus"] == "private"
+        # publishAt は UTC（Z 終端）に正規化される
+        assert body["status"]["publishAt"] == "2099-01-01T11:00:00Z"
+
+    def test_should_normalize_publish_at_to_utc(self, tmp_path):
+        """+09:00 のような timezone offset 付き値は UTC (Z) に正規化される."""
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        metadata = _make_metadata()
+        metadata["publish_at"] = "2099-06-15T20:00:00+09:00"
+
+        with patch(
+            "youtube_automation.application.uploads.youtube.ResumableUploader.upload_video",
+            return_value="VID_NORMALIZED",
+        ) as mock_core_upload:
+            uploader.upload_video(str(video), metadata)
+
+        body = mock_core_upload.call_args.args[1]
+        assert body["status"]["publishAt"] == "2099-06-15T11:00:00Z"
+
+    def test_should_passthrough_already_utc_publish_at(self, tmp_path):
+        """既に UTC (Z) の publish_at はそのまま透過する."""
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        metadata = _make_metadata()
+        metadata["publish_at"] = "2099-06-15T11:00:00Z"
+
+        with patch(
+            "youtube_automation.application.uploads.youtube.ResumableUploader.upload_video",
+            return_value="VID_UTC",
+        ) as mock_core_upload:
+            uploader.upload_video(str(video), metadata)
+
+        body = mock_core_upload.call_args.args[1]
+        assert body["status"]["publishAt"] == "2099-06-15T11:00:00Z"
+
+    def test_should_omit_publish_at_when_metadata_does_not_have_it(self, tmp_path):
+        """publish_at が無いメタデータでは status.publishAt は付与されない."""
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+
+        with patch(
+            "youtube_automation.application.uploads.youtube.ResumableUploader.upload_video",
+            return_value="VID_IMMEDIATE",
+        ) as mock_core_upload:
+            uploader.upload_video(str(video), _make_metadata())
+
+        body = mock_core_upload.call_args.args[1]
+        assert "publishAt" not in body["status"]
+
+    def test_should_downgrade_public_to_private_without_publish_at(self, tmp_path, caplog):
+        """予約日時なしの public は公開事故を避けるため private へ降格する."""
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+        metadata = _make_metadata()
+        metadata["privacy_status"] = "public"
+
+        with (
+            patch(
+                "youtube_automation.application.uploads.youtube.ResumableUploader.upload_video",
+                return_value="VID_PRIVATE",
+            ) as mock_core_upload,
+            caplog.at_level(logging.WARNING),
+        ):
+            uploader.upload_video(str(video), metadata)
+
+        body = mock_core_upload.call_args.args[1]
+        assert body["status"]["privacyStatus"] == "private"
+        assert "publishAt" not in body["status"]
+        warning = "\n".join(record.getMessage() for record in caplog.records)
+        assert "即時公開を抑止" in warning
+        assert "schedule_config.json" in warning
+        assert "YouTube Studio" in warning
+
+    def test_should_keep_unlisted_without_publish_at(self, tmp_path, caplog):
+        """予約日時なしの unlisted はレビュー共有用途のため維持する."""
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path / "collections"))
+        video = tmp_path / "v.mp4"
+        video.write_bytes(b"\x00")
+        metadata = _make_metadata()
+        metadata["privacy_status"] = "unlisted"
+
+        with (
+            patch(
+                "youtube_automation.application.uploads.youtube.ResumableUploader.upload_video",
+                return_value="VID_UNLISTED",
+            ) as mock_core_upload,
+            caplog.at_level(logging.WARNING),
+        ):
+            uploader.upload_video(str(video), metadata)
+
+        body = mock_core_upload.call_args.args[1]
+        assert body["status"]["privacyStatus"] == "unlisted"
+        assert "publishAt" not in body["status"]
+        assert not caplog.records
+
+
+class TestDefaultPublishAt:
+    """#1054: チャンネル既定の予約投稿時刻。"""
+
+    @staticmethod
+    def _config(time_text: str | None = "20:00", tz: str = "Asia/Tokyo") -> SimpleNamespace:
+        return SimpleNamespace(
+            meta=SimpleNamespace(
+                channel_name="Rainy Jazz Night",
+                youtube_handle="@rainyjazz",
+                channel_id="UC123",
+            ),
+            youtube=SimpleNamespace(
+                api=SimpleNamespace(
+                    default_publish_time=time_text,
+                    default_publish_timezone=tz,
+                )
+            ),
+        )
+
+    def test_resolves_today_when_default_time_is_still_future(self):
+        from youtube_automation.application.uploads.youtube import _resolve_default_publish_at
+
+        now = datetime.fromisoformat("2099-01-01T19:00:00+09:00")
+        assert _resolve_default_publish_at(self._config(), now=now) == "2099-01-01T20:00:00+09:00"
+
+    def test_resolves_tomorrow_when_default_time_has_passed(self):
+        from youtube_automation.application.uploads.youtube import _resolve_default_publish_at
+
+        now = datetime.fromisoformat("2099-01-01T21:00:00+09:00")
+        assert _resolve_default_publish_at(self._config(), now=now) == "2099-01-02T20:00:00+09:00"
+
+    def test_returns_none_when_not_configured(self):
+        from youtube_automation.application.uploads.youtube import _resolve_default_publish_at
+
+        assert _resolve_default_publish_at(self._config(time_text=None)) is None
+
+    def test_upload_collection_applies_default_when_publish_at_omitted(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        col_dir = tmp_path / "20990101-foo-collection"
+        col_dir.mkdir()
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+
+        with (
+            patch("youtube_automation.application.uploads.youtube.ensure_collection_preflight"),
+            patch.object(uploader, "_verify_authenticated_upload_channel"),
+            patch.object(uploader.preflight_checker, "check"),
+            patch.object(
+                uploader,
+                "_upload_complete_collection",
+                return_value={"video_id": "V", "video_url": "u", "title": "t", "file_path": "p"},
+            ) as mock_inner,
+            patch("youtube_automation.application.uploads.youtube.BAHMetadataGenerator") as mock_gen_cls,
+            patch(
+                "youtube_automation.application.uploads.youtube._resolve_default_publish_at",
+                return_value="2099-01-01T20:00:00+09:00",
+            ) as mock_default,
+            patch(
+                "youtube_automation.application.uploads.youtube.load_config",
+                return_value=self._config(),
+            ),
+        ):
+            mock_gen_cls.return_value.collection_name = col_dir.name
+            uploader.upload_collection(str(col_dir), publish_at=None)
+
+        assert mock_default.called
+        assert mock_inner.call_args.kwargs["publish_at"] == "2099-01-01T20:00:00+09:00"
+
+    def test_upload_collection_can_skip_default_publish_fallback(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        col_dir = tmp_path / "20990101-foo-collection"
+        col_dir.mkdir()
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+
+        with (
+            patch("youtube_automation.application.uploads.youtube.ensure_collection_preflight"),
+            patch.object(uploader, "_verify_authenticated_upload_channel"),
+            patch.object(uploader.preflight_checker, "check"),
+            patch.object(
+                uploader,
+                "_upload_complete_collection",
+                return_value={"video_id": "V", "video_url": "u", "title": "t", "file_path": "p"},
+            ) as mock_inner,
+            patch("youtube_automation.application.uploads.youtube.BAHMetadataGenerator") as mock_gen_cls,
+            patch("youtube_automation.application.uploads.youtube._resolve_default_publish_at") as mock_default,
+        ):
+            mock_gen_cls.return_value.collection_name = col_dir.name
+            uploader.upload_collection(str(col_dir), publish_at=None, apply_default_publish_at=False)
+
+        assert not mock_default.called
+        assert mock_inner.call_args.kwargs["publish_at"] is None
+
+    def test_upload_collection_keeps_explicit_publish_at(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+
+        col_dir = tmp_path / "20990101-foo-collection"
+        col_dir.mkdir()
+        uploader = YouTubeAutoUploader(collections_root=str(tmp_path))
+
+        with (
+            patch("youtube_automation.application.uploads.youtube.ensure_collection_preflight"),
+            patch.object(uploader, "_verify_authenticated_upload_channel"),
+            patch.object(uploader.preflight_checker, "check"),
+            patch.object(
+                uploader,
+                "_upload_complete_collection",
+                return_value={"video_id": "V", "video_url": "u", "title": "t", "file_path": "p"},
+            ) as mock_inner,
+            patch("youtube_automation.application.uploads.youtube.BAHMetadataGenerator") as mock_gen_cls,
+            patch("youtube_automation.application.uploads.youtube._resolve_default_publish_at") as mock_default,
+        ):
+            mock_gen_cls.return_value.collection_name = col_dir.name
+            uploader.upload_collection(str(col_dir), publish_at="2099-01-05T20:00:00+09:00")
+
+        assert not mock_default.called
+        assert mock_inner.call_args.kwargs["publish_at"] == "2099-01-05T20:00:00+09:00"
+
+
+class TestNormalizePublishAt:
+    """`_normalize_publish_at` の単体テスト."""
+
+    def test_jst_offset_is_converted_to_utc_z(self):
+        from youtube_automation.application.uploads.youtube import _normalize_publish_at
+
+        assert _normalize_publish_at("2099-06-15T20:00:00+09:00") == "2099-06-15T11:00:00Z"
+
+    def test_utc_z_passthrough(self):
+        from youtube_automation.application.uploads.youtube import _normalize_publish_at
+
+        assert _normalize_publish_at("2099-06-15T11:00:00Z") == "2099-06-15T11:00:00Z"
+
+    def test_invalid_string_returns_as_is(self):
+        from youtube_automation.application.uploads.youtube import _normalize_publish_at
+
+        # パース不能ならそのまま返す（呼び出し側に責務を任せる）
+        assert _normalize_publish_at("not-an-iso-date") == "not-an-iso-date"
+
+    def test_naive_iso_returns_as_is(self):
+        from youtube_automation.application.uploads.youtube import _normalize_publish_at
+
+        # naive datetime は TZ 不明 → そのまま返す
+        assert _normalize_publish_at("2099-06-15T11:00:00") == "2099-06-15T11:00:00"
+
+
+@pytest.mark.parametrize(
+    "search_item",
+    [{"snippet": {"title": "Rainy Jazz"}}, {"id": {"videoId": "v9"}}],
+)
+def test_dedup_fails_open_for_invalid_search_response_shape(tmp_path, search_item):
+    from youtube_automation.application.uploads.youtube import DedupSearch
+
+    uploader = DedupSearch(MagicMock())
+    uploader.youtube.search.return_value.list.return_value.execute.return_value = {"items": [search_item]}
+
+    assert uploader.find_existing_video_by_title("Rainy Jazz") is None
+
+
+@pytest.mark.parametrize("response", [None, {"items": None}, {"items": {}}])
+def test_dedup_fails_open_for_invalid_search_response_container(tmp_path, response):
+    from youtube_automation.application.uploads.youtube import DedupSearch
+
+    uploader = DedupSearch(MagicMock())
+    uploader.youtube.search.return_value.list.return_value.execute.return_value = response
+
+    assert uploader.find_existing_video_by_title("Rainy Jazz") is None
+
+
+@pytest.mark.parametrize(
+    "video_item",
+    [
+        {"id": "v9", "status": {"uploadStatus": "processed"}},
+        {"id": "v9", "snippet": {"title": "Rainy Jazz"}, "status": {}},
+        {"snippet": {"title": "Rainy Jazz"}, "status": {"uploadStatus": "processed"}},
+    ],
+)
+def test_dedup_fails_open_for_invalid_video_response_shape(tmp_path, video_item):
+    from youtube_automation.application.uploads.youtube import DedupSearch
+
+    uploader = DedupSearch(MagicMock())
+    uploader.youtube.search.return_value.list.return_value.execute.return_value = {
+        "items": [{"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}}]
+    }
+    uploader.youtube.videos.return_value.list.return_value.execute.return_value = {"items": [video_item]}
+
+    assert uploader.find_existing_video_by_title("Rainy Jazz") is None
+
+
+@pytest.mark.parametrize("response", [None, {"items": None}, {"items": {}}])
+def test_dedup_fails_open_for_invalid_video_response_container(tmp_path, response):
+    from youtube_automation.application.uploads.youtube import DedupSearch
+
+    uploader = DedupSearch(MagicMock())
+    uploader.youtube.search.return_value.list.return_value.execute.return_value = {
+        "items": [{"id": {"videoId": "v9"}, "snippet": {"title": "Rainy Jazz"}}]
+    }
+    uploader.youtube.videos.return_value.list.return_value.execute.return_value = response
+
+    assert uploader.find_existing_video_by_title("Rainy Jazz") is None
+
+
+# ---------------------------------------------------------------------------
+# PR #4346: preflight プレイリスト割り当てゲート
+# ---------------------------------------------------------------------------
+
+
+_CATEGORIZING_PLAYLISTS = {
+    "all": {"title": "All", "auto_add": True, "playlist_id": "PL_ALL"},
+    "rain": {"title": "Rain", "auto_add_themes": ["rain"], "playlist_id": "PL_RAIN"},
+}
+
+
+def _make_playlist_config(playlists: dict) -> SimpleNamespace:
+    cfg = _make_preflight_config(["ja", "en"])
+    cfg.playlists = SimpleNamespace(items=playlists)
+    cfg.content.title.activity_for_theme = lambda _theme: "Study"
+    return cfg
+
+
+def _write_playlist_collection(tmp_path: Path, planning: dict | None, theme: str) -> Path:
+    col_dir = _write_preflight_collection(tmp_path, ["en", "ja"])
+    state = {"theme": theme, "scene_phrases": {lang: {"title": f"title-{lang}"} for lang in ("en", "ja")}}
+    if planning is not None:
+        state["planning"] = planning
+    (col_dir / "workflow-state.json").write_text(json.dumps(state), encoding="utf-8")
+    return col_dir
+
+
+class TestPreflightPlaylistAssignment:
+    """新テーマが黙って auto_add プレイリストだけに入る状態を、数 GB を送る前に弾く."""
+
+    def test_should_fail_when_theme_matches_no_categorizing_playlist(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import PreflightChecker
+
+        col_dir = _write_playlist_collection(tmp_path, None, "carriage-six")
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_playlist_config(_CATEGORIZING_PLAYLISTS),
+        )
+
+        with pytest.raises(ValidationError, match="プレイリスト未割り当て"):
+            checker.check(col_dir)
+
+    def test_should_pass_with_explicit_planning_playlists(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import PreflightChecker
+
+        col_dir = _write_playlist_collection(tmp_path, {"playlists": ["rain"]}, "carriage-six")
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_playlist_config(_CATEGORIZING_PLAYLISTS),
+        )
+
+        checker.check(col_dir)
+
+    def test_should_pass_with_explicit_empty_playlists(self, tmp_path):
+        """空配列 = operator が「auto_add のみ」を明示した状態は通過させる."""
+        from youtube_automation.application.uploads.youtube import PreflightChecker
+
+        col_dir = _write_playlist_collection(tmp_path, {"playlists": []}, "carriage-six")
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_playlist_config(_CATEGORIZING_PLAYLISTS),
+        )
+
+        checker.check(col_dir)
+
+    def test_should_fail_when_explicit_playlists_only_names_auto_add(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import PreflightChecker
+
+        col_dir = _write_playlist_collection(tmp_path, {"playlists": ["all"]}, "carriage-six")
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_playlist_config(_CATEGORIZING_PLAYLISTS),
+        )
+
+        with pytest.raises(ValidationError, match="プレイリスト未割り当て"):
+            checker.check(col_dir)
+
+    def test_should_fail_when_categorizing_playlist_has_no_youtube_id(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import PreflightChecker
+
+        playlists = {
+            "all": {"title": "All", "auto_add": True, "playlist_id": "PL_ALL"},
+            "rain": {"title": "Rain", "auto_add_themes": ["rain"]},
+        }
+        col_dir = _write_playlist_collection(tmp_path, {"playlists": ["rain"]}, "carriage-six")
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_playlist_config(playlists),
+        )
+
+        with pytest.raises(ValidationError, match="playlist_id 未設定.*rain"):
+            checker.check(col_dir)
+
+    def test_should_pass_when_legacy_keyword_still_matches(self, tmp_path):
+        """既存コレクション（キーワードが当たる）は明示指定なしでも通る（後方互換）."""
+        from youtube_automation.application.uploads.youtube import PreflightChecker
+
+        col_dir = _write_playlist_collection(tmp_path, None, "rain-on-the-bar-window")
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_playlist_config(_CATEGORIZING_PLAYLISTS),
+        )
+
+        checker.check(col_dir)
+
+    def test_should_pass_when_channel_has_no_categorizing_playlist(self, tmp_path):
+        from youtube_automation.application.uploads.youtube import PreflightChecker
+
+        col_dir = _write_playlist_collection(tmp_path, None, "carriage-six")
+        checker = PreflightChecker(
+            tmp_path,
+            config_loader=lambda: _make_playlist_config({"all": {"auto_add": True, "playlist_id": "PL_ALL"}}),
+        )
+
+        checker.check(col_dir)

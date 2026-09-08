@@ -137,6 +137,26 @@ def _required_bitrate_kbps(height: int | None) -> int | None:
     return None
 
 
+def _quality_failures(
+    max_keyframe_interval: float | None,
+    bitrate_bps: int | None,
+    bitrate_kbps: int | None,
+    required_bitrate_kbps: int | None,
+) -> list[str]:
+    required_bitrate_bps = required_bitrate_kbps * 1000 if required_bitrate_kbps is not None else None
+    failures: list[str] = []
+    if max_keyframe_interval is None:
+        failures.append("keyframe interval is unavailable")
+    elif max_keyframe_interval > MAX_KEYFRAME_INTERVAL_SEC:
+        failures.append(f"keyframe interval {max_keyframe_interval:.2f}s exceeds {MAX_KEYFRAME_INTERVAL_SEC:.0f}s")
+    if bitrate_kbps is None:
+        failures.append("video bitrate is unavailable")
+    elif required_bitrate_bps is not None and bitrate_bps is not None and bitrate_bps < required_bitrate_bps:
+        failures.append(f"video bitrate {bitrate_kbps} Kbps is below {required_bitrate_kbps} Kbps")
+
+    return failures
+
+
 def check_video(path: Path) -> dict[str, str]:
     if shutil.which("ffprobe") is None:
         return _result(
@@ -159,18 +179,9 @@ def check_video(path: Path) -> dict[str, str]:
     bitrate_bps = _int_or_none(stream.get("bit_rate"))
     bitrate_kbps = round(bitrate_bps / 1000) if bitrate_bps is not None else None
     required_bitrate_kbps = _required_bitrate_kbps(height)
-    required_bitrate_bps = required_bitrate_kbps * 1000 if required_bitrate_kbps is not None else None
     max_keyframe_interval = _max_interval(keyframes, duration)
 
-    failures: list[str] = []
-    if max_keyframe_interval is None:
-        failures.append("keyframe interval is unavailable")
-    elif max_keyframe_interval > MAX_KEYFRAME_INTERVAL_SEC:
-        failures.append(f"keyframe interval {max_keyframe_interval:.2f}s exceeds {MAX_KEYFRAME_INTERVAL_SEC:.0f}s")
-    if bitrate_kbps is None:
-        failures.append("video bitrate is unavailable")
-    elif required_bitrate_bps is not None and bitrate_bps is not None and bitrate_bps < required_bitrate_bps:
-        failures.append(f"video bitrate {bitrate_kbps} Kbps is below {required_bitrate_kbps} Kbps")
+    failures = _quality_failures(max_keyframe_interval, bitrate_bps, bitrate_kbps, required_bitrate_kbps)
 
     codec = str(stream.get("codec_name") or "")
     profile = str(stream.get("profile") or "")
@@ -187,23 +198,10 @@ def check_video(path: Path) -> dict[str, str]:
         f"bitrate={bitrate_kbps or 'unknown'} Kbps; "
         f"max_keyframe_interval={interval_summary}"
     )
-    if failures:
-        return _result(
-            ok=False,
-            status="failed",
-            message="; ".join(failures),
-            profile_ok=profile_ok,
-            profile_message=profile_message,
-            width=width or "",
-            height=height or "",
-            bitrate_kbps=bitrate_kbps or "",
-            required_bitrate_kbps=required_bitrate_kbps or "",
-            max_keyframe_interval_sec=(f"{max_keyframe_interval:.3f}" if max_keyframe_interval is not None else ""),
-        )
     return _result(
-        ok=True,
-        status="ok",
-        message=summary,
+        ok=not failures,
+        status="failed" if failures else "ok",
+        message="; ".join(failures) if failures else summary,
         profile_ok=profile_ok,
         profile_message=profile_message,
         width=width or "",

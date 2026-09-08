@@ -75,14 +75,7 @@ def lint_frontmatter_text(text: str) -> list[str]:
     if not isinstance(parsed, dict):
         return ["frontmatter が dict として解釈できません"]
 
-    violations: list[str] = []
-    for key in ("name", "description"):
-        if key not in parsed:
-            violations.append(f"frontmatter に '{key}' がありません")
-        elif not isinstance(parsed[key], str):
-            violations.append(f"'{key}' が文字列ではありません")
-        elif not parsed[key].strip():
-            violations.append(f"'{key}' が空です")
+    violations = _lint_required_frontmatter_text(parsed)
 
     if "description" in parsed and not _DESCRIPTION_DOUBLE_QUOTED.search(frontmatter):
         violations.append(
@@ -96,6 +89,20 @@ def lint_frontmatter_text(text: str) -> list[str]:
     elif parsed["purpose"] not in _PURPOSE_VALUES:
         allowed = ", ".join(sorted(_PURPOSE_VALUES))
         violations.append(f"'purpose' が許容値ではありません: {parsed['purpose']} (許容値: {allowed})")
+    return violations
+
+
+def _lint_required_frontmatter_text(parsed: dict) -> list[str]:
+    """Validate the required nonempty text fields in parsed skill metadata."""
+    violations: list[str] = []
+    for key in ("name", "description"):
+        if key not in parsed:
+            violations.append(f"frontmatter に '{key}' がありません")
+        elif not isinstance(parsed[key], str):
+            violations.append(f"'{key}' が文字列ではありません")
+        elif not parsed[key].strip():
+            violations.append(f"'{key}' が空です")
+
     return violations
 
 

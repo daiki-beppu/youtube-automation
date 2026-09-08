@@ -158,38 +158,29 @@ def _require_tag_ref(ref: str, *, source: str) -> str:
     return value
 
 
-def _git_status_porcelain(root: Path) -> str:
+def _capture_command(cmd: list[str], cwd: Path, *, label: str | None = None) -> subprocess.CompletedProcess[str]:
+    """Capture a step's output, translating launch failures consistently."""
     try:
-        proc = subprocess.run(
-            ["git", "status", "--porcelain", "--untracked-files=no"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError as e:
-        raise _StepFailed(f"git status を起動できません: {e}") from e
+        return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=False)
+    except OSError as error:
+        raise _StepFailed(f"{label or ' '.join(cmd)} を起動できません: {error}") from error
+
+
+def _git_status_output(root: Path, arguments: list[str]) -> str:
+    proc = _capture_command(["git", "status", *arguments], root, label="git status")
     if proc.returncode != 0:
         raise _StepFailed(f"git status に失敗しました: {proc.stderr.strip()}")
-    return proc.stdout.strip()
+    return proc.stdout
+
+
+def _git_status_porcelain(root: Path) -> str:
+    return _git_status_output(root, ["--porcelain", "--untracked-files=no"]).strip()
 
 
 def _git_status_paths(root: Path) -> set[str]:
     """Return all paths currently reported by status, including untracked files."""
-    try:
-        proc = subprocess.run(
-            ["git", "status", "--porcelain=v1", "-z", "--untracked-files=all"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError as e:
-        raise _StepFailed(f"git status を起動できません: {e}") from e
-    if proc.returncode != 0:
-        raise _StepFailed(f"git status に失敗しました: {proc.stderr.strip()}")
-
-    records = proc.stdout.split("\0")
+    output = _git_status_output(root, ["--porcelain=v1", "-z", "--untracked-files=all"])
+    records = output.split("\0")
     paths: set[str] = set()
     index = 0
     while index < len(records):
@@ -269,16 +260,7 @@ def _check_channel_config(root: Path) -> str:
         "--target",
         str(root),
     ]
-    try:
-        proc = subprocess.run(
-            cmd,
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError as e:
-        raise _StepFailed(f"{' '.join(cmd)} を起動できません: {e}") from e
+    proc = _capture_command(cmd, root)
     try:
         payload = json.loads(proc.stdout)
     except json.JSONDecodeError as e:
@@ -305,16 +287,7 @@ def _check_channel_config(root: Path) -> str:
 
 def _skills_diff_has_changes(root: Path) -> bool:
     cmd = ["uv", "run", "yt-skills", "diff"]
-    try:
-        proc = subprocess.run(
-            cmd,
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError as e:
-        raise _StepFailed(f"{' '.join(cmd)} を起動できません: {e}") from e
+    proc = _capture_command(cmd, root)
     output = "\n".join(part for part in [proc.stdout, proc.stderr] if part)
     local_fix_markers = (
         "内容が異なる",
@@ -395,6 +368,32 @@ def cmd_check(args: argparse.Namespace) -> int:
         return EXIT_ERROR
 
 
+def _resolve_apply_ref(pin: Pin, *, rev: str | None, tag: str | None) -> str | None:
+    """Validate pin-specific overrides before resolving the update target."""
+    if pin.kind == "registry":
+        raise ConfigError(
+            "registry 参照 (git 参照ではない) のため自動追従できません。"
+            "pyproject.toml を git 参照 (tag pin / main 追従) へ切り替えてください"
+        )
+    if rev is not None and pin.kind != "sha":
+        raise ConfigError("--rev は sha pin の apply でのみ指定できます")
+    if tag is not None and pin.kind != "tag":
+        raise ConfigError("--tag は tag pin の apply でのみ指定できます")
+    if pin.kind == "sha" and not rev:
+        raise ConfigError(
+            "sha pin は bump 先の判断が必要です。--rev <sha> で明示してください"
+            "（bump 先の決定はスキル側の [HUMAN STEP]）"
+        )
+    if rev is not None and not _SHA_RE.fullmatch(rev):
+        raise ConfigError("--rev には 40 桁の hex sha を指定してください")
+    new_ref: str | None = None
+    if pin.kind == "tag":
+        new_ref = _require_tag_ref(tag or _fetch_latest_release_tag(), source="追従先")
+    elif pin.kind == "sha":
+        new_ref = rev
+    return new_ref
+
+
 def cmd_apply(args: argparse.Namespace) -> int:
     try:
         root = _resolve_repo_root(args.target)
@@ -403,27 +402,7 @@ def cmd_apply(args: argparse.Namespace) -> int:
         _require_downstream(pyproject, root)
         pin = _detect_pin(pyproject)
         _validate_sync_only(args.sync_only)
-        if pin.kind == "registry":
-            raise ConfigError(
-                "registry 参照 (git 参照ではない) のため自動追従できません。"
-                "pyproject.toml を git 参照 (tag pin / main 追従) へ切り替えてください"
-            )
-        if args.rev is not None and pin.kind != "sha":
-            raise ConfigError("--rev は sha pin の apply でのみ指定できます")
-        if args.tag is not None and pin.kind != "tag":
-            raise ConfigError("--tag は tag pin の apply でのみ指定できます")
-        if pin.kind == "sha" and not args.rev:
-            raise ConfigError(
-                "sha pin は bump 先の判断が必要です。--rev <sha> で明示してください"
-                "（bump 先の決定はスキル側の [HUMAN STEP]）"
-            )
-        if args.rev is not None and not _SHA_RE.fullmatch(args.rev):
-            raise ConfigError("--rev には 40 桁の hex sha を指定してください")
-        new_ref: str | None = None
-        if pin.kind == "tag":
-            new_ref = _require_tag_ref(args.tag or _fetch_latest_release_tag(), source="追従先")
-        elif pin.kind == "sha":
-            new_ref = args.rev
+        new_ref = _resolve_apply_ref(pin, rev=args.rev, tag=args.tag)
     except ConfigError as e:
         print(f"[error] {e}", file=sys.stderr)
         return EXIT_ERROR

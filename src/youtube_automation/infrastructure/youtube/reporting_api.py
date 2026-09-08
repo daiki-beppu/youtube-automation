@@ -32,14 +32,18 @@ import io
 import logging
 import math
 from collections import defaultdict
+from contextlib import closing
 from datetime import datetime, timedelta, timezone
-from typing import Any, Iterable
+from typing import TYPE_CHECKING, Any, Iterable
 
 import requests.exceptions
 from google.auth.transport.requests import AuthorizedSession
 from googleapiclient.errors import HttpError
 
 from youtube_automation.core.errors import ConfigError, ValidationError, YouTubeAPIError
+
+if TYPE_CHECKING:
+    from google.auth.credentials import Credentials
 
 # CSV ダウンロードのタイムアウト（接続, 読み取り）秒
 _DOWNLOAD_TIMEOUT = (5, 60)
@@ -64,6 +68,14 @@ _REPORT_TYPE_PRIORITIES = (
     "channel_reach_basic_a1",
     "channel_reach_combined_a1",
 )
+
+
+def _matching_reporting_job(jobs: list[dict], report_type_id: str, job_name: str) -> dict | None:
+    """Find the first job matching both the requested report type and managed name."""
+    return next(
+        (job for job in jobs if job.get("reportTypeId") == report_type_id and job.get("name") == job_name),
+        None,
+    )
 
 
 class ReportingAPIClient:
@@ -135,12 +147,7 @@ class ReportingAPIClient:
         selected = priority_matches[0] if priority_matches else None
 
         jobs = job_response.get("jobs", [])
-        existing_job = None
-        if selected is not None:
-            for job in jobs:
-                if job.get("reportTypeId") == selected and job.get("name") == self.JOB_NAME:
-                    existing_job = job
-                    break
+        existing_job = _matching_reporting_job(jobs, selected, self.JOB_NAME) if selected is not None else None
 
         recent_reports_count: int | None = None
         if existing_job is not None:
@@ -169,14 +176,7 @@ class ReportingAPIClient:
         except HttpError as e:
             raise YouTubeAPIError.from_http_error(e, "reporting:jobs.list") from e
 
-        return next(
-            (
-                job
-                for job in existing.get("jobs", [])
-                if job.get("reportTypeId") == report_type_id and job.get("name") == self.JOB_NAME
-            ),
-            None,
-        )
+        return _matching_reporting_job(existing.get("jobs", []), report_type_id, self.JOB_NAME)
 
     def ensure_job(self, report_type_id: str) -> str:
         """`reportTypeId + name` 一致のジョブを再利用、無ければ create。
@@ -222,27 +222,7 @@ class ReportingAPIClient:
         Returns:
             レポート dict のリスト（startTime / endTime / downloadUrl などを含む）
         """
-        cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
-        created_after = cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
-
-        reports: list[dict] = []
-        page_token: str | None = None
-
-        while True:
-            try:
-                kwargs: dict[str, Any] = {"jobId": job_id, "createdAfter": created_after}
-                if page_token:
-                    kwargs["pageToken"] = page_token
-                response = self._service.jobs().reports().list(**kwargs).execute()
-            except HttpError as e:
-                raise YouTubeAPIError.from_http_error(e, "reporting:jobs.reports.list") from e
-
-            reports.extend(response.get("reports", []))
-            page_token = response.get("nextPageToken")
-            if not page_token:
-                break
-
-        return reports
+        return _list_recent_reports(self._service, job_id, since_days)
 
     def download_report_csv(self, download_url: str) -> str:
         """downloadUrl から CSV を取得して文字列で返す。
@@ -261,70 +241,14 @@ class ReportingAPIClient:
         if self._credentials is None:
             raise YouTubeAPIError("Reporting API: CSV ダウンロードには credentials が必要です")
 
-        session = AuthorizedSession(self._credentials)
-        try:
-            response = session.get(download_url, timeout=_DOWNLOAD_TIMEOUT)
-        except requests.exceptions.RequestException as e:
-            raise YouTubeAPIError(f"reporting:download_csv: {e}") from e
-
-        if response.status_code != 200:
-            raise YouTubeAPIError(
-                f"reporting:download_csv: HTTP {response.status_code} {response.text[:200]}",
-                status_code=response.status_code,
-            )
-
-        return response.content.decode("utf-8")
+        return _download_csv_text(download_url, self._credentials)
 
     # ------------------------------------------------------------------
     # CSV パース
     # ------------------------------------------------------------------
     def parse_csv(self, csv_text: str) -> list[dict[str, Any]]:
-        """CSV テキストを行ごとの dict にパース。
-
-        ヘッダ行から impressions / ctr / video_id / date 列のインデックスを動的解決し、
-        欠損列はスキップ（fail-open）。
-
-        Args:
-            csv_text: ダウンロード済み CSV テキスト
-
-        Returns:
-            行 dict のリスト。各 dict は以下のキーを持つ可能性がある:
-            - date: str | None
-            - video_id: str | None
-            - impressions: int | None
-            - ctr_percentage: float | None  (CTR 値、％換算済み)
-
-        Raises:
-            ValidationError: ヘッダに impressions / ctr 列が両方無い
-        """
-        reader = csv.reader(io.StringIO(csv_text))
-        try:
-            header = next(reader)
-        except StopIteration:
-            return []
-
-        idx = {col.strip(): i for i, col in enumerate(header)}
-
-        impressions_idx = _first_index(idx, _IMPRESSIONS_COLUMNS)
-        ctr_idx = _first_index(idx, _CTR_COLUMNS)
-        video_id_idx = _first_index(idx, _VIDEO_ID_COLUMNS)
-        date_idx = _first_index(idx, _DATE_COLUMNS)
-
-        if impressions_idx is None and ctr_idx is None:
-            raise ValidationError(f"Reporting API CSV: impressions / ctr 列が見つかりません header={header}")
-
-        rows: list[dict[str, Any]] = []
-        for row in reader:
-            if not row:
-                continue
-            entry: dict[str, Any] = {
-                "date": _safe_str(row, date_idx),
-                "video_id": _safe_str(row, video_id_idx),
-                "impressions": _safe_int(row, impressions_idx),
-                "ctr_percentage": _normalize_ctr(_safe_float(row, ctr_idx)),
-            }
-            rows.append(entry)
-        return rows
+        """Decode downloaded CSV using the provider's column and numeric conventions."""
+        return _parse_report_csv(csv_text)
 
     # ------------------------------------------------------------------
     # 高水準 API
@@ -383,6 +307,97 @@ class ReportingAPIClient:
 # ---------------------------------------------------------------------------
 # ヘルパー（モジュール private）
 # ---------------------------------------------------------------------------
+def _list_recent_reports(service, job_id: str, since_days: int) -> list[dict]:
+    """Retrieve all report pages using one UTC cutoff for the requested time window."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
+    created_after = cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    reports: list[dict] = []
+    page_token: str | None = None
+
+    while True:
+        try:
+            kwargs: dict[str, str] = {"jobId": job_id, "createdAfter": created_after}
+            if page_token:
+                kwargs["pageToken"] = page_token
+            response = service.jobs().reports().list(**kwargs).execute()
+        except HttpError as e:
+            raise YouTubeAPIError.from_http_error(e, "reporting:jobs.reports.list") from e
+
+        reports.extend(response.get("reports", []))
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            break
+
+    return reports
+
+
+def _download_csv_text(download_url: str, credentials: Credentials) -> str:
+    """Download and decode one report while owning its authenticated session lifetime."""
+    with closing(AuthorizedSession(credentials)) as session:
+        try:
+            response = session.get(download_url, timeout=_DOWNLOAD_TIMEOUT)
+        except requests.exceptions.RequestException as e:
+            raise YouTubeAPIError(f"reporting:download_csv: {e}") from e
+
+        if response.status_code != 200:
+            raise YouTubeAPIError(
+                f"reporting:download_csv: HTTP {response.status_code} {response.text[:200]}",
+                status_code=response.status_code,
+            )
+
+        return response.content.decode("utf-8")
+
+
+def _parse_report_csv(csv_text: str) -> list[dict[str, str | int | float | None]]:
+    """CSV テキストを行ごとの dict にパース。
+
+    ヘッダ行から impressions / ctr / video_id / date 列のインデックスを動的解決し、
+    欠損列はスキップ（fail-open）。
+
+    Args:
+        csv_text: ダウンロード済み CSV テキスト
+
+    Returns:
+        行 dict のリスト。各 dict は以下のキーを持つ可能性がある:
+        - date: str | None
+        - video_id: str | None
+        - impressions: int | None
+        - ctr_percentage: float | None  (CTR 値、％換算済み)
+
+    Raises:
+        ValidationError: ヘッダに impressions / ctr 列が両方無い
+    """
+    reader = csv.reader(io.StringIO(csv_text))
+    try:
+        header = next(reader)
+    except StopIteration:
+        return []
+
+    idx = {col.strip(): i for i, col in enumerate(header)}
+
+    impressions_idx = _first_index(idx, _IMPRESSIONS_COLUMNS)
+    ctr_idx = _first_index(idx, _CTR_COLUMNS)
+    video_id_idx = _first_index(idx, _VIDEO_ID_COLUMNS)
+    date_idx = _first_index(idx, _DATE_COLUMNS)
+
+    if impressions_idx is None and ctr_idx is None:
+        raise ValidationError(f"Reporting API CSV: impressions / ctr 列が見つかりません header={header}")
+
+    rows: list[dict[str, str | int | float | None]] = []
+    for row in reader:
+        if not row:
+            continue
+        entry: dict[str, str | int | float | None] = {
+            "date": _safe_str(row, date_idx),
+            "video_id": _safe_str(row, video_id_idx),
+            "impressions": _safe_int(row, impressions_idx),
+            "ctr_percentage": _normalize_ctr(_safe_float(row, ctr_idx)),
+        }
+        rows.append(entry)
+    return rows
+
+
 def _first_index(idx: dict[str, int], candidates: Iterable[str]) -> int | None:
     for name in candidates:
         if name in idx:

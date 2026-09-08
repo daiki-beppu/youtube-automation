@@ -120,15 +120,27 @@ SLOW_NODE_IDS = (
     ),
     (
         "test_audience_analytics.py",
-        "TestGetDeviceAnalytics::test_permanent_api_failure_keeps_api_specific_fail_soft_result",
+        "TestGetDeviceAnalytics::test_permanent_api_failure_keeps_api_specific_fail_soft_result[mixin]",
     ),
     (
         "test_audience_analytics.py",
-        "TestGetSubscribedStatusAnalytics::test_returns_empty_statuses_when_api_returns_no_rows",
+        "TestGetDeviceAnalytics::test_permanent_api_failure_keeps_api_specific_fail_soft_result[collector]",
     ),
     (
         "test_audience_analytics.py",
-        "TestGetSubscribedStatusAnalytics::test_returns_error_shape_for_http_error",
+        "TestGetSubscribedStatusAnalytics::test_returns_empty_statuses_when_api_returns_no_rows[mixin]",
+    ),
+    (
+        "test_audience_analytics.py",
+        "TestGetSubscribedStatusAnalytics::test_returns_empty_statuses_when_api_returns_no_rows[collector]",
+    ),
+    (
+        "test_audience_analytics.py",
+        "TestGetSubscribedStatusAnalytics::test_returns_error_shape_for_http_error[mixin]",
+    ),
+    (
+        "test_audience_analytics.py",
+        "TestGetSubscribedStatusAnalytics::test_returns_error_shape_for_http_error[collector]",
     ),
     (
         "test_benchmark_collector_channels_batch.py",

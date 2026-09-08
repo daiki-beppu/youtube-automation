@@ -870,3 +870,24 @@ def test_relative_to_channel_dir_inside(tmp_channel: Path):
 def test_relative_to_channel_dir_outside(tmp_channel: Path, tmp_path: Path):
     outside = tmp_path.parent / "elsewhere" / "x.png"
     assert cost_tracker.relative_to_channel_dir(outside) == str(outside)
+
+
+@pytest.mark.parametrize("kind", ["generation", "quota"])
+@pytest.mark.parametrize("error_type", [OSError, RuntimeError, TimeoutError])
+def test_log_path_resolution_failure_warns_without_writing(tmp_channel, monkeypatch, capsys, kind, error_type):
+    def fail_path(*args):
+        raise error_type("path unavailable")
+
+    append_calls = []
+    monkeypatch.setattr(cost_tracker, "_append_log_entry", lambda *args, **kwargs: append_calls.append(args))
+    if kind == "generation":
+        monkeypatch.setattr(cost_tracker, "_log_path", fail_path)
+        result = cost_tracker.log_generation("image", model="model", unit="image")
+        warning = "コストログ書き込み失敗 (image)"
+    else:
+        monkeypatch.setattr(cost_tracker, "_quota_log_path", fail_path)
+        result = cost_tracker.log_quota("youtube-data-api", "videos.insert", 100)
+        warning = "quota ログ書き込み失敗"
+    assert result is None
+    assert append_calls == []
+    assert capsys.readouterr().out == f"  [Warn]   {warning}: path unavailable\n"

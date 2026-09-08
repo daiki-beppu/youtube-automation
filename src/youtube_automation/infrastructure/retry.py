@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 import time
+from abc import abstractmethod
 from collections.abc import Callable
 from functools import wraps
 from typing import ParamSpec, Protocol, TypeVar
@@ -18,6 +19,7 @@ T = TypeVar("T")
 
 
 class ExecutableRequest(Protocol[T]):
+    @abstractmethod
     def execute(self) -> T: ...
 
 

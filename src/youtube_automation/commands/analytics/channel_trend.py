@@ -8,26 +8,21 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
 from pathlib import Path
 
-from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.configuration import channel_dir as _channel_dir
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.commands._shared.cli_harness import print_json_or_text_report, run_cli, run_logged_command
+from youtube_automation.core.channel_context import channel_dir as _channel_dir
 from youtube_automation.domains.analytics.series.channel_trend import analyze_channel_trend
+from youtube_automation.infrastructure.analytics.snapshots import load_latest_analytics_snapshot
 
 logger = logging.getLogger(__name__)
 
 
 def _load_daily_metrics(channel_dir: Path):
     """最新 analytics_data_*.json から daily_metrics を取り出す"""
-    candidates = sorted((channel_dir / "data").glob("analytics_data_*.json"))
-    if not candidates:
-        raise ConfigError("analytics_data_*.json が見つかりません。先に `yt-analytics` を実行してください。")
-    with open(candidates[-1], encoding="utf-8") as f:
-        data = json.load(f)
+    data = load_latest_analytics_snapshot(channel_dir)
     ca = data.get("channel_analytics") or {}
     return ca.get("daily_metrics") or []
 
@@ -75,23 +70,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(args: argparse.Namespace) -> int:
-    try:
-        channel_dir = _channel_dir()
-        daily_metrics = _load_daily_metrics(channel_dir)
-        analysis = analyze_channel_trend(daily_metrics, z_threshold=args.z_threshold)
+    return run_logged_command(lambda: _run(args), logger)
 
-        if args.text:
-            _print_text_summary(analysis)
-        else:
-            print(json.dumps(analysis, ensure_ascii=False, indent=2))
-        return 0
 
-    except ConfigError as e:
-        logger.error(str(e))
-        return 2
-    except Exception as e:
-        logger.exception(f"エラー: {e}")
-        return 1
+def _run(args: argparse.Namespace) -> int:
+    channel_dir = _channel_dir()
+    daily_metrics = _load_daily_metrics(channel_dir)
+    analysis = analyze_channel_trend(daily_metrics, z_threshold=args.z_threshold)
+
+    print_json_or_text_report(analysis, text=args.text, render_text=_print_text_summary)
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

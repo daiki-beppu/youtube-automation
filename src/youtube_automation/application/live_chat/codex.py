@@ -42,52 +42,57 @@ class CodexLiveChatGenerator:
             f"<viewer_input>{payload}</viewer_input>\n"
             "Return only the requested schema. When should_reply is false, reply_text must be empty."
         )
-        with tempfile.TemporaryDirectory(prefix="yt-live-chat-codex-") as directory:
-            schema_path = Path(directory) / "schema.json"
-            output_path = Path(directory) / "result.json"
-            schema_path.write_text(json.dumps(_SCHEMA), encoding="utf-8")
-            args = [
-                "codex",
-                "exec",
-                "--ephemeral",
-                "--ignore-user-config",
-                "--skip-git-repo-check",
-                "--sandbox",
-                "read-only",
-                "--output-schema",
-                str(schema_path),
-                "--output-last-message",
-                str(output_path),
-                "-",
-            ]
-            if self._model:
-                args[2:2] = ["--model", self._model]
-            try:
-                completed = subprocess.run(
-                    args,
-                    input=prompt,
-                    text=True,
-                    capture_output=True,
-                    check=False,
-                    timeout=self._timeout_sec,
-                    cwd=directory,
-                )
-            except (OSError, subprocess.TimeoutExpired) as error:
-                raise GeneratorError(f"codex exec 呼び出し失敗: {error}") from error
-            if completed.returncode != 0:
-                raise GeneratorError(f"codex exec が失敗しました: {completed.stderr.strip()}")
-            try:
-                result = json.loads(output_path.read_text(encoding="utf-8"))
-                if not isinstance(result, dict):
-                    raise TypeError("result must be an object")
-                if not isinstance(result.get("should_reply"), bool):
-                    raise TypeError("should_reply must be boolean")
-                if not isinstance(result.get("reply_text"), str) or not isinstance(result.get("reason"), str):
-                    raise TypeError("reply_text and reason must be strings")
-                return ReplyDecision(
-                    should_reply=result["should_reply"],
-                    reply_text=result["reply_text"].strip(),
-                    reason=result["reason"],
-                )
-            except (OSError, json.JSONDecodeError, KeyError, TypeError) as error:
-                raise GeneratorError(f"codex exec の構造化出力が不正です: {error}") from error
+        return _run_codex_decision(prompt, model=self._model, timeout_sec=self._timeout_sec)
+
+
+def _run_codex_decision(prompt: str, *, model: str | None, timeout_sec: float) -> ReplyDecision:
+    """Run the isolated CLI request and validate its structured response."""
+    with tempfile.TemporaryDirectory(prefix="yt-live-chat-codex-") as directory:
+        schema_path = Path(directory) / "schema.json"
+        output_path = Path(directory) / "result.json"
+        schema_path.write_text(json.dumps(_SCHEMA), encoding="utf-8")
+        args = [
+            "codex",
+            "exec",
+            "--ephemeral",
+            "--ignore-user-config",
+            "--skip-git-repo-check",
+            "--sandbox",
+            "read-only",
+            "--output-schema",
+            str(schema_path),
+            "--output-last-message",
+            str(output_path),
+            "-",
+        ]
+        if model:
+            args[2:2] = ["--model", model]
+        try:
+            completed = subprocess.run(
+                args,
+                input=prompt,
+                text=True,
+                capture_output=True,
+                check=False,
+                timeout=timeout_sec,
+                cwd=directory,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise GeneratorError(f"codex exec 呼び出し失敗: {error}") from error
+        if completed.returncode != 0:
+            raise GeneratorError(f"codex exec が失敗しました: {completed.stderr.strip()}")
+        try:
+            result = json.loads(output_path.read_text(encoding="utf-8"))
+            if not isinstance(result, dict):
+                raise TypeError("result must be an object")
+            if not isinstance(result.get("should_reply"), bool):
+                raise TypeError("should_reply must be boolean")
+            if not isinstance(result.get("reply_text"), str) or not isinstance(result.get("reason"), str):
+                raise TypeError("reply_text and reason must be strings")
+            return ReplyDecision(
+                should_reply=result["should_reply"],
+                reply_text=result["reply_text"].strip(),
+                reason=result["reason"],
+            )
+        except (OSError, json.JSONDecodeError, KeyError, TypeError) as error:
+            raise GeneratorError(f"codex exec の構造化出力が不正です: {error}") from error

@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import ClassVar
 
 from youtube_automation.configuration import ScheduleConfig, load_config
-from youtube_automation.core.adapters.runtime import get_schedule_timezone, resolve_default_publish_at
 from youtube_automation.core.errors import ValidationError, YouTubeAPIError
+from youtube_automation.domains.uploads.scheduling import get_schedule_timezone, resolve_default_publish_at
 from youtube_automation.infrastructure.google.youtube import execute_youtube_request, validate_youtube_response_items
 from youtube_automation.infrastructure.quota import youtube_quota_recorder
 

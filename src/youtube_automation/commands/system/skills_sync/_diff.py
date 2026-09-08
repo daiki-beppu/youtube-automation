@@ -8,31 +8,22 @@ import sys
 from pathlib import Path
 
 from youtube_automation.commands.system.skills_sync import (
-    _ASSET_SPECS,
-    _asset_root,
+    _dispatch_asset,
     _distribution_entries,
-    _guard_target_with_all,
     _resolve_file_target,
+    _run_all_assets,
 )
 from youtube_automation.commands.system.skills_sync._ops import _has_diff, _prunable_orphan_names
 
 
 def cmd_diff(args: argparse.Namespace) -> int:
-    # CLI 以外 (テスト / 公開 API 直呼び) からの呼び出しに対しても silent な誤動作を防ぐ
-    # (asset=all + target 指定なら ValueError)。CLI 経由では _resolve_default_target が
-    # 先に catch して exit 2 するため、通常はここまで到達しない。
-    _guard_target_with_all(args)
-    if args.asset == "all":
-        return _diff_all(args)
-    spec = _ASSET_SPECS[args.asset]
-    root = _asset_root(args.asset)
-    target = Path(args.target).resolve()
-
-    if spec["kind"] == "file":
-        return _diff_file_asset(args.asset, spec, root, target)
-    if spec["kind"] == "json-merge":
-        return _diff_settings_asset(spec, root, target)
-    return _diff_dir_asset(spec, root, target)
+    return _dispatch_asset(
+        args,
+        all_assets=_diff_all,
+        file_asset=lambda spec, root, target: _diff_file_asset(args.asset, spec, root, target),
+        settings_asset=_diff_settings_asset,
+        directory_asset=_diff_dir_asset,
+    )
 
 
 def _diff_all(args: argparse.Namespace) -> int:
@@ -41,19 +32,7 @@ def _diff_all(args: argparse.Namespace) -> int:
     `--target` 指定時は parser 側 (`_resolve_default_target`) で既に error 終了
     しているため、ここでは args.target は必ず None。
     """
-    overall_rc = 0
-    for i, asset_name in enumerate(sorted(_ASSET_SPECS.keys())):
-        if i > 0:
-            print()
-        print(f"=== [{asset_name}] diff ===")
-        sub_args = argparse.Namespace(
-            asset=asset_name,
-            target=_ASSET_SPECS[asset_name]["default_target"],
-        )
-        rc = cmd_diff(sub_args)
-        if rc != 0:
-            overall_rc = rc
-    return overall_rc
+    return _run_all_assets("diff", cmd_diff)
 
 
 def _diff_file_asset(asset: str, spec: dict[str, str], root: Path, target: Path) -> int:
@@ -95,6 +74,17 @@ def _diff_settings_asset(spec: dict[str, str], root: Path, target: Path) -> int:
     return 0
 
 
+def _print_entry_changes(names: list[str], heading: str, marker: str, *, footer: str | None = None) -> None:
+    """Display a nonempty group of distribution differences."""
+    if not names:
+        return
+    print(heading)
+    for name in names:
+        print(f"  {marker} {name}")
+    if footer is not None:
+        print(footer)
+
+
 def _diff_dir_asset(spec: dict[str, str], root: Path, target_dir: Path) -> int:
     if not target_dir.exists():
         print(f"target が存在しません: {target_dir}", file=sys.stderr)
@@ -109,38 +99,28 @@ def _diff_dir_asset(spec: dict[str, str], root: Path, target_dir: Path) -> int:
     protected_local = sorted(only_disk - set(prunable_orphans))
     common = sorted(bundled & on_disk)
 
-    if only_bundled:
-        print("同梱版にのみ存在 (sync で追加されます):")
-        for n in only_bundled:
-            print(f"  + {n}")
-    if prunable_orphans:
-        print("upstream 管理の既知の旧 skill (prune 候補):")
-        for n in prunable_orphans:
-            print(f"  - {n}")
-        print("  (削除するには yt-skills sync --prune --yes を使ってください)")
-    if protected_local:
-        print("target にのみ存在 (未知のローカル entry として prune から保護されます):")
-        for n in protected_local:
-            print(f"  - {n}")
+    _print_entry_changes(only_bundled, "同梱版にのみ存在 (sync で追加されます):", "+")
+    _print_entry_changes(
+        prunable_orphans,
+        "upstream 管理の既知の旧 skill (prune 候補):",
+        "-",
+        footer="  (削除するには yt-skills sync --prune --yes を使ってください)",
+    )
+    _print_entry_changes(
+        protected_local, "target にのみ存在 (未知のローカル entry として prune から保護されます):", "-"
+    )
 
-    differing: list[str] = []
-    for name in common:
-        src = root / name
-        dst = target_dir / name
-        if src.is_dir() and dst.is_dir():
-            cmp = filecmp.dircmp(src, dst)
-            if _has_diff(cmp):
-                differing.append(name)
-        elif src.is_file() and dst.is_file():
-            if not filecmp.cmp(src, dst, shallow=False):
-                differing.append(name)
-        else:
-            # 種別不一致 (片方が dir、もう片方が file 等) も差分扱い
-            differing.append(name)
-    if differing:
-        print("内容が異なる entry:")
-        for n in differing:
-            print(f"  ~ {n}")
+    differing = [name for name in common if _entries_differ(root / name, target_dir / name)]
+    _print_entry_changes(differing, "内容が異なる entry:", "~")
     if not (only_bundled or only_disk or differing):
         print("差分なし。target は同梱版と一致しています。")
     return 0
+
+
+def _entries_differ(src: Path, dst: Path) -> bool:
+    if src.is_dir() and dst.is_dir():
+        return _has_diff(filecmp.dircmp(src, dst))
+    if src.is_file() and dst.is_file():
+        return not filecmp.cmp(src, dst, shallow=False)
+    # A file/directory mismatch is itself a difference.
+    return True

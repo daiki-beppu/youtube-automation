@@ -22,8 +22,8 @@ from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 
-from youtube_automation.core.adapters.runtime import format_duration_mss
 from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.core.time_utils import format_duration_mss
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.domains.distrokid.metadata import (
@@ -261,15 +261,11 @@ def validate_spec(spec: dict, music_filenames: list[str]) -> None:
 
         # 4. slug バリデーション
         slug = disc.get("slug", "")
-        if is_multi_disc:
-            if not _DISC_SLUG_RE.match(slug):
-                errors.append(f"discs[{disc_idx - 1}].slug '{slug}' は disc{{N}}-kebab-case 形式ではありません。")
-            else:
-                # N を抽出して出現順チェック
-                n = int(re.match(r"disc(\d+)-", slug).group(1))  # type: ignore[union-attr]
-                slug_nums.append(n)
-        elif not _SINGLE_DISC_SLUG_RE.match(slug):
-            errors.append(f"discs[{disc_idx - 1}].slug '{slug}' は kebab-case 形式ではありません。")
+        slug_number, slug_error = _validate_disc_slug(slug, disc_idx, is_multi_disc=is_multi_disc)
+        if slug_error is not None:
+            errors.append(slug_error)
+        if slug_number is not None:
+            slug_nums.append(slug_number)
 
         tracks = disc.get("tracks", [])
 
@@ -291,6 +287,27 @@ def validate_spec(spec: dict, music_filenames: list[str]) -> None:
     if slug_nums and slug_nums != expected_nums:
         errors.append(f"disc slug の番号順が {slug_nums} で、期待する出現順 {expected_nums} と異なります。")
 
+    errors.extend(_spec_track_errors(music_filenames, all_spec_filenames, all_titles))
+
+    if errors:
+        raise ValidationError("\n".join(errors))
+
+
+def _validate_disc_slug(slug: str, disc_idx: int, *, is_multi_disc: bool) -> tuple[int | None, str | None]:
+    """Validate a disc identifier and expose its number for the sequence check."""
+    if is_multi_disc:
+        if not _DISC_SLUG_RE.match(slug):
+            return None, f"discs[{disc_idx - 1}].slug '{slug}' は disc{{N}}-kebab-case 形式ではありません。"
+        number = int(re.match(r"disc(\d+)-", slug).group(1))  # type: ignore[union-attr]
+        return number, None
+    if not _SINGLE_DISC_SLUG_RE.match(slug):
+        return None, f"discs[{disc_idx - 1}].slug '{slug}' は kebab-case 形式ではありません。"
+    return None, None
+
+
+def _spec_track_errors(music_filenames: list[str], all_spec_filenames: list[str], all_titles: list[str]) -> list[str]:
+    """Check collection-wide filename coverage and unique track titles."""
+    errors: list[str] = []
     # 2. filename exactly-once チェック
     music_set = set(music_filenames)
     spec_set = set(all_spec_filenames)
@@ -319,9 +336,7 @@ def validate_spec(spec: dict, music_filenames: list[str]) -> None:
             f"コレクション全体でトラックタイトルが重複しています: {dup_titles}。"
             "spec の needs_unique トラックをユニーク化してから build を実行してください。"
         )
-
-    if errors:
-        raise ValidationError("\n".join(errors))
+    return errors
 
 
 # ---------------------------------------------------------------------------

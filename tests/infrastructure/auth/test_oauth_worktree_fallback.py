@@ -10,11 +10,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from youtube_automation.infrastructure.auth.youtube import (
-    YouTubeOAuthHandler,
-    client_secrets_file_candidates,
-    resolve_client_secrets_path,
-)
+from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
+from youtube_automation.infrastructure.auth.youtube import client_secrets_file_candidates, resolve_client_secrets_path
 from youtube_automation.infrastructure.vcs.worktree import main_worktree_root
 
 _CLIENT_SECRETS = {

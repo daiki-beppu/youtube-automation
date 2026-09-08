@@ -13,8 +13,9 @@ import json
 import logging
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 import google.auth.exceptions
 from google.auth.transport.requests import Request
@@ -22,14 +23,22 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from requests import Session
 
-from youtube_automation.core.errors import AuthError, ConfigError, ValidationError, YouTubeAPIError
+from youtube_automation.core.errors import AuthError, ConfigError, YouTubeAPIError
+from youtube_automation.core.redaction import redact_sensitive_data
 from youtube_automation.infrastructure import secrets as secret_store
-from youtube_automation.infrastructure.auth.client_secrets import validate_desktop_client_config
-from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
+from youtube_automation.infrastructure.auth.client_secrets import (
+    validate_desktop_client_config,
+    validate_desktop_client_file,
+)
 from youtube_automation.infrastructure.auth.tokens import save_credentials
 from youtube_automation.infrastructure.auth.tokens import token_path as resolve_token_path
 from youtube_automation.infrastructure.vcs.worktree import main_worktree_root
+
+if TYPE_CHECKING:
+    from googleapiclient.discovery import Resource
+
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +96,7 @@ def resolve_client_secrets_location(channel_dir: Path) -> tuple[str, Path]:
 def resolve_client_secrets_source(channel_dir: Path | None = None) -> tuple[Path, dict[str, object] | None]:
     """client_secrets の表示用パスと任意の in-memory config を解決する。"""
     if channel_dir is None:
-        from youtube_automation.configuration import channel_dir as _channel_dir
+        from youtube_automation.core.channel_context import channel_dir as _channel_dir
 
         channel_dir = _channel_dir()
 
@@ -104,6 +113,88 @@ def resolve_client_secrets_source(channel_dir: Path | None = None) -> tuple[Path
 def resolve_client_secrets_path(channel_dir: Path | None = None) -> Path:
     """後方互換のため client_secrets の表示用パスだけを返す。"""
     return resolve_client_secrets_source(channel_dir)[0]
+
+
+def _run_browser_authorization(
+    client_config: dict[str, object] | None,
+    client_file: Path,
+    scopes: list[str],
+    channel_label: str,
+) -> Credentials:
+    """Run the Google browser flow using an already validated desktop client."""
+    if client_config is not None:
+        flow = InstalledAppFlow.from_client_config(client_config, scopes)
+    else:
+        flow = InstalledAppFlow.from_client_secrets_file(str(client_file), scopes)
+    # authorization_prompt_message は run_local_server() 内で
+    # ``.format(url=...)`` される。`{url}` placeholder を壊さないよう
+    # ラベル側の brace は escape する（success_message は format されない）
+    escaped_label = channel_label.replace("{", "{{").replace("}", "}}")
+    return flow.run_local_server(
+        port=0,
+        authorization_prompt_message=(
+            f"🔐 [{escaped_label}] チャンネルの OAuth 認証です。"
+            "ブラウザが開かない場合は以下の URL を開いてください"
+            "（URL 内 redirect_uri のポート番号がこのターミナルに対応するタブの目印です）: {url}"
+        ),
+        success_message=(
+            f"[{channel_label}] チャンネルの OAuth 認証が完了しました。このタブを閉じてターミナルに戻ってください。"
+        ),
+    )
+
+
+def _refresh_credentials(credentials: Credentials) -> None:
+    """Refresh with a transport session bounded to this operation."""
+    with Session() as session:
+        credentials.refresh(Request(session=session))
+
+
+def _connect_youtube_service(credentials: Credentials) -> "Resource":
+    """Build the service and translate discovery HTTP failures at the SDK boundary."""
+    try:
+        service = build_youtube_service(credentials)
+        print("✅ YouTube Data API サービス接続成功", file=sys.stderr)
+        return service
+    except HttpError as e:
+        raise YouTubeAPIError.from_http_error(e, "YouTube Data API サービス接続失敗") from e
+
+
+def _test_youtube_connection(get_service: Callable[[], "Resource"], token_file: Path, client_file: Path) -> bool:
+    """Probe the authenticated channel and report connection failures with redaction."""
+    try:
+        service = get_service()
+        # チャンネル情報取得でテスト
+        response = service.channels().list(part="snippet,statistics", mine=True).execute()
+
+        if response["items"]:
+            channel = response["items"][0]
+            channel_title = channel["snippet"]["title"]
+            subscriber_count = channel["statistics"].get("subscriberCount", "N/A")
+            print("✅ API接続テスト成功", file=sys.stderr)
+            print(f"📺 チャンネル名: {channel_title}", file=sys.stderr)
+            print(f"👥 登録者数: {subscriber_count}", file=sys.stderr)
+            return True
+        else:
+            print("❌ チャンネル情報が取得できませんでした", file=sys.stderr)
+            return False
+
+    except (HttpError, AuthError, YouTubeAPIError, google.auth.exceptions.GoogleAuthError, OSError) as e:
+        logger.error(
+            "API 接続テスト失敗: %s",
+            redact_sensitive_data(str(e), token_file, client_file),
+        )
+        return False
+
+
+def _persist_oauth_credentials(token_file: Path, credentials: Credentials) -> None:
+    """Persist credentials atomically and report filesystem errors as configuration failures."""
+    try:
+        save_credentials(token_file, credentials)
+        print(f"💾 認証トークン保存完了: {token_file}", file=sys.stderr)
+    except OSError as e:
+        raise ConfigError(
+            f"認証トークン保存失敗: {token_file} ({e})。親ディレクトリの書き込み権限と空き容量を確認してください。"
+        ) from e
 
 
 class YouTubeOAuthHandler:
@@ -142,7 +233,7 @@ class YouTubeOAuthHandler:
                 stream key 取得用に ``token_streaming.json`` を分離する用途で使用する（issue #135）
             interactive (bool): token を利用できない場合に browser OAuth を開始してよいか。
         """
-        from youtube_automation.configuration import channel_dir as _channel_dir
+        from youtube_automation.core.channel_context import channel_dir as _channel_dir
 
         channel_dir = _channel_dir()
         self._channel_dir = channel_dir
@@ -205,7 +296,7 @@ class YouTubeOAuthHandler:
         handler を生成せずファイル存在だけで判定できるよう classmethod にしている
         （client_secrets 解決や 1Password 参照を発行チェックの副作用にしない）。
         """
-        from youtube_automation.configuration import channel_dir as _channel_dir
+        from youtube_automation.core.channel_context import channel_dir as _channel_dir
 
         channel = _channel_dir()
         local = channel / "auth" / cls.READONLY_TOKEN_FILENAME
@@ -227,7 +318,7 @@ class YouTubeOAuthHandler:
         """
         resolved_token_path = cls.readonly_token_path()
         if resolved_token_path is None:
-            from youtube_automation.configuration import channel_dir as _channel_dir
+            from youtube_automation.core.channel_context import channel_dir as _channel_dir
 
             channel = _channel_dir()
             auth_dir = channel / "auth"
@@ -247,44 +338,27 @@ class YouTubeOAuthHandler:
         )
 
     def _channel_label(self) -> str:
-        """認証メッセージに埋め込むチャンネル識別ラベルを返す。
-
-        config 読み込みに失敗しても認証自体は継続できるよう、
-        ``ConfigError`` 時は auth ディレクトリの親ディレクトリ名へフォールバックする。
-        """
-        try:
-            from youtube_automation.configuration import load_config
-
-            return load_config().meta.channel_short
-        except ConfigError:
-            return self.auth_dir.resolve().parent.name
+        """設定に依存しない認証ラベルとして auth ディレクトリの親名を返す。"""
+        return self.auth_dir.resolve().parent.name
 
     def _validate_client_secrets(self):
         """client_secrets.json の存在確認"""
         if self._client_secrets_config is not None:
             validate_desktop_client_config(self._client_secrets_config)
             return
-        if self.client_secrets_file.exists() and not self.client_secrets_file.is_file():
-            raise ValidationError(f"client_secrets.json は通常ファイルである必要があります: {self.client_secrets_file}")
-        if not self.client_secrets_file.is_file():
-            searched = "\n".join(f"  - {p}" for p in client_secrets_file_candidates(self._channel_dir))
-            raise FileNotFoundError(
-                f"❌ client_secrets.json が見つかりません: {self.client_secrets_file}\n"
-                f"探索したパス:\n{searched}\n"
-                "設定手順:\n"
-                "1. チャンネルルートで "
-                "`bash .claude/skills/setup/references/oauth-client-wizard.sh` を起動\n"
-                "   (Console 手順の正本は wizard。完了すると "
-                "<channel_dir>/auth/client_secrets.json が配置されます)\n"
-                "2. または CLIENT_SECRETS_DIR 環境変数を指定 / 1Password に CLIENT_SECRETS_JSON として登録"
-            )
-        try:
-            data = json.loads(self.client_secrets_file.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as e:
-            raise ValidationError(f"client_secrets.json 読み込み失敗: {e}") from e
-        if not isinstance(data, dict):
-            raise ValidationError("client_secrets.json は JSON object である必要があります")
-        validate_desktop_client_config(data)
+        if validate_desktop_client_file(self.client_secrets_file):
+            return
+        searched = "\n".join(f"  - {p}" for p in client_secrets_file_candidates(self._channel_dir))
+        raise FileNotFoundError(
+            f"❌ client_secrets.json が見つかりません: {self.client_secrets_file}\n"
+            f"探索したパス:\n{searched}\n"
+            "設定手順:\n"
+            "1. チャンネルルートで "
+            "`bash .claude/skills/setup/references/oauth-client-wizard.sh` を起動\n"
+            "   (Console 手順の正本は wizard。完了すると "
+            "<channel_dir>/auth/client_secrets.json が配置されます)\n"
+            "2. または CLIENT_SECRETS_DIR 環境変数を指定 / 1Password に CLIENT_SECRETS_JSON として登録"
+        )
 
     def authenticate(self, force_reauth=False):
         """
@@ -318,7 +392,7 @@ class YouTubeOAuthHandler:
             if self.credentials.expired and self.credentials.refresh_token:
                 try:
                     print("🔄 トークンの更新中...", file=sys.stderr)
-                    self.credentials.refresh(Request())
+                    _refresh_credentials(self.credentials)
                     print("✅ トークン更新成功", file=sys.stderr)
                     if not self._ephemeral_credentials:
                         self._save_credentials()
@@ -332,43 +406,30 @@ class YouTubeOAuthHandler:
 
         # 新規認証が必要な場合
         if not self.credentials or not self.credentials.valid:
-            self._require_interactive_reauthentication()
-            self._validate_client_secrets()
-            channel_label = self._channel_label()
-            print(f"🌐 [{channel_label}] ブラウザで認証を実行します...", file=sys.stderr)
-            print(
-                "📝 注意: 初回認証時はブラウザが開き、Googleアカウントでのログインが必要です",
-                file=sys.stderr,
-            )
-
-            try:
-                if self._client_secrets_config is not None:
-                    flow = InstalledAppFlow.from_client_config(self._client_secrets_config, self._scopes)
-                else:
-                    flow = InstalledAppFlow.from_client_secrets_file(str(self.client_secrets_file), self._scopes)
-                # authorization_prompt_message は run_local_server() 内で
-                # ``.format(url=...)`` される。`{url}` placeholder を壊さないよう
-                # ラベル側の brace は escape する（success_message は format されない）
-                escaped_label = channel_label.replace("{", "{{").replace("}", "}}")
-                self.credentials = flow.run_local_server(
-                    port=0,
-                    authorization_prompt_message=(
-                        f"🔐 [{escaped_label}] チャンネルの OAuth 認証です。"
-                        "ブラウザが開かない場合は以下の URL を開いてください"
-                        "（URL 内 redirect_uri のポート番号がこのターミナルに対応するタブの目印です）: {url}"
-                    ),
-                    success_message=(
-                        f"[{channel_label}] チャンネルの OAuth 認証が完了しました。"
-                        "このタブを閉じてターミナルに戻ってください。"
-                    ),
-                )
-                print("✅ OAuth 2.0 認証成功", file=sys.stderr)
-                self._save_credentials()
-            except (ValueError, OSError, google.auth.exceptions.GoogleAuthError) as e:
-                logger.error("OAuth 2.0 認証失敗: %s", redact_sensitive_data(str(e), self.client_secrets_file))
-                raise AuthError("OAuth 2.0 認証に失敗しました") from e
+            self._authenticate_interactively()
 
         return self.credentials
+
+    def _authenticate_interactively(self) -> None:
+        """Run the permitted browser flow and persist its credentials with existing error redaction."""
+        self._require_interactive_reauthentication()
+        self._validate_client_secrets()
+        channel_label = self._channel_label()
+        print(f"🌐 [{channel_label}] ブラウザで認証を実行します...", file=sys.stderr)
+        print(
+            "📝 注意: 初回認証時はブラウザが開き、Googleアカウントでのログインが必要です",
+            file=sys.stderr,
+        )
+
+        try:
+            self.credentials = _run_browser_authorization(
+                self._client_secrets_config, self.client_secrets_file, self._scopes, channel_label
+            )
+            print("✅ OAuth 2.0 認証成功", file=sys.stderr)
+            self._save_credentials()
+        except (ValueError, OSError, google.auth.exceptions.GoogleAuthError) as e:
+            logger.error("OAuth 2.0 認証失敗: %s", redact_sensitive_data(str(e), self.client_secrets_file))
+            raise AuthError("OAuth 2.0 認証に失敗しました") from e
 
     def refresh_existing_credentials(self) -> Credentials:
         """既存 refresh token だけを使い、ブラウザを開かず access token を更新する。"""
@@ -383,7 +444,7 @@ class YouTubeOAuthHandler:
         if not credentials.refresh_token:
             raise AuthError("既存の OAuth token に refresh token がありません")
         try:
-            credentials.refresh(Request())
+            _refresh_credentials(credentials)
         except google.auth.exceptions.GoogleAuthError as exc:
             logger.warning("token refresh 失敗: %s", redact_sensitive_data(str(exc)))
             raise AuthError("OAuth token の更新に失敗しました。refresh token が失効している可能性があります") from exc
@@ -403,14 +464,7 @@ class YouTubeOAuthHandler:
         Raises:
             ConfigError: トークンファイルの書き込みに失敗した場合。
         """
-        try:
-            save_credentials(self.token_file, self.credentials)
-            print(f"💾 認証トークン保存完了: {self.token_file}", file=sys.stderr)
-        except OSError as e:
-            raise ConfigError(
-                f"認証トークン保存失敗: {self.token_file} ({e})。"
-                "親ディレクトリの書き込み権限と空き容量を確認してください。"
-            ) from e
+        _persist_oauth_credentials(self.token_file, self.credentials)
 
     def get_youtube_service(self):
         """
@@ -422,12 +476,7 @@ class YouTubeOAuthHandler:
         if not self.credentials:
             self.authenticate()
 
-        try:
-            service = build_youtube_service(self.credentials)
-            print("✅ YouTube Data API サービス接続成功", file=sys.stderr)
-            return service
-        except HttpError as e:
-            raise YouTubeAPIError.from_http_error(e, "YouTube Data API サービス接続失敗") from e
+        return _connect_youtube_service(self.credentials)
 
     def test_connection(self):
         """
@@ -436,26 +485,4 @@ class YouTubeOAuthHandler:
         Returns:
             bool: 接続成功可否
         """
-        try:
-            service = self.get_youtube_service()
-            # チャンネル情報取得でテスト
-            response = service.channels().list(part="snippet,statistics", mine=True).execute()
-
-            if response["items"]:
-                channel = response["items"][0]
-                channel_title = channel["snippet"]["title"]
-                subscriber_count = channel["statistics"].get("subscriberCount", "N/A")
-                print("✅ API接続テスト成功", file=sys.stderr)
-                print(f"📺 チャンネル名: {channel_title}", file=sys.stderr)
-                print(f"👥 登録者数: {subscriber_count}", file=sys.stderr)
-                return True
-            else:
-                print("❌ チャンネル情報が取得できませんでした", file=sys.stderr)
-                return False
-
-        except (HttpError, AuthError, YouTubeAPIError, google.auth.exceptions.GoogleAuthError, OSError) as e:
-            logger.error(
-                "API 接続テスト失敗: %s",
-                redact_sensitive_data(str(e), self.token_file, self.client_secrets_file),
-            )
-            return False
+        return _test_youtube_connection(self.get_youtube_service, self.token_file, self.client_secrets_file)

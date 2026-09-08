@@ -33,6 +33,7 @@ _ROOT = REPO_ROOT
 _SUNO_ROOT = "youtube_automation.domains.suno"
 _DOWNLOADED_ROOT = f"{_SUNO_ROOT}.downloaded"
 _METADATA_ROOT = "youtube_automation.domains.metadata"
+_METADATA_SERVICE = "youtube_automation.application.metadata.service"
 
 _DOMAIN_MODULES = (
     f"{_DOWNLOADED_ROOT}.models",
@@ -46,7 +47,6 @@ _DOMAIN_MODULES = (
     f"{_SUNO_ROOT}.prompts",
     f"{_SUNO_ROOT}.playlist",
     f"{_SUNO_ROOT}.selection",
-    f"{_METADATA_ROOT}.service",
     f"{_METADATA_ROOT}.titles",
     f"{_METADATA_ROOT}.descriptions",
     f"{_METADATA_ROOT}.tags",
@@ -105,10 +105,9 @@ def test_downloaded_facade_exposes_only_domain_operations() -> None:
 
 def test_metadata_facade_has_fixed_public_surface_and_class_identity() -> None:
     facade = importlib.import_module(_METADATA_ROOT)
-    service = importlib.import_module(f"{_METADATA_ROOT}.service")
+    service = importlib.import_module(_METADATA_SERVICE)
 
     assert facade.__all__ == [
-        "BAHMetadataGenerator",
         "LOCALIZED_TITLE_PLACEHOLDERS",
         "SceneTitleViolation",
         "build_short_description",
@@ -118,7 +117,8 @@ def test_metadata_facade_has_fixed_public_surface_and_class_identity() -> None:
         "validate_localizations_title_templates",
         "validate_scene_phrases",
     ]
-    assert facade.BAHMetadataGenerator is service.BAHMetadataGenerator
+    assert service.BAHMetadataGenerator.__module__ == _METADATA_SERVICE
+    assert not hasattr(facade, "BAHMetadataGenerator")
     assert "main" not in facade.__all__
     assert "_extract_pattern_key" not in facade.__all__
     assert "_localized_title_values" not in facade.__all__
@@ -129,7 +129,7 @@ def test_metadata_service_module_cli_does_not_emit_runtime_warning() -> None:
     env["PYTHONPATH"] = str(_ROOT / "src")
 
     result = subprocess.run(
-        [sys.executable, "-m", f"{_METADATA_ROOT}.service"],
+        [sys.executable, "-m", _METADATA_SERVICE],
         cwd=_ROOT,
         env=env,
         capture_output=True,
@@ -139,7 +139,7 @@ def test_metadata_service_module_cli_does_not_emit_runtime_warning() -> None:
 
     assert result.returncode == 1
     assert "RuntimeWarning" not in result.stderr
-    assert "使用法: python -m youtube_automation.domains.metadata.service" in result.stdout
+    assert "使用法: python -m youtube_automation.application.metadata.service" in result.stdout
 
 
 def _resolve_imported_modules(module_name: str, tree: ast.AST) -> set[str]:
@@ -177,6 +177,7 @@ def test_domain_dependency_edges_are_one_way() -> None:
         f"{_DOWNLOADED_ROOT}.validation": {
             f"{_DOWNLOADED_ROOT}.workflow",
             f"{_DOWNLOADED_ROOT}.models",
+            f"{_SUNO_ROOT}.config",  # Canonical owner of the shared genre-line validation.
         },
         f"{_DOWNLOADED_ROOT}.archive": {
             f"{_DOWNLOADED_ROOT}.models",
@@ -187,7 +188,7 @@ def test_domain_dependency_edges_are_one_way() -> None:
             f"{_DOWNLOADED_ROOT}.workflow",
             f"{_DOWNLOADED_ROOT}.models",
         },
-        f"{_METADATA_ROOT}.service": {
+        _METADATA_SERVICE: {
             f"{_METADATA_ROOT}.titles",
             f"{_METADATA_ROOT}.descriptions",
             f"{_METADATA_ROOT}.tags",
@@ -199,7 +200,7 @@ def test_domain_dependency_edges_are_one_way() -> None:
         },
     }
 
-    for module_name in _DOMAIN_MODULES:
+    for module_name in (*_DOMAIN_MODULES, _METADATA_SERVICE):
         tree = ast.parse(_module_path(module_name).read_text(encoding="utf-8"))
         imported = _resolve_imported_modules(module_name, tree)
         domain_prefix = _SUNO_ROOT if module_name.startswith(_DOWNLOADED_ROOT) else _METADATA_ROOT

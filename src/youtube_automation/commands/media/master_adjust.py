@@ -11,12 +11,13 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
 
+from youtube_automation.commands._shared.arguments import add_optional_collection_argument
 from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ValidationError
+from youtube_automation.domains.collections.paths import CollectionPaths, resolve_collection_dir
 from youtube_automation.domains.media.audio_adjustments import read_audio_adjustments, validate_master_settings
 from youtube_automation.infrastructure.file_lock import file_lock
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths, resolve_collection_dir
 
 _SKILL_NAME = "masterup"
 _DEFAULT_BITRATE = "192k"
@@ -70,11 +71,8 @@ def build_ffmpeg_cmd(source: Path, output: Path, settings: object, bitrate: str)
     ]
 
 
-def _adjust_master_unlocked(collection_dir: Path, *, quiet: bool = False) -> Path:
-    """Rebuild master.mp3 from the immutable pre-adjust backup without cumulative effects."""
-    paths = CollectionPaths(collection_dir)
-    master = paths.master_audio_path
-    backup = paths.master_adjustment_backup_path
+def _validate_master_paths(collection_dir: Path, master: Path, backup: Path) -> None:
+    """Require local, regular audio files before processing or replacing them."""
     collection_root = collection_dir.resolve()
     for candidate, label in ((master, "master"), (backup, "master 調整原本")):
         if not candidate.parent.resolve().is_relative_to(collection_root):
@@ -83,6 +81,14 @@ def _adjust_master_unlocked(collection_dir: Path, *, quiet: bool = False) -> Pat
         raise ValidationError(f"マスター音源が見つかりません: {master}")
     if backup.exists() and (not backup.is_file() or backup.is_symlink()):
         raise ValidationError(f"master 調整原本は通常ファイルである必要があります: {backup}")
+
+
+def _adjust_master_unlocked(collection_dir: Path, *, quiet: bool = False) -> Path:
+    """Rebuild master.mp3 from the immutable pre-adjust backup without cumulative effects."""
+    paths = CollectionPaths(collection_dir)
+    master = paths.master_audio_path
+    backup = paths.master_adjustment_backup_path
+    _validate_master_paths(collection_dir, master, backup)
     if shutil.which("ffmpeg") is None:
         raise ValidationError("ffmpeg が見つかりません (brew install ffmpeg など)")
 
@@ -138,7 +144,7 @@ def adjust_master(collection_dir: Path, *, quiet: bool = False) -> Path:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="保存済み Audio Studio 設定を master.mp3 全体へ適用")
-    parser.add_argument("collection", nargs="?", help="コレクションディレクトリ (省略時は CWD)")
+    add_optional_collection_argument(parser)
     parser.add_argument("--quiet", action="store_true", help="完了表示を抑制")
     return parser
 

@@ -1,12 +1,14 @@
 """YouTube playlist upload operations owned by the uploads domain."""
 
 import logging
+from abc import abstractmethod
 from pathlib import Path
 from typing import Protocol
 
-from youtube_automation.configuration import channel_dir, load_config, reset
-from youtube_automation.core.adapters.media import CollectionPaths
+from youtube_automation.configuration import load_config, reset
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import ValidationError, WorkflowStateError, YouTubeAPIError
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.uploads.playlist_resolution import (
     check_playlist_assignment,
@@ -27,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 class _YouTubeClientScope(Protocol):
     @property
+    @abstractmethod
     def youtube(self): ...
 
 
@@ -40,6 +43,43 @@ _QUOTA_UNITS_BY_BUCKET = {
 
 def _log_playlist_quota(bucket: str, **metadata):
     return youtube_quota_recorder(bucket, _QUOTA_UNITS_BY_BUCKET[bucket], metadata=metadata or None)
+
+
+def _read_sync_candidate(col_path: Path) -> tuple[str, str, str] | None:
+    """Read the theme, video ID and display title required for playlist synchronization."""
+    paths = CollectionPaths(col_path)
+
+    # workflow-state.json からテーマ取得
+    ws_path = paths.workflow_state_path
+    state = read_workflow_state_or_none(ws_path)
+    if state is None:
+        logger.warning(f"  {col_path.name}: workflow-state.json なし — スキップ")
+        return None
+
+    theme = state.theme
+    if not theme:
+        logger.warning(f"  {col_path.name}: theme 未設定 — スキップ")
+        return None
+
+    # upload_tracking.json から video_id 取得
+    tracking_path = paths.tracking_path
+    if not path_exists(tracking_path):
+        logger.warning(f"  {col_path.name}: upload_tracking.json なし — スキップ")
+        return None
+
+    tracking = read_json(tracking_path)
+
+    video_id = tracking.get("complete_collection", {}).get("video_id")
+    if not video_id:
+        logger.warning(f"  {col_path.name}: video_id なし — スキップ")
+        return None
+
+    # タイトル取得（表示用）
+    steps = state.get("steps")
+    planning = steps.get("planning") if isinstance(steps, dict) else None
+    title = planning.get("final_title", col_path.name) if isinstance(planning, dict) else col_path.name
+
+    return theme, video_id, title
 
 
 class PlaylistManager:
@@ -327,37 +367,10 @@ class PlaylistManager:
             if not path_is_directory(col_path) or col_path.name.startswith("."):
                 continue
 
-            paths = CollectionPaths(col_path)
-
-            # workflow-state.json からテーマ取得
-            ws_path = paths.workflow_state_path
-            state = read_workflow_state_or_none(ws_path)
-            if state is None:
-                logger.warning(f"  {col_path.name}: workflow-state.json なし — スキップ")
+            candidate = _read_sync_candidate(col_path)
+            if candidate is None:
                 continue
-
-            theme = state.theme
-            if not theme:
-                logger.warning(f"  {col_path.name}: theme 未設定 — スキップ")
-                continue
-
-            # upload_tracking.json から video_id 取得
-            tracking_path = paths.tracking_path
-            if not path_exists(tracking_path):
-                logger.warning(f"  {col_path.name}: upload_tracking.json なし — スキップ")
-                continue
-
-            tracking = read_json(tracking_path)
-
-            video_id = tracking.get("complete_collection", {}).get("video_id")
-            if not video_id:
-                logger.warning(f"  {col_path.name}: video_id なし — スキップ")
-                continue
-
-            # タイトル取得（表示用）
-            steps = state.get("steps")
-            planning = steps.get("planning") if isinstance(steps, dict) else None
-            title = planning.get("final_title", col_path.name) if isinstance(planning, dict) else col_path.name
+            theme, video_id, title = candidate
 
             explicit = self._planning_playlists(col_path)
             activity_override = self._planning_activities(col_path) if explicit is None else None
@@ -396,8 +409,6 @@ class PlaylistManager:
         playlists_config = self.config.playlists.items
         removed_per_playlist: dict[str, int] = {}
 
-        deleted_titles = {"Deleted video", "Private video"}
-
         for key, pl in playlists_config.items():
             playlist_id = pl.get("playlist_id")
             if not playlist_id:
@@ -419,30 +430,7 @@ class PlaylistManager:
                     on_attempt=_log_playlist_quota("playlistItems.list", playlist_id=playlist_id),
                 )
 
-                for item in validate_youtube_response_items(resp, "playlistItems.list"):
-                    if not isinstance(item, dict) or not isinstance(item.get("snippet"), dict):
-                        raise ValidationError("playlistItems.list response is missing snippet")
-                    snippet = item["snippet"]
-                    title = snippet.get("title", "")
-                    if title in deleted_titles:
-                        item_id = item.get("id")
-                        if not isinstance(item_id, str) or not item_id:
-                            raise ValidationError("playlistItems.list response is missing id")
-                        resource_id = snippet.get("resourceId") or {}
-                        video_id = resource_id.get("videoId", "?") if isinstance(resource_id, dict) else "?"
-                        if dry_run:
-                            print(f"  [DRY-RUN] {key}: 除去予定 {video_id} ({title})")
-                        else:
-                            request = youtube.playlistItems().delete(id=item_id)
-                            execute_youtube_request(
-                                request,
-                                "playlistItems.delete failed",
-                                on_attempt=_log_playlist_quota(
-                                    "playlistItems.delete", playlist_id=playlist_id, video_id=video_id
-                                ),
-                            )
-                            logger.info(f"  {key}: 除去 {video_id} ({title})")
-                        removed += 1
+                removed += _clean_playlist_page(youtube, resp, key=key, playlist_id=playlist_id, dry_run=dry_run)
 
                 page_token = resp.get("nextPageToken")
                 if not page_token:
@@ -471,3 +459,33 @@ class PlaylistManager:
 
         total = sum(len(v) for v in results.values())
         print(f"\n=== 完了: {len(results)} コレクション, {total} 件の割り当て ===")
+
+
+def _clean_playlist_page(youtube, response: dict, *, key: str, playlist_id: str, dry_run: bool) -> int:
+    """Validate one listing page and remove only deleted/private placeholders."""
+    removed = 0
+    deleted_titles = {"Deleted video", "Private video"}
+    for item in validate_youtube_response_items(response, "playlistItems.list"):
+        if not isinstance(item, dict) or not isinstance(item.get("snippet"), dict):
+            raise ValidationError("playlistItems.list response is missing snippet")
+        snippet = item["snippet"]
+        title = snippet.get("title", "")
+        if title in deleted_titles:
+            item_id = item.get("id")
+            if not isinstance(item_id, str) or not item_id:
+                raise ValidationError("playlistItems.list response is missing id")
+            resource_id = snippet.get("resourceId") or {}
+            video_id = resource_id.get("videoId", "?") if isinstance(resource_id, dict) else "?"
+            if dry_run:
+                print(f"  [DRY-RUN] {key}: 除去予定 {video_id} ({title})")
+            else:
+                request = youtube.playlistItems().delete(id=item_id)
+                execute_youtube_request(
+                    request,
+                    "playlistItems.delete failed",
+                    on_attempt=_log_playlist_quota("playlistItems.delete", playlist_id=playlist_id, video_id=video_id),
+                )
+                logger.info(f"  {key}: 除去 {video_id} ({title})")
+            removed += 1
+
+    return removed

@@ -11,12 +11,12 @@ from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.configuration import load_config
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ValidationError
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.media.acceptance import MediaAcceptancePolicy, MediaAcceptanceReport
 from youtube_automation.domains.media.loudness_receipt import resolve_max_deviation_lu
 from youtube_automation.domains.suno.prompts import read_suno_duration_filter
 from youtube_automation.infrastructure.media.audio_acceptance import FFmpegAudioInspector
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 from youtube_automation.infrastructure.notifications.discord import create_discord_notification_sink
 
 _MINIMUM_INTEGRATED_LUFS = -40.0

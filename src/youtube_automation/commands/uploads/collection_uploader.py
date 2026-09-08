@@ -3,16 +3,16 @@
 import argparse
 import logging
 
-from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.configuration import load_config
-from youtube_automation.core.errors import AutomationError
-from youtube_automation.domains.notifications import NotificationEvent, NotificationEventKind
-from youtube_automation.domains.uploads.collection import (
+from youtube_automation.application.uploads.collection import (
     ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED,
     ACTION_COMPLETE_COLLECTION_UPLOADED,
     CollectionUploader,
 )
-from youtube_automation.infrastructure.google.youtube import create_authenticated_youtube_clients
+from youtube_automation.application.youtube_auth import create_authenticated_youtube_clients
+from youtube_automation.commands._shared.cli_harness import UPLOAD_COMMAND_ERRORS, run_cli
+from youtube_automation.configuration import load_config
+from youtube_automation.core.errors import AutomationError
+from youtube_automation.domains.notifications import NotificationEvent, NotificationEventKind
 from youtube_automation.infrastructure.notifications.discord import create_discord_notification_sink
 
 
@@ -96,8 +96,7 @@ def main(argv: list[str] | None = None) -> int:
         build_parser,
         run,
         argv,
-        failure_message="エラー",
         interrupt_message="処理が中断されました",
         interrupt_exit_code=None,
-        handled_errors=(AutomationError, OSError, ValueError),
+        handled_errors=UPLOAD_COMMAND_ERRORS,
     )

@@ -14,8 +14,8 @@ from pathlib import Path
 
 from googleapiclient.errors import HttpError
 
+from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
 from youtube_automation.core.errors import ValidationError, YouTubeAPIError
-from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 
 CHANNELS_PART = "snippet,brandingSettings,localizations"
 SNAPSHOT_SOURCE = f"youtube.channels.list(part={CHANNELS_PART})"
