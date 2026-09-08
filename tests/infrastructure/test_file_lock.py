@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import builtins
 import contextlib
+import errno
 import importlib
 import sys
 import threading
@@ -77,6 +78,76 @@ def test_file_lock_releases_msvcrt_lock_when_body_raises(tmp_path: Path, monkeyp
                 raise ValueError("critical section failed")
 
     assert calls == [(fake_msvcrt.LK_NBLCK, 1), (fake_msvcrt.LK_UNLCK, 1)]
+
+
+def test_try_file_lock_takes_msvcrt_lock_when_fcntl_is_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Given fcntl なし / msvcrt あり
+    When non-blocking ロックを取得・解放する
+    Then Windows でも msvcrt の排他ロックを取得し、取得成功を返す。
+    """
+    calls: list[tuple[int, int]] = []
+    fake_msvcrt = ModuleType("msvcrt")
+    fake_msvcrt.LK_NBLCK = 1
+    fake_msvcrt.LK_UNLCK = 2
+    fake_msvcrt.locking = lambda _fd, mode, size: calls.append((mode, size))
+
+    with _import_file_lock_without(monkeypatch, {"fcntl"}, msvcrt_module=fake_msvcrt) as module:
+        with module.try_file_lock(tmp_path / "session-update") as acquired:
+            assert acquired
+
+    assert calls == [(fake_msvcrt.LK_NBLCK, 1), (fake_msvcrt.LK_UNLCK, 1)]
+    assert (tmp_path / "session-update.lock").exists()
+
+
+def test_try_file_lock_reports_contention_without_blocking_on_windows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Given Windows で他プロセスが同じロックを保持している
+    When non-blocking ロックを試す
+    Then 待機せず取得失敗を返し、解放も行わない。
+    """
+    calls: list[int] = []
+    sleeps: list[float] = []
+    fake_msvcrt = ModuleType("msvcrt")
+    fake_msvcrt.LK_NBLCK = 1
+    fake_msvcrt.LK_UNLCK = 2
+
+    def locking(_descriptor: int, mode: int, _size: int) -> None:
+        calls.append(mode)
+        raise OSError(errno.EACCES, "lock contention")
+
+    fake_msvcrt.locking = locking
+
+    with _import_file_lock_without(monkeypatch, {"fcntl"}, msvcrt_module=fake_msvcrt) as module:
+        monkeypatch.setattr(module.time, "sleep", sleeps.append)
+        with module.try_file_lock(tmp_path / "session-update") as acquired:
+            assert not acquired
+
+    assert calls == [fake_msvcrt.LK_NBLCK]
+    assert sleeps == []
+
+
+def test_try_file_lock_reports_contention_between_threads_without_platform_locks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Given fcntl / msvcrt の双方がない環境で先行ロックが保持されている
+    When 別スレッドが non-blocking ロックを試す
+    Then 待機せず取得失敗を返す。
+    """
+    outcomes: list[bool] = []
+
+    def try_lock() -> None:
+        with module.try_file_lock(tmp_path / "session-update") as acquired:
+            outcomes.append(acquired)
+
+    with _import_file_lock_without(monkeypatch, {"fcntl", "msvcrt"}) as module:
+        with module.try_file_lock(tmp_path / "session-update") as acquired:
+            assert acquired
+            contender = threading.Thread(target=try_lock)
+            contender.start()
+            contender.join()
+
+    assert outcomes == [False]
 
 
 def test_file_descriptor_lock_retries_windows_contention_until_acquired(

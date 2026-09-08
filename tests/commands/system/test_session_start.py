@@ -22,7 +22,8 @@ def import_without_fcntl(name, *args, **kwargs):
     return original_import(name, *args, **kwargs)
 builtins.__import__ = import_without_fcntl
 from youtube_automation.commands.system import session_start
-assert session_start.fcntl is None
+from youtube_automation.infrastructure import file_lock
+assert session_start.try_file_lock is file_lock.try_file_lock
 """
 
     environment = os.environ | {"PYTHONPATH": str(REPO_ROOT / "src")}

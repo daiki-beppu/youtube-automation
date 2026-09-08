@@ -7,16 +7,12 @@ import os
 import subprocess
 from pathlib import Path
 
-try:
-    import fcntl
-except ImportError:  # pragma: no cover - exercised by an import subprocess
-    fcntl = None  # type: ignore[assignment]
-
 from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.commands.system.automation_update import _load_pyproject, _resolve_repo_root
 from youtube_automation.commands.system.automation_update_followup import migrate_action, render_action
 from youtube_automation.commands.system.automation_update_refs import _detect_pin
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.file_lock import try_file_lock
 
 _PREFIX = "[yt-session-start]"
 _CHECK_TIMEOUT_SECONDS = 3
@@ -96,15 +92,11 @@ def _run(_: argparse.Namespace) -> int:
         pin = _detect_pin(_load_pyproject(root / "pyproject.toml"))
         if pin.kind == "sha":
             return 0
-        lock_path = root / ".automation-run" / "session-update.lock"
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
-        with lock_path.open("w", encoding="utf-8") as lock:
-            if fcntl is not None:
-                try:
-                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                except BlockingIOError:
-                    print(f"{_PREFIX} 別 session が追従中です")
-                    return 0
+        # try_file_lock は `<path>.lock` を lock file にするため、`session-update.lock` を共有し続ける。
+        with try_file_lock(root / ".automation-run" / "session-update") as acquired:
+            if not acquired:
+                print(f"{_PREFIX} 別 session が追従中です")
+                return 0
             check = _command(["uv", "run", "yt-automation-update", "check"], root, timeout=_CHECK_TIMEOUT_SECONDS)
             if check.returncode != 1:
                 return 0
