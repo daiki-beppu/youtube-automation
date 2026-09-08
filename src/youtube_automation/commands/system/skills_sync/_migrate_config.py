@@ -176,6 +176,14 @@ def _restore_files(originals: Mapping[Path, bytes | None]) -> None:
             path.write_bytes(payload)
 
 
+def _verify_migrated_values(channel_dir: Path, resolved_before: Mapping[str, object]) -> None:
+    """Require the public loader to resolve identical settings after file migration."""
+    for skill, before in resolved_before.items():
+        after = load_skill_config(skill, use_cache=False, channel_dir=channel_dir)
+        if after != before:
+            raise ConfigError(f"公開 loader の設定解決値が変化しました: {skill}")
+
+
 def apply_migration_plan(plan: MigrationPlan) -> None:
     """Stage all writes, then replace destinations and delete sources as one transaction.
 
@@ -196,10 +204,7 @@ def apply_migration_plan(plan: MigrationPlan) -> None:
             os.replace(temporary, destination)
         for action in plan.actions:
             action.source.unlink()
-        for skill, before in resolved_before.items():
-            after = load_skill_config(skill, use_cache=False, channel_dir=plan.channel_dir)
-            if after != before:
-                raise ConfigError(f"公開 loader の設定解決値が変化しました: {skill}")
+        _verify_migrated_values(plan.channel_dir, resolved_before)
     except (ConfigError, OSError) as exc:
         for temporary in staged.values():
             temporary.unlink(missing_ok=True)

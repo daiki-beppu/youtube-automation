@@ -6,6 +6,8 @@ import pytest
 
 from tests.helpers.paths import FIXTURES_DIR
 from youtube_automation.commands.analytics import launch_curve
+from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.analytics import launch_curve_data
 from youtube_automation.infrastructure.analytics.launch_curve_data import build_launch_curve_frame
 
 FIXTURES = FIXTURES_DIR / "sample_launch_curve"
@@ -226,3 +228,34 @@ def test_build_launch_curve_frame_excludes_rows_before_publish_date():
 
     assert list(df["days_since_publish"]) == [0, 1]
     assert list(df["cumulative_views"]) == [10, 30]
+
+
+@pytest.mark.parametrize("kind", ["daily_per_video", "reporting_api"])
+def test_snapshot_reader_selects_latest_filename_and_propagates_corrupt_json(tmp_path: Path, kind: str) -> None:
+    loader = (
+        launch_curve_data.load_latest_daily_snapshot
+        if kind == "daily_per_video"
+        else launch_curve_data.load_latest_reporting_snapshot
+    )
+    assert loader(tmp_path) is None
+    directory = tmp_path / "analytics" / kind
+    directory.mkdir(parents=True)
+    assert loader(tmp_path) is None
+    (directory / "20260102.json").write_text('{"new": true}')
+    (directory / "20260101.json").write_text('{"old": true}')
+    assert loader(tmp_path) == {"new": True}
+    (directory / "20260103.json").write_text("{broken")
+    with pytest.raises(json.JSONDecodeError):
+        loader(tmp_path)
+
+
+def test_video_metadata_reader_requires_snapshot_and_rejects_corrupt_latest(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match="analytics_data_.*見つかりません"):
+        launch_curve_data.load_video_metadata(tmp_path)
+    directory = tmp_path / "data"
+    directory.mkdir()
+    (directory / "analytics_data_20260101.json").write_text('{"video_analytics": null}')
+    assert launch_curve_data.load_video_metadata(tmp_path) == {}
+    (directory / "analytics_data_20260102.json").write_text("{broken")
+    with pytest.raises(json.JSONDecodeError):
+        launch_curve_data.load_video_metadata(tmp_path)

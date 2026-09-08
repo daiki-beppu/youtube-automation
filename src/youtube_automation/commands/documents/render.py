@@ -8,13 +8,13 @@ from pathlib import Path
 
 from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.core.errors import DocumentRenderError, DocumentValidationError
+from youtube_automation.domains.documents.published import read_published_json_document
 from youtube_automation.domains.documents.schema_registry import (
     RepositorySchema,
     repository_schema_names,
     validate_repository_document,
 )
 from youtube_automation.infrastructure.documents import publish_json_document
-from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 
 
 def build_parser() -> argparse.ArgumentParser:

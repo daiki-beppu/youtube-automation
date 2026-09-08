@@ -10,7 +10,9 @@ import logging
 import sys
 from datetime import datetime, timedelta
 
-from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.application.youtube_auth import create_readonly_youtube_clients
+from youtube_automation.configuration import load_config
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import AutomationError, YouTubeAPIError
 from youtube_automation.domains.analytics.query_contract import (
     TARGETED_QUERY_VIEWS_METRIC,
@@ -19,7 +21,6 @@ from youtube_automation.domains.analytics.query_contract import (
 from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
 from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.infrastructure.analytics_adapter import AnalyticsAdapter, YouTubeDataAdapter
-from youtube_automation.infrastructure.google.youtube import create_readonly_youtube_clients
 from youtube_automation.infrastructure.youtube.reporting_api import ReportingAPIClient
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,51 @@ def _record_read_quota(bucket: str, *, service: str = _QUOTA_SERVICE) -> None:
     # tracker 内部の警告 print が stdout 契約（--json 等）を汚さないよう stderr へ逃がす
     with contextlib.redirect_stdout(sys.stderr):
         cost_tracker.log_quota(service, bucket, _READ_QUOTA_UNITS)
+
+
+def _collection_record(item: dict) -> dict:
+    """Map a playlist item to the collection status format."""
+    snippet = item["snippet"]
+    video_id = snippet["resourceId"]["videoId"]
+    record = {
+        "collection_name": snippet["title"],
+        "published_at": snippet["publishedAt"][:10],
+        "video_id": video_id,
+        "url": f"https://youtu.be/{video_id}",
+    }
+    return record
+
+
+def _add_video_statistics(collector: YouTubeAnalyticsCollector, collections: list[dict]) -> None:
+    # 個別動画の Analytics 統計を OAuth で一括取得
+    video_ids = [c["video_id"] for c in collections if "video_id" in c]
+    if video_ids:
+        logger.info(f"📊 {len(video_ids)}本の動画 Analytics を取得中...")
+        stats_map = {}
+        end_date = datetime.now().strftime("%Y-%m-%d")
+        start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
+        try:
+            response = collector.analytics_service.query(
+                ids=f"channel=={collector.channel_id}",
+                startDate=start_date,
+                endDate=end_date,
+                metrics=f"{TARGETED_QUERY_VIEWS_METRIC},estimatedMinutesWatched,averageViewDuration",
+                dimensions="video",
+                filters=f"video=={','.join(video_ids)}",
+                sort=TARGETED_QUERY_VIEWS_SORT,
+            )
+            for row in response.get("rows", []):
+                stats_map[row[0]] = {
+                    "views": row[1],
+                    "watch_time_min": round(row[2], 1),
+                    "avg_view_duration_sec": row[3],
+                }
+        except YouTubeAPIError as e:
+            logger.warning(f"⚠️ Analytics 取得エラー: {e}")
+        for c in collections:
+            vid = c.get("video_id")
+            if vid and vid in stats_map:
+                c["stats"] = stats_map[vid]
 
 
 def get_channel_latest_status():
@@ -116,15 +162,7 @@ def get_channel_latest_status():
 
             for item in playlist_items_response["items"]:
                 video_title = item["snippet"]["title"]
-                collections.append(
-                    {
-                        "collection_name": video_title,
-                        "published_at": item["snippet"]["publishedAt"][:10],
-                        "video_id": item["snippet"]["resourceId"]["videoId"],
-                        "url": f"https://youtu.be/{item['snippet']['resourceId']['videoId']}",
-                        "playlist_source": playlist["title"],
-                    }
-                )
+                collections.append(_collection_record(item) | {"playlist_source": playlist["title"]})
                 logger.info(f"  ✅ {video_title}")
 
         # 投稿日時で降順ソート（新しい順）
@@ -138,44 +176,9 @@ def get_channel_latest_status():
                 uploads_playlist_id, max_results=10
             )
             for item in recent_videos_response.get("items", []):
-                collections.append(
-                    {
-                        "collection_name": item["snippet"]["title"],
-                        "published_at": item["snippet"]["publishedAt"][:10],
-                        "video_id": item["snippet"]["resourceId"]["videoId"],
-                        "url": f"https://youtu.be/{item['snippet']['resourceId']['videoId']}",
-                    }
-                )
+                collections.append(_collection_record(item))
 
-        # 個別動画の Analytics 統計を OAuth で一括取得
-        video_ids = [c["video_id"] for c in collections if "video_id" in c]
-        if video_ids:
-            logger.info(f"📊 {len(video_ids)}本の動画 Analytics を取得中...")
-            stats_map = {}
-            end_date = datetime.now().strftime("%Y-%m-%d")
-            start_date = (datetime.now() - timedelta(days=365)).strftime("%Y-%m-%d")
-            try:
-                response = collector.analytics_service.query(
-                    ids=f"channel=={collector.channel_id}",
-                    startDate=start_date,
-                    endDate=end_date,
-                    metrics=f"{TARGETED_QUERY_VIEWS_METRIC},estimatedMinutesWatched,averageViewDuration",
-                    dimensions="video",
-                    filters=f"video=={','.join(video_ids)}",
-                    sort=TARGETED_QUERY_VIEWS_SORT,
-                )
-                for row in response.get("rows", []):
-                    stats_map[row[0]] = {
-                        "views": row[1],
-                        "watch_time_min": round(row[2], 1),
-                        "avg_view_duration_sec": row[3],
-                    }
-            except YouTubeAPIError as e:
-                logger.warning(f"⚠️ Analytics 取得エラー: {e}")
-            for c in collections:
-                vid = c.get("video_id")
-                if vid and vid in stats_map:
-                    c["stats"] = stats_map[vid]
+        _add_video_statistics(collector, collections)
 
         # コレクション数とトラック数を動的算出
         collections_count = len(collections)

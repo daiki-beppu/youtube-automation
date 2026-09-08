@@ -26,8 +26,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from youtube_automation.configuration import channel_dir
 from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import ValidationError
 from youtube_automation.infrastructure.media.stock import SOURCE_ROLES, archive_to_stock, load_stock_config
 

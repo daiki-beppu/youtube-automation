@@ -1,12 +1,7 @@
-"""yt-discover-competitors のパイプライン orchestration（Issue #114）。
+"""競合探索の YouTube API 通信と検索キャッシュを所有する。
 
-YouTube Data API I/O と公開関数 `discover_competitors` を提供する。
-ドメイン型・純粋スコアリング・フィルタは `competitor_scoring.py` を参照。
-
-設計方針:
-- 境界（CLI）で `DiscoveryParams` に正規化された値だけをこのモジュールが受け取る
-- API 呼び出しと純粋関数を別モジュールに分離する
-- `googleapiclient.errors.HttpError` は `YouTubeAPIError` で包む
+設定による除外と探索の実行順は application.analytics.competitor_discovery、
+純粋なスコアリングとフィルタは competitor_scoring が所有する。
 """
 
 from __future__ import annotations
@@ -15,22 +10,15 @@ import json
 import logging
 import os
 import time
-from collections import defaultdict
-from dataclasses import replace
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
 
-from youtube_automation.configuration import channel_dir, load_config
-from youtube_automation.core.errors import YouTubeAPIError
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.infrastructure.analytics.competitor_scoring import (
     _RECENT_VIDEOS_PER_CHANNEL,
     CandidateChannel,
-    DiscoveryParams,
-    ScoredCandidate,
     VideoMetric,
-    _apply_filters,
-    _score_candidate,
 )
 from youtube_automation.infrastructure.retry import execute_with_retry
 
@@ -110,14 +98,6 @@ def _cached_search_channels(
     return hits
 
 
-def _discovered_channel_ids() -> set[str]:
-    return {
-        channel_id
-        for channel in load_config().analytics.benchmark.channels
-        if isinstance(channel, dict) and isinstance((channel_id := channel.get("id")), str) and channel_id
-    }
-
-
 # ----------------------------------------------------------------------------
 # YouTube API 呼び出し（HttpError は YouTubeAPIError に包む）
 # ----------------------------------------------------------------------------
@@ -129,16 +109,13 @@ def _search_channels(youtube, keyword: str, max_results: int) -> dict[str, set[s
     骨格 `CandidateChannel` を作らない（後段で `_fetch_channel_details` が実体を組み立てる）。
     重複 channel_id は呼び出し側で union する。
     """
-    try:
-        request = youtube.search().list(
-            part="snippet",
-            q=keyword,
-            type="channel",
-            maxResults=max_results,
-        )
-        resp = execute_with_retry(request, f"search.list failed (q={keyword!r})")
-    except YouTubeAPIError:
-        raise
+    request = youtube.search().list(
+        part="snippet",
+        q=keyword,
+        type="channel",
+        maxResults=max_results,
+    )
+    resp = execute_with_retry(request, f"search.list failed (q={keyword!r})")
 
     hits: dict[str, set[str]] = {}
     for item in resp.get("items", []):
@@ -160,11 +137,8 @@ def _fetch_channel_details(
     uploads_map: dict[str, str] = {}
     for i in range(0, len(channel_ids), _CHANNELS_BATCH_SIZE):
         batch = channel_ids[i : i + _CHANNELS_BATCH_SIZE]
-        try:
-            request = youtube.channels().list(part="snippet,statistics,contentDetails,topicDetails", id=",".join(batch))
-            resp = execute_with_retry(request, "channels.list failed")
-        except YouTubeAPIError:
-            raise
+        request = youtube.channels().list(part="snippet,statistics,contentDetails,topicDetails", id=",".join(batch))
+        resp = execute_with_retry(request, "channels.list failed")
 
         for item in resp.get("items", []):
             ch_id = item["id"]
@@ -193,25 +167,19 @@ def _fetch_channel_details(
 
 def _fetch_recent_videos(youtube, uploads_playlist_id: str) -> list[VideoMetric]:
     """uploads playlist から直近動画を `_RECENT_VIDEOS_PER_CHANNEL` 本取得する。"""
-    try:
-        request = youtube.playlistItems().list(
-            part="contentDetails",
-            playlistId=uploads_playlist_id,
-            maxResults=_RECENT_VIDEOS_PER_CHANNEL,
-        )
-        playlist_resp = execute_with_retry(request, f"playlistItems.list failed (playlist={uploads_playlist_id})")
-    except YouTubeAPIError:
-        raise
+    request = youtube.playlistItems().list(
+        part="contentDetails",
+        playlistId=uploads_playlist_id,
+        maxResults=_RECENT_VIDEOS_PER_CHANNEL,
+    )
+    playlist_resp = execute_with_retry(request, f"playlistItems.list failed (playlist={uploads_playlist_id})")
 
     video_ids = [item["contentDetails"]["videoId"] for item in playlist_resp.get("items", [])]
     if not video_ids:
         return []
 
-    try:
-        request = youtube.videos().list(part="snippet,statistics", id=",".join(video_ids))
-        videos_resp = execute_with_retry(request, "videos.list failed")
-    except YouTubeAPIError:
-        raise
+    request = youtube.videos().list(part="snippet,statistics", id=",".join(video_ids))
+    videos_resp = execute_with_retry(request, "videos.list failed")
 
     metrics: list[VideoMetric] = []
     for item in videos_resp.get("items", []):
@@ -233,59 +201,3 @@ def _fetch_recent_videos(youtube, uploads_playlist_id: str) -> list[VideoMetric]
             )
         )
     return metrics
-
-
-# ----------------------------------------------------------------------------
-# パブリック API
-# ----------------------------------------------------------------------------
-
-
-def discover_competitors(
-    youtube,
-    params: DiscoveryParams,
-    cache_mode: SearchCacheMode = SearchCacheMode.USE,
-) -> list[ScoredCandidate]:
-    """競合チャンネル候補を発掘し、複合スコア降順で返す。
-
-    パイプライン:
-      1. TTL キャッシュまたは search.list × keywords → channel_id → matched_keywords map（直接 union）
-      2. benchmark.channels の検出済み channel ID を除外
-      3. channels.list → メタデータ + uploads playlist
-      4. _apply_filters（subs / total_videos）
-      5. _fetch_recent_videos → recent_videos + last_posted_at
-      6. _apply_filters（posted_within_days）
-      7. _score_candidate + sort + top N
-    """
-    keyword_map: dict[str, set[str]] = defaultdict(set)
-    for keyword in params.keywords:
-        for ch_id, kws in _cached_search_channels(youtube, keyword, params.per_keyword_results, cache_mode).items():
-            keyword_map[ch_id] |= kws
-
-    for channel_id in _discovered_channel_ids():
-        keyword_map.pop(channel_id, None)
-
-    if not keyword_map:
-        return []
-
-    channel_ids = list(keyword_map.keys())
-
-    fetched, uploads_map = _fetch_channel_details(youtube, channel_ids, keyword_map)
-    pre_filtered = _apply_filters(fetched, params)
-
-    enriched: list[CandidateChannel] = []
-    for ch in pre_filtered:
-        uploads = uploads_map.get(ch.channel_id)
-        if not uploads:
-            continue
-        recent = _fetch_recent_videos(youtube, uploads)
-        if not recent:
-            continue
-        last_posted = max((v.published_at for v in recent), default=None)
-        enriched.append(replace(ch, recent_videos=recent, last_posted_at=last_posted))
-
-    posted_filtered = _apply_filters(enriched, params)
-
-    scored = [_score_candidate(ch, params) for ch in posted_filtered]
-    scored.sort(key=lambda s: s.score.total, reverse=True)
-
-    return scored[: params.top]

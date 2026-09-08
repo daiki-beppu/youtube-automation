@@ -29,7 +29,7 @@ import logging
 import sys
 from pathlib import Path
 
-from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.core.channel_context import channel_dir as _channel_dir
 from youtube_automation.core.errors import AutomationError, ValidationError
 from youtube_automation.domains.collections.weekly_vote_log import (
     AxisVote,

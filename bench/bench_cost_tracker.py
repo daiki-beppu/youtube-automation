@@ -11,6 +11,7 @@ import json
 import os
 import sys
 import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Sequence
 
@@ -28,7 +29,7 @@ def _seed_log(path: Path, size: int) -> None:
             "category": "audio",
             "model": "lyria-3.0-1-preview",
             "quantity": 30,
-            "unit": "30sec",
+            "unit": "second",
             "estimated_cost_usd": 0.06,
             "metadata": {"seed": i},
         }
@@ -55,38 +56,43 @@ def _scoped_channel_dir(path: Path):
         reset()
 
 
-def _bench_log_generation(size: int) -> Stats:
+@contextlib.contextmanager
+def _temporary_channel() -> Iterator[Path]:
+    """計測専用チャンネルの準備・設定切り替え・後片付けをまとめる。"""
     with tempfile.TemporaryDirectory() as tmpdir:
         channel_dir = Path(tmpdir) / "channel"
         (channel_dir / "data").mkdir(parents=True)
         with _scoped_channel_dir(channel_dir):
-            from youtube_automation.infrastructure import cost_tracker
+            yield channel_dir
 
-            log_path = channel_dir / "data" / "audio_costs.json"
-            _seed_log(log_path, size)
 
-            def call() -> None:
-                cost_tracker.log_generation(
-                    "audio",
-                    model="lyria-3.0-1-preview",
-                    quantity=30,
-                    metadata={"bench": True},
-                )
+def _bench_log_generation(size: int) -> Stats:
+    with _temporary_channel() as channel_dir:
+        from youtube_automation.infrastructure import cost_tracker
 
-            return time_calls(call, n=50, warmup=2, name=f"log_generation_n{size}")
+        log_path = channel_dir / "data" / "audio_costs.json"
+        _seed_log(log_path, size)
+
+        def call() -> None:
+            cost_tracker.log_generation(
+                "audio",
+                model="lyria-3.0-1-preview",
+                quantity=30,
+                unit="second",
+                metadata={"bench": True},
+            )
+
+        return time_calls(call, n=50, warmup=2, name=f"log_generation_n{size}")
 
 
 def _bench_read_all(size: int) -> Stats:
-    with tempfile.TemporaryDirectory() as tmpdir:
-        channel_dir = Path(tmpdir) / "channel"
-        (channel_dir / "data").mkdir(parents=True)
-        with _scoped_channel_dir(channel_dir):
-            from youtube_automation.infrastructure import cost_tracker
+    with _temporary_channel() as channel_dir:
+        from youtube_automation.infrastructure import cost_tracker
 
-            for cat in ("image", "video", "audio"):
-                _seed_log(channel_dir / "data" / f"{cat}_costs.json", size)
+        for cat in ("image", "video", "audio"):
+            _seed_log(channel_dir / "data" / f"{cat}_costs.json", size)
 
-            return time_calls(cost_tracker.read_all, n=20, warmup=1, name=f"read_all_n{size}")
+        return time_calls(cost_tracker.read_all, n=20, warmup=1, name=f"read_all_n{size}")
 
 
 def run() -> Sequence[Stats]:

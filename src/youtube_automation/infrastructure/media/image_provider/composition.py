@@ -161,6 +161,16 @@ def resolve_cost_per_image(
     return float(custom)
 
 
+def persist_image_bytes(payload: bytes, output_path: Path, *, save_as_png: bool) -> Path:
+    """Decode a provider's encoded image and close it after saving all output formats."""
+    import io
+
+    from PIL import Image
+
+    with Image.open(io.BytesIO(payload)) as image:
+        return persist_image(image, output_path, save_as_png=save_as_png)
+
+
 def persist_image(image: "PILImage", output_path: Path, *, save_as_png: bool) -> Path:
     """PIL Image を ``output_path`` に保存する（YouTube サムネ 2MB 上限対応）。
 
@@ -168,8 +178,7 @@ def persist_image(image: "PILImage", output_path: Path, *, save_as_png: bool) ->
     それ以外（``.jpg`` 等）は JPEG のみ保存する。後者で拡張子が ``.jpg`` 以外なら
     元パスのファイルは削除する。
 
-    bytes 入力の provider（OpenAI 等）は呼び出し側で
-    ``PIL.Image.open(io.BytesIO(payload))`` を行ってから渡すこと。
+    bytes 入力の provider は ``persist_image_bytes`` でデコードと画像の解放を行う。
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     rgb_image = image.convert("RGB")

@@ -751,7 +751,8 @@ class TestSaveJson:
 
 
 class TestBenchmarkReportGeneratorDescriptionSamples:
-    def test_channel_markdown_includes_description_ttp_samples(self, tmp_path):
+    @pytest.mark.parametrize("same_day_posts", [False, True])
+    def test_channel_markdown_includes_description_ttp_samples(self, tmp_path, same_day_posts):
         # Given: benchmark JSON 相当の channel data に概要欄本文つき Long 動画がある
         description = (
             "A direct prose hook that should be visible in the benchmark report.\n\n"
@@ -799,6 +800,8 @@ class TestBenchmarkReportGeneratorDescriptionSamples:
                 }
             ],
         }
+        if same_day_posts:
+            channel["posting_trend"] = {"average_interval": 0, "intervals_days": [0, 0], "trend": "stable"}
         config = SimpleNamespace(analytics=SimpleNamespace(benchmark=SimpleNamespace(channels=[])))
         generator = BenchmarkReportGenerator(config, tmp_path, date(2026, 5, 28))
 
@@ -806,6 +809,8 @@ class TestBenchmarkReportGeneratorDescriptionSamples:
         markdown = generator._generate_channel_md(channel)
 
         # Then: docs/benchmarks/*.md から概要欄の型を参照できる
+        if same_day_posts:
+            assert "平均間隔: 0.0日（安定）" in markdown
         assert "## 概要欄TTPサンプル" in markdown
         assert "Reference Mix" in markdown
         assert "A direct prose hook that should be visible in the benchmark report." in markdown
@@ -1017,3 +1022,66 @@ class TestBenchmarkReportUserRegion:
         self._generator(tmp_path).write_markdown({})
 
         assert list(tmp_path.iterdir()) == []
+
+
+def test_injected_clients_bypass_oauth_assembly_and_authenticate_on_initialize(monkeypatch) -> None:
+    from youtube_automation.infrastructure.google.youtube import YouTubeClients
+
+    factory = MagicMock(side_effect=AssertionError("default OAuth assembly must not run"))
+    monkeypatch.setattr(benchmark_collector, "_create_benchmark_clients", factory)
+    readonly_handler = MagicMock()
+    clients = YouTubeClients(readonly_handler=readonly_handler)
+    collector = BenchmarkCollector(youtube_clients=clients)
+
+    assert collector.youtube_clients is clients
+    assert collector.youtube is None
+    readonly_handler.get_youtube_service.assert_not_called()
+
+    collector.initialize()
+
+    readonly_handler.get_youtube_service.assert_called_once_with()
+    assert collector.youtube is readonly_handler.get_youtube_service.return_value
+
+
+@pytest.mark.parametrize(
+    ("arguments", "answer", "exit_code"),
+    [([], "n", 0), ([], EOFError(), 0), ([], KeyboardInterrupt(), 0), (["--playlists"], "y", 1)],
+)
+def test_main_stops_before_authentication_when_cancelled_or_playlist_target_missing(
+    monkeypatch, arguments, answer, exit_code
+):
+    collector = MagicMock()
+    collector.config.analytics.benchmark.channels = [{"id": "UC_A", "name": "Channel A", "slug": "channel-a"}]
+    collector.benchmark_config = {"gemini_thumbnail_analysis": False, "scan_recent": 1, "freshness_days": 3}
+    monkeypatch.setattr(benchmark_collector, "BenchmarkCollector", lambda: collector)
+    monkeypatch.setattr(sys, "argv", ["yt-benchmark-collect", *arguments])
+    prompt = MagicMock(side_effect=answer) if isinstance(answer, BaseException) else MagicMock(return_value=answer)
+    monkeypatch.setattr(builtins, "input", prompt)
+
+    with pytest.raises(SystemExit) as error:
+        benchmark_collector.main()
+
+    assert error.value.code == exit_code
+    collector.initialize.assert_not_called()
+    collector.collect_all.assert_not_called()
+    collector.collect_playlists.assert_not_called()
+
+
+def test_playlist_merge_updates_repeated_new_slug_without_duplicate_channels(tmp_path):
+    collector = _make_collector(MagicMock())
+    collector.data_dir = tmp_path
+    results = [
+        {
+            "channel_id": "UC-test",
+            "name": "Test",
+            "slug": "test",
+            "playlists_collected_at": stamp,
+            "playlists": playlists,
+        }
+        for stamp, playlists in [("first", [{"id": "old"}]), ("second", [{"id": "new"}])]
+    ]
+    path = collector.merge_playlists_into_json(results)
+    saved = json.loads(path.read_text())
+    assert len(saved["channels"]) == 1
+    assert saved["channels"][0]["playlists"] == [{"id": "new"}]
+    assert saved["channels"][0]["playlists_collected_at"] == "second"

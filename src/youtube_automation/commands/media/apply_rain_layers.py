@@ -32,20 +32,19 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from youtube_automation.configuration import channel_dir
+from youtube_automation.commands._shared.arguments import add_optional_collection_argument
+from youtube_automation.commands._shared.cli_harness import run_validated_command
 from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import (
     ConfigError,
     ValidationError,
     WorkflowStateError,
     WorkflowStateSectionTypeError,
 )
+from youtube_automation.domains.collections.paths import CollectionPaths, resolve_collection_dir
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
-from youtube_automation.infrastructure.media.collection_paths import (
-    CollectionPaths,
-    resolve_collection_dir,
-)
 
 # 雨レイヤー設定 (skill-config post_processing.rain_layers namespace で上書き可)。
 _DEFAULT_VOLUME_DB = -19.0
@@ -190,6 +189,28 @@ def _update_workflow_state_raw_master(workflow_state_path: Path, new_name: str) 
     return True
 
 
+def _render_rain_mix(cmd: list[str], output: Path) -> bool:
+    """Run the prepared mix and require a produced file before state updates."""
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        print(
+            f"ERROR: ffmpeg apply_rain_layers failed (rc={proc.returncode})",
+            file=sys.stderr,
+        )
+        if proc.stderr:
+            print(proc.stderr, file=sys.stderr)
+        return False
+
+    # 出力が実在することを確認してから state を更新（fail-fast）。
+    if not output.is_file():
+        print(
+            f"ERROR: ffmpeg は成功扱いだが出力ファイルが生成されていません: {output}",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
 def apply_rain_layers(
     collection_dir: Path,
     channel: Path,
@@ -251,22 +272,7 @@ def apply_rain_layers(
     if not quiet:
         print(f"  Applying {len(rains)} rain layer(s) onto {master.name} -> {output.name}...")
 
-    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
-    if proc.returncode != 0:
-        print(
-            f"ERROR: ffmpeg apply_rain_layers failed (rc={proc.returncode})",
-            file=sys.stderr,
-        )
-        if proc.stderr:
-            print(proc.stderr, file=sys.stderr)
-        return 1
-
-    # 出力が実在することを確認してから state を更新（fail-fast）。
-    if not output.is_file():
-        print(
-            f"ERROR: ffmpeg は成功扱いだが出力ファイルが生成されていません: {output}",
-            file=sys.stderr,
-        )
+    if not _render_rain_mix(cmd, output):
         return 1
 
     try:
@@ -284,11 +290,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="branding/rain_layers/*.wav を raw master に amix で重ねた後処理音源を生成する",
     )
-    parser.add_argument(
-        "collection",
-        nargs="?",
-        help="コレクションディレクトリ (省略時は CWD)",
-    )
+    add_optional_collection_argument(parser)
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -297,18 +299,14 @@ def main() -> int:
     parser.add_argument("--quiet", action="store_true", help="進捗表示を抑制")
     args = parser.parse_args()
 
-    try:
-        collection_dir = resolve_collection_dir(args.collection)
-        channel = channel_dir()
-        return apply_rain_layers(
-            collection_dir,
-            channel,
+    return run_validated_command(
+        lambda: apply_rain_layers(
+            resolve_collection_dir(args.collection),
+            channel_dir(),
             dry_run=args.dry_run,
             quiet=args.quiet,
         )
-    except (ValidationError, ConfigError) as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    )
 
 
 if __name__ == "__main__":

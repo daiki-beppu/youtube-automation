@@ -110,28 +110,7 @@ def evaluate_media_acceptance(
             )
         )
     for measurement in measurements:
-        if not policy.minimum_duration_seconds <= measurement.duration_seconds <= policy.maximum_duration_seconds:
-            issues.append(
-                MediaAcceptanceIssue(
-                    "duration",
-                    (
-                        f"{measurement.duration_seconds:.3f}s is outside "
-                        f"{policy.minimum_duration_seconds:.3f}..{policy.maximum_duration_seconds:.3f}s"
-                    ),
-                    measurement.path.name,
-                )
-            )
-        if not policy.minimum_integrated_lufs <= measurement.integrated_lufs <= policy.maximum_integrated_lufs:
-            issues.append(
-                MediaAcceptanceIssue(
-                    "loudness",
-                    (
-                        f"{measurement.integrated_lufs:.3f} LUFS is outside "
-                        f"{policy.minimum_integrated_lufs:.3f}..{policy.maximum_integrated_lufs:.3f} LUFS"
-                    ),
-                    measurement.path.name,
-                )
-            )
+        issues.extend(_measurement_range_issues(measurement, policy))
     if measurements:
         loudness_values = [measurement.integrated_lufs for measurement in measurements]
         deviation = max(loudness_values) - min(loudness_values)
@@ -143,3 +122,34 @@ def evaluate_media_acceptance(
                 )
             )
     return MediaAcceptanceReport(policy, measurements, tuple(issues))
+
+
+def _measurement_range_issues(
+    measurement: AudioMeasurement, policy: MediaAcceptancePolicy
+) -> list[MediaAcceptanceIssue]:
+    """Check each absolute measurement range in report order, with its unit."""
+    ranges: tuple[tuple[MediaAcceptanceIssueCode, float, float, float, str], ...] = (
+        (
+            "duration",
+            measurement.duration_seconds,
+            policy.minimum_duration_seconds,
+            policy.maximum_duration_seconds,
+            "s",
+        ),
+        (
+            "loudness",
+            measurement.integrated_lufs,
+            policy.minimum_integrated_lufs,
+            policy.maximum_integrated_lufs,
+            " LUFS",
+        ),
+    )
+    return [
+        MediaAcceptanceIssue(
+            code,
+            f"{value:.3f}{unit} is outside {minimum:.3f}..{maximum:.3f}{unit}",
+            measurement.path.name,
+        )
+        for code, value, minimum, maximum, unit in ranges
+        if not minimum <= value <= maximum
+    ]

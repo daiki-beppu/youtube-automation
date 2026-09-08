@@ -138,6 +138,20 @@ def _validate_axis(payload: object, *, context: str) -> AxisVote:
     return AxisVote(key=key, label=label, votes=votes)
 
 
+def _validate_total_votes(total_votes: object, axes: tuple[AxisVote, ...], *, context: str) -> int:
+    """Derive an omitted total or verify the declared total against individual votes."""
+    expected_total = sum(axis.votes for axis in axes)
+    if total_votes is None:
+        return expected_total
+    if not isinstance(total_votes, int) or isinstance(total_votes, bool):
+        raise ValidationError(f"{context}.total_votes: 整数を期待")
+    if total_votes != expected_total:
+        raise ValidationError(
+            f"{context}.total_votes: axes.votes の合計と不一致 (declared={total_votes}, computed={expected_total})"
+        )
+    return total_votes
+
+
 def _validate_entry(payload: object, *, context: str) -> WeeklyVoteEntry:
     if not isinstance(payload, dict):
         raise ValidationError(f"{context}: dict を期待 (got {type(payload).__name__})")
@@ -162,17 +176,7 @@ def _validate_entry(payload: object, *, context: str) -> WeeklyVoteEntry:
     if top_axis not in keys:
         raise ValidationError(f"{context}.top_axis: axes 内に存在しない key ({top_axis})")
 
-    total_votes = payload.get("total_votes")
-    expected_total = sum(axis.votes for axis in axes)
-    if total_votes is None:
-        total_votes = expected_total
-    else:
-        if not isinstance(total_votes, int) or isinstance(total_votes, bool):
-            raise ValidationError(f"{context}.total_votes: 整数を期待")
-        if total_votes != expected_total:
-            raise ValidationError(
-                f"{context}.total_votes: axes.votes の合計と不一致 (declared={total_votes}, computed={expected_total})"
-            )
+    total_votes = _validate_total_votes(payload.get("total_votes"), axes, context=context)
 
     notes = payload.get("notes", "")
     if not isinstance(notes, str):

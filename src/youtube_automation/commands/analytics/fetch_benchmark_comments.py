@@ -27,17 +27,16 @@ from pathlib import Path
 
 from youtube_automation.application.analytics.benchmark_query import load_benchmark_videos
 from youtube_automation.application.analytics.benchmark_refresh import ensure_benchmark_fresh
+from youtube_automation.application.youtube_auth import create_authenticated_youtube_clients
 from youtube_automation.commands._shared.arguments import CompetitorArgumentParser
 from youtube_automation.commands.analytics.benchmark_collector import (
     BenchmarkCollector,
     BenchmarkReportGenerator,
     BenchmarkThumbnailAnalyzer,
 )
-from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.core.channel_context import channel_dir as _channel_dir
 from youtube_automation.core.errors import AutomationError, YouTubeAPIError
-from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.cost_tracker import log_quota
-from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +61,7 @@ class BenchmarkCommentCollector:
         self.max_comments = max_comments
         self.competitor_slug = competitor_slug
         self.youtube = None
-        self.youtube_clients = YouTubeClients(full_handler=YouTubeOAuthHandler())
+        self.youtube_clients = create_authenticated_youtube_clients()
         self.today = date.today()
 
     def _fetch_comments(self, video_id: str) -> list[dict]:

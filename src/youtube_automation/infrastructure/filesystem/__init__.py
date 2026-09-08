@@ -81,10 +81,10 @@ def _temporary_path(target: Path, *, suffix: str) -> tuple[int, Path]:
     return descriptor, Path(name)
 
 
-def _write_temporary_text(target: Path, text: str, *, encoding: str) -> Path:
+def _write_temporary_text(target: Path, text: str, *, encoding: str, newline: str | None = None) -> Path:
     descriptor, temporary = _temporary_path(target, suffix=".tmp")
     try:
-        with os.fdopen(descriptor, "w", encoding=encoding) as stream:
+        with os.fdopen(descriptor, "w", encoding=encoding, newline=newline) as stream:
             stream.write(text)
             stream.flush()
             os.fsync(stream.fileno())
@@ -92,6 +92,26 @@ def _write_temporary_text(target: Path, text: str, *, encoding: str) -> Path:
         temporary.unlink(missing_ok=True)
         raise
     return temporary
+
+
+def write_file_text_atomically(
+    path: Path,
+    text: str,
+    *,
+    mode: int,
+    encoding: str = "utf-8",
+    newline: str | None = None,
+    validate_staged: Callable[[Path], None] | None = None,
+) -> None:
+    """Replace one file after flushing its contents and setting the requested permissions."""
+    temporary = _write_temporary_text(path, text, encoding=encoding, newline=newline)
+    try:
+        if validate_staged is not None:
+            validate_staged(temporary)
+        temporary.chmod(mode)
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _reserve_backup_path(target: Path) -> Path:
@@ -125,6 +145,17 @@ def _cleanup_paths(paths: list[Path]) -> None:
         path.unlink(missing_ok=True)
 
 
+def _transaction_targets(contents: Mapping[Path, str]) -> list[Path]:
+    """Validate the publication scope before creating temporary files or backups."""
+    targets = list(contents)
+    if not targets:
+        raise ValueError("transactional file publish requires at least one target")
+    if len({target.parent for target in targets}) != 1:
+        raise ValueError("transactional file publish targets must share one directory")
+
+    return targets
+
+
 def _write_text_files_transactionally(
     contents: Mapping[Path, str],
     verifier: Callable[[], None] | None,
@@ -136,18 +167,15 @@ def _write_text_files_transactionally(
     Process termination and filesystem loss are outside this local transaction's
     guarantees. All temporary and backup files are created beside their targets.
     """
-    targets = list(contents)
-    if not targets:
-        raise ValueError("transactional file publish requires at least one target")
-    if len({target.parent for target in targets}) != 1:
-        raise ValueError("transactional file publish targets must share one directory")
+    targets = _transaction_targets(contents)
 
     temporaries: dict[Path, Path] = {}
     backups: dict[Path, Path] = {}
     original_targets = {target for target in targets if target.exists()}
     backed_up_targets: set[Path] = set()
     try:
-        temporaries = {target: _write_temporary_text(target, contents[target], encoding=encoding) for target in targets}
+        for target in targets:
+            temporaries[target] = _write_temporary_text(target, contents[target], encoding=encoding)
         for target in targets:
             if target not in original_targets:
                 continue

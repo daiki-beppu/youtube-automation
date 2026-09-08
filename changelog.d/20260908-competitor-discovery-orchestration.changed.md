@@ -1,0 +1,1 @@
+- 競合探索の設定依存と実行順の管理を application.analytics.competitor_discovery へ移し、基盤層は設定ローダーに依存せず検索キャッシュと API 通信を担当。CLI の探索・除外・評価順を維持。

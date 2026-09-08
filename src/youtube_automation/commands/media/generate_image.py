@@ -17,8 +17,12 @@ import concurrent.futures
 import re
 import sys
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+from typing import TextIO
 
+from youtube_automation.configuration.image_generation import load_image_generation_config
 from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.thumbnail.references import (
     format_reference_assignment,
@@ -32,7 +36,6 @@ from youtube_automation.domains.thumbnail.selection import (
 from youtube_automation.infrastructure.media.image_provider import (
     ImageGenerationRequest,
     get_provider,
-    load_image_generation_config,
 )
 from youtube_automation.infrastructure.media.image_provider.composition import (
     apply_composition_rules,
@@ -67,7 +70,7 @@ _AB_PATTERN_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
 def _channel_root() -> Path:
-    from youtube_automation.configuration import channel_dir
+    from youtube_automation.core.channel_context import channel_dir
 
     return channel_dir()
 
@@ -300,7 +303,8 @@ def print_provider_fallback_hint(provider_name: str) -> None:
     print("  詳細: .claude/skills/thumbnail/SKILL.md の「障害時の provider fallback」")
 
 
-def main():
+def _parse_args() -> argparse.Namespace:
+    """引数の検証と、生成を伴わないコスト表示を済ませる。"""
     parser = argparse.ArgumentParser(
         description="画像生成プロバイダー（Gemini / OpenAI）で画像を生成（ダイレクトモード）"
     )
@@ -414,74 +418,11 @@ def main():
     if not args.prompt or not args.output:
         parser.error("--prompt と --output は必須です（--costs 単独実行を除く）")
 
-    try:
-        cfg = load_image_generation_config()
-    except ConfigError as e:
-        print(f"[ERROR] skill-config 読み込み失敗: {e}")
-        sys.exit(1)
+    return args
 
-    if cfg.provider == "codex":
-        print(
-            "[ERROR] image_generation.provider=codex は yt-generate-image の API 経路では実行できません。"
-            ".claude/skills/thumbnail/references/codex-image.sh を使ってください。"
-        )
-        sys.exit(1)
 
-    # provider オーバーライド: --model 指定時は cfg のモデル値を差し替える
-    if args.model:
-        cfg = replace_model(cfg, args.model)
-
-    # composition_prefix は channel-side の image_generation.<provider> から解決する。
-    from youtube_automation.configuration.skills import load_skill_config
-
-    try:
-        skill_cfg = load_skill_config("thumbnail")
-        composition_source = resolve_composition_source(skill_cfg, cfg.provider)
-        ab_test_patterns = resolve_ab_test_patterns(skill_cfg)
-    except ConfigError as e:
-        print(f"[ERROR] {e}")
-        sys.exit(1)
-
-    # single_step モード情報は TTP strict の事前検証と attempt 解決に使う。
-    gemini_section = skill_cfg.get("image_generation", {}).get("gemini", {})
-    generation_mode = gemini_section.get("generation_mode") if isinstance(gemini_section, dict) else None
-
-    if args.no_composition or args.reference:
-        prompt = args.prompt
-    else:
-        prompt = apply_composition_rules(args.prompt, composition_source)
-    try:
-        prompt = expand_thumbnail_prompt_clauses(prompt, skill_cfg)
-        prompt = apply_ab_test_pattern(prompt, ab_test_patterns, args.ab_pattern)
-    except ConfigError as e:
-        print(f"[ERROR] {e}")
-        sys.exit(1)
-
-    # NG ワード事前検査 (#1664): 最終プロンプト確定直後・生成 API 呼び出し前に実施。
-    # ヒットしたキーワードは要件どおり標準エラーへ列挙する。
-    try:
-        validate_forbid_keywords(prompt, skill_cfg)
-    except ConfigError as e:
-        print(f"[ERROR] {e}", file=sys.stderr)
-        sys.exit(1)
-
-    output_path = Path(args.output)
-    if not output_path.is_absolute():
-        output_path = Path.cwd() / output_path
-
-    # provider 別にモデル ID と画像サイズキーを解決
-    if cfg.provider == "gemini":
-        assert cfg.gemini is not None
-        model = cfg.gemini.model
-        image_size = args.size
-    elif cfg.provider == "openai":
-        assert cfg.openai is not None
-        model = cfg.openai.model
-        image_size = cfg.openai.quality
-    else:
-        print(f"[ERROR] provider={cfg.provider!r} は yt-generate-image では未対応です")
-        sys.exit(1)
-
+def _resolve_attempt_settings(args: argparse.Namespace, gemini_section: object) -> tuple[int, bool]:
+    """CLI と設定から試行回数・参照ローテーションを解決する。"""
     # max_attempts / rotate / reference_index の解決（コスト表示前に出すため早期解決）
     single_step_section = gemini_section.get("single_step") if isinstance(gemini_section, dict) else None
     if not isinstance(single_step_section, dict):
@@ -493,6 +434,13 @@ def main():
         cli_max_attempts = 1
     rotate = (not args.no_rotate) and config_rotate
 
+    return cli_max_attempts, rotate
+
+
+def _resolve_reference_plan(
+    args: argparse.Namespace, skill_cfg: dict, generation_mode: str | None, cli_max_attempts: int, rotate: bool
+) -> tuple[list[Path | None], Path | None, int]:
+    """出力確認や課金承認の前に参照を検証し、試行ごとの割り当てを確定する。"""
     # single_step preflight は既存出力確認・コスト確認・provider 初期化より前に済ませる。
     if generation_mode == "single_step" and not args.reference:
         try:
@@ -548,11 +496,21 @@ def main():
         print(f"[ERROR] {e}")
         sys.exit(1)
 
-    # コスト算出: skill-config の cost_per_image_usd を尊重。未設定なら None。
-    cost_per_image = resolve_cost_per_image(skill_cfg, cfg.provider)
+    return reference_assignments, benchmark_root, cli_max_attempts
 
+
+def _print_generation_plan(
+    args: argparse.Namespace,
+    provider_name: str,
+    prompt: str,
+    output_path: Path,
+    image_size: str,
+    cli_max_attempts: int,
+    rotate: bool,
+) -> None:
+    """承認前に生成条件と試行回数を表示する。"""
     print("\nモード:       ダイレクト")
-    print(f"プロバイダー: {cfg.provider}")
+    print(f"プロバイダー: {provider_name}")
     print(f"プロンプト:   {prompt[:80]}{'...' if len(prompt) > 80 else ''}")
     print(f"出力先:       {output_path}")
     print(f"解像度:       {image_size}")
@@ -562,29 +520,14 @@ def main():
         rotate_label = " (rotate=ON)" if rotate else " (rotate=OFF)"
         print(f"試行回数:     {cli_max_attempts} attempts{rotate_label}")
 
-    # 既存ファイル確認（上書き or -vN 自動採番）
-    resolved_path = prompt_overwrite_or_rename(output_path, yes=args.yes)
-    if resolved_path is None:
-        sys.exit(0)
-    output_path = resolved_path
 
-    if not args.yes and not confirm_cost(model, cost_per_image):
-        sys.exit(0)
-
-    try:
-        provider = get_provider(cfg)
-    except ConfigError as e:
-        print(f"[ERROR] {e}")
-        sys.exit(1)
-
-    # 並列度: レート制限を考慮した控えめなデフォルト。1 attempt なら 1。
-    max_workers = args.max_workers if args.max_workers is not None else _DEFAULT_MAX_WORKERS
-    if max_workers < 1:
-        max_workers = 1
-
-    # 出力パス（-vN）と参照画像をループ前に全 attempt ぶん確定し、
-    # resolve_unique_path の直列依存を排除してから並列 submit する。
-    planned_paths = plan_output_paths(output_path, cli_max_attempts)
+def _print_attempt_plan(
+    reference_assignments: list[Path | None],
+    planned_paths: list[Path],
+    benchmark_root: Path | None,
+    cli_max_attempts: int,
+) -> None:
+    """並列生成の前に、各試行の出力先と参照画像をまとめて表示する。"""
     if reference_assignments:
         print()
         print("参照割当:")
@@ -603,31 +546,16 @@ def main():
         if selected_ref is not None:
             print(f"参照画像:     {format_reference_assignment(selected_ref, benchmark_root)}")
 
-    requests = build_requests(
-        prompt,
-        planned_paths,
-        reference_assignments,
-        aspect_ratio=args.aspect_ratio,
-        image_size=image_size,
-    )
 
-    total_start = time.monotonic()
-    results, errors = run_requests_parallel(
-        provider,
-        requests,
-        max_workers=max_workers,
-        aspect_ratio=args.aspect_ratio,
-    )
-    elapsed = time.monotonic() - total_start
-
-    # ConfigError はループ外に集約して終了する（1 件でも失敗ならプロセスを落とす）。
-    if errors:
-        for attempt, error in errors:
-            prefix = f"attempt {attempt + 1}: " if cli_max_attempts > 1 else ""
-            print(f"[ERROR] {prefix}{error}")
-        print_provider_fallback_hint(cfg.provider)
-        sys.exit(1)
-
+def _print_generation_results(
+    results: list,
+    planned_paths: list[Path],
+    cli_max_attempts: int,
+    cost_per_image: float | None,
+    elapsed: float,
+    provider_name: str,
+) -> bool:
+    """生成結果とコストを表示し、一枚以上成功したかを返す。"""
     saved_paths: list[Path] = []
     success_flags: list[bool] = []
     for attempt, result in enumerate(results):
@@ -651,11 +579,151 @@ def main():
     else:
         print(f"  画像生成: 失敗 (0/{cli_max_attempts})")
         print("  プロンプト・参照画像・config を調整して再試行してください。")
-        print_provider_fallback_hint(cfg.provider)
+        print_provider_fallback_hint(provider_name)
     print("===========================================")
     print()
 
-    sys.exit(0 if any(success_flags) else 1)
+    return any(success_flags)
+
+
+def _exit_on_generation_errors(
+    errors: list[tuple[int, ConfigError]], cli_max_attempts: int, provider_name: str
+) -> None:
+    """失敗した試行を順に報告し、一件でも失敗なら終了する。"""
+    # ConfigError はループ外に集約して終了する（1 件でも失敗ならプロセスを落とす）。
+    if errors:
+        for attempt, error in errors:
+            prefix = f"attempt {attempt + 1}: " if cli_max_attempts > 1 else ""
+            print(f"[ERROR] {prefix}{error}")
+        print_provider_fallback_hint(provider_name)
+        sys.exit(1)
+
+
+@contextmanager
+def _configuration_errors(*, prefix: str = "[ERROR]", stream: TextIO | None = None) -> Iterator[None]:
+    """Preserve this CLI's configuration-error output and exit status at each boundary."""
+    try:
+        yield
+    except ConfigError as error:
+        print(f"{prefix} {error}", file=stream)
+        sys.exit(1)
+
+
+def main():
+    args = _parse_args()
+
+    with _configuration_errors(prefix="[ERROR] skill-config 読み込み失敗:"):
+        cfg = load_image_generation_config()
+
+    if cfg.provider == "codex":
+        print(
+            "[ERROR] image_generation.provider=codex は yt-generate-image の API 経路では実行できません。"
+            ".claude/skills/thumbnail/references/codex-image.sh を使ってください。"
+        )
+        sys.exit(1)
+
+    # provider オーバーライド: --model 指定時は cfg のモデル値を差し替える
+    if args.model:
+        cfg = replace_model(cfg, args.model)
+
+    # composition_prefix は channel-side の image_generation.<provider> から解決する。
+    from youtube_automation.configuration.skills import load_skill_config
+
+    with _configuration_errors():
+        skill_cfg = load_skill_config("thumbnail")
+        composition_source = resolve_composition_source(skill_cfg, cfg.provider)
+        ab_test_patterns = resolve_ab_test_patterns(skill_cfg)
+
+    # single_step モード情報は TTP strict の事前検証と attempt 解決に使う。
+    gemini_section = skill_cfg.get("image_generation", {}).get("gemini", {})
+    generation_mode = gemini_section.get("generation_mode") if isinstance(gemini_section, dict) else None
+
+    if args.no_composition or args.reference:
+        prompt = args.prompt
+    else:
+        prompt = apply_composition_rules(args.prompt, composition_source)
+    with _configuration_errors():
+        prompt = expand_thumbnail_prompt_clauses(prompt, skill_cfg)
+        prompt = apply_ab_test_pattern(prompt, ab_test_patterns, args.ab_pattern)
+
+    # NG ワード事前検査 (#1664): 最終プロンプト確定直後・生成 API 呼び出し前に実施。
+    # ヒットしたキーワードは要件どおり標準エラーへ列挙する。
+    with _configuration_errors(stream=sys.stderr):
+        validate_forbid_keywords(prompt, skill_cfg)
+
+    output_path = Path(args.output)
+    if not output_path.is_absolute():
+        output_path = Path.cwd() / output_path
+
+    # provider 別にモデル ID と画像サイズキーを解決
+    if cfg.provider == "gemini":
+        assert cfg.gemini is not None
+        model = cfg.gemini.model
+        image_size = args.size
+    elif cfg.provider == "openai":
+        assert cfg.openai is not None
+        model = cfg.openai.model
+        image_size = cfg.openai.quality
+    else:
+        print(f"[ERROR] provider={cfg.provider!r} は yt-generate-image では未対応です")
+        sys.exit(1)
+
+    cli_max_attempts, rotate = _resolve_attempt_settings(args, gemini_section)
+
+    reference_assignments, benchmark_root, cli_max_attempts = _resolve_reference_plan(
+        args, skill_cfg, generation_mode, cli_max_attempts, rotate
+    )
+
+    # コスト算出: skill-config の cost_per_image_usd を尊重。未設定なら None。
+    cost_per_image = resolve_cost_per_image(skill_cfg, cfg.provider)
+
+    _print_generation_plan(args, cfg.provider, prompt, output_path, image_size, cli_max_attempts, rotate)
+
+    # 既存ファイル確認（上書き or -vN 自動採番）
+    resolved_path = prompt_overwrite_or_rename(output_path, yes=args.yes)
+    if resolved_path is None:
+        sys.exit(0)
+    output_path = resolved_path
+
+    if not args.yes and not confirm_cost(model, cost_per_image):
+        sys.exit(0)
+
+    with _configuration_errors():
+        provider = get_provider(cfg)
+
+    # 並列度: レート制限を考慮した控えめなデフォルト。1 attempt なら 1。
+    max_workers = args.max_workers if args.max_workers is not None else _DEFAULT_MAX_WORKERS
+    if max_workers < 1:
+        max_workers = 1
+
+    # 出力パス（-vN）と参照画像をループ前に全 attempt ぶん確定し、
+    # resolve_unique_path の直列依存を排除してから並列 submit する。
+    planned_paths = plan_output_paths(output_path, cli_max_attempts)
+    _print_attempt_plan(reference_assignments, planned_paths, benchmark_root, cli_max_attempts)
+
+    requests = build_requests(
+        prompt,
+        planned_paths,
+        reference_assignments,
+        aspect_ratio=args.aspect_ratio,
+        image_size=image_size,
+    )
+
+    total_start = time.monotonic()
+    results, errors = run_requests_parallel(
+        provider,
+        requests,
+        max_workers=max_workers,
+        aspect_ratio=args.aspect_ratio,
+    )
+    elapsed = time.monotonic() - total_start
+
+    _exit_on_generation_errors(errors, cli_max_attempts, cfg.provider)
+
+    succeeded = _print_generation_results(
+        results, planned_paths, cli_max_attempts, cost_per_image, elapsed, cfg.provider
+    )
+    sys.exit(0 if succeeded else 1)
 
 
 if __name__ == "__main__":

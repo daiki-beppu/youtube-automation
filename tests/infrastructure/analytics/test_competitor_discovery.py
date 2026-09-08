@@ -24,8 +24,9 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
+from youtube_automation.application.analytics.competitor_discovery import discover_competitors
 from youtube_automation.core.errors import YouTubeAPIError
-from youtube_automation.infrastructure.analytics.competitor_discovery import SearchCacheMode, discover_competitors
+from youtube_automation.infrastructure.analytics.competitor_discovery import SearchCacheMode
 from youtube_automation.infrastructure.analytics.competitor_scoring import (
     _MUSIC_TOPIC_URLS,
     CandidateChannel,

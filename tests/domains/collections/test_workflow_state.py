@@ -252,7 +252,9 @@ def test_record_cloud_handoff_is_idempotent_but_rejects_conflicting_reference() 
         ),
     ],
 )
+@pytest.mark.parametrize("operation", ["record_cloud_handoff", "validate_cloud_handoff"])
 def test_record_cloud_handoff_fails_closed_before_mutation(
+    operation: str,
     payload: dict[str, JSONValue],
     manifest_key: str,
     root_sha256: str,
@@ -262,7 +264,7 @@ def test_record_cloud_handoff_fails_closed_before_mutation(
     before = state.to_dict()
 
     with pytest.raises(WorkflowStateError, match=message):
-        state.record_cloud_handoff(
+        getattr(state, operation)(
             point="suno_download",
             manifest_key=manifest_key,
             root_sha256=root_sha256,
@@ -760,3 +762,30 @@ class TestPlanningPlaylists:
         assert planning.playlists == ["rain"]
         with pytest.raises(WorkflowStateError, match="planning.playlists"):
             planning.set_known("playlists", "rain")
+
+
+@pytest.mark.parametrize("already_recorded", [False, True])
+def test_validate_cloud_handoff_preserves_the_complete_document(already_recorded: bool) -> None:
+    state = WorkflowState(
+        {
+            "phase": "prepared",
+            "planning": {"music": {"engine": "suno"}},
+            "assets": {"music_downloaded": True},
+            "future": {"nested": [1, {"keep": True}]},
+        }
+    )
+    if already_recorded:
+        state.record_cloud_handoff(
+            point="suno_download",
+            manifest_key="002ch/sample/suno-download/manifest.json",
+            root_sha256="a" * 64,
+        )
+    before = state.to_dict()
+
+    state.validate_cloud_handoff(
+        point="suno_download",
+        manifest_key="002ch/sample/suno-download/manifest.json",
+        root_sha256="a" * 64,
+    )
+
+    assert state.to_dict() == before

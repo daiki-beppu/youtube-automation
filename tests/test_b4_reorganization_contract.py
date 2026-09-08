@@ -31,8 +31,6 @@ DOMAIN_MODULES = (
     "youtube_automation.domains.uploads.youtube",
     "youtube_automation.domains.uploads.policy",
     "youtube_automation.domains.uploads.preflight",
-    "youtube_automation.domains.uploads.collection",
-    "youtube_automation.domains.uploads.shorts",
     "youtube_automation.domains.youtube.channel_seed",
     "youtube_automation.domains.youtube.channel_settings",
     "youtube_automation.domains.youtube.video_listing",
@@ -45,7 +43,7 @@ LEGACY_AGENT_OWNERS = {
     ),
     "_dedup_search": ("youtube_automation.domains.uploads._dedup_search", "DedupSearch"),
     "_playlist_assignment": ("youtube_automation.domains.uploads._playlist_assignment", "PlaylistAssignment"),
-    "_preflight": ("youtube_automation.domains.uploads._preflight", "PreflightChecker"),
+    "_preflight": ("youtube_automation.application.uploads.preflight", "PreflightChecker"),
     "_published_dates": ("youtube_automation.domains.uploads._published_dates", "PublishedDatesScheduler"),
     "_tracking_io": ("youtube_automation.domains.uploads._tracking_io", "TrackingStore"),
     "_uploader_constants": (
@@ -75,10 +73,18 @@ UPLOADER_ENTRYPOINTS = (
     "short_uploader.py",
 )
 
+APPLICATION_MODULES = (
+    "youtube_automation.application.uploads.preflight",
+    "youtube_automation.application.uploads.youtube",
+    "youtube_automation.application.uploads.shorts",
+    "youtube_automation.application.uploads.collection",
+    "youtube_automation.application.uploads._complete_collection_executor",
+)
+
 CANONICAL_UPLOAD_OWNERS = {
-    "CollectionUploader": "youtube_automation.domains.uploads.collection",
-    "ShortUploader": "youtube_automation.domains.uploads.shorts",
-    "YouTubeAutoUploader": "youtube_automation.domains.uploads.youtube",
+    "CollectionUploader": "youtube_automation.application.uploads.collection",
+    "ShortUploader": "youtube_automation.application.uploads.shorts",
+    "YouTubeAutoUploader": "youtube_automation.application.uploads.youtube",
 }
 
 INFRASTRUCTURE_MODULES = (
@@ -138,14 +144,14 @@ def _source_calls(path: Path) -> set[str]:
 
 
 def test_new_domain_and_infrastructure_modules_are_importable() -> None:
-    expected = (*DOMAIN_MODULES, *INFRASTRUCTURE_MODULES)
+    expected = (*DOMAIN_MODULES, *APPLICATION_MODULES, *INFRASTRUCTURE_MODULES)
 
     imported = [importlib.import_module(name).__name__ for name in expected]
 
     assert imported == list(expected)
 
 
-@pytest.mark.parametrize("module_name", DOMAIN_MODULES)
+@pytest.mark.parametrize("module_name", (*DOMAIN_MODULES, *APPLICATION_MODULES))
 def test_domain_modules_do_not_import_adapters_or_auth(module_name: str) -> None:
     imports = _import_targets(module_name)
 
@@ -200,7 +206,7 @@ def test_legacy_agent_owners_have_canonical_domain_implementations() -> None:
 
 
 def test_upload_preflight_uses_explicit_checker_without_mro_hook() -> None:
-    source = (SRC / "domains" / "uploads" / "youtube.py").read_text(encoding="utf-8")
+    source = (SRC / "application" / "uploads" / "youtube.py").read_text(encoding="utf-8")
 
     assert "super().preflight_check" not in source
     assert "self.preflight_checker.check(collection_dir)" in source
@@ -234,8 +240,9 @@ def test_upload_domain_has_no_mixin_classes_or_test_private_imports() -> None:
 
 
 def test_upload_hosts_keep_only_the_real_resumable_base() -> None:
-    from youtube_automation.domains.uploads.collection import CollectionUploader
-    from youtube_automation.domains.uploads.youtube import ResumableUploader, YouTubeAutoUploader
+    from youtube_automation.application.uploads.collection import CollectionUploader
+    from youtube_automation.application.uploads.youtube import YouTubeAutoUploader
+    from youtube_automation.domains.uploads.youtube import ResumableUploader
 
     assert YouTubeAutoUploader.__bases__ == (ResumableUploader,)
     assert CollectionUploader.__bases__ == (object,)
@@ -255,9 +262,9 @@ def test_uploader_commands_are_thin_main_adapters(filename: str) -> None:
 @pytest.mark.parametrize(
     ("filename", "owner_module", "owner_name"),
     [
-        ("youtube_auto_uploader.py", "youtube_automation.domains.uploads.youtube", "YouTubeAutoUploader"),
-        ("collection_uploader.py", "youtube_automation.domains.uploads.collection", "CollectionUploader"),
-        ("short_uploader.py", "youtube_automation.domains.uploads.shorts", "ShortUploader"),
+        ("youtube_auto_uploader.py", "youtube_automation.application.uploads.youtube", "YouTubeAutoUploader"),
+        ("collection_uploader.py", "youtube_automation.application.uploads.collection", "CollectionUploader"),
+        ("short_uploader.py", "youtube_automation.application.uploads.shorts", "ShortUploader"),
     ],
 )
 def test_uploader_adapters_wire_canonical_owner_and_instance_clients(
@@ -276,19 +283,21 @@ def test_uploader_adapters_wire_canonical_owner_and_instance_clients(
 
     assert (owner_module, owner_name) in imports
     assert (
-        "youtube_automation.infrastructure.google.youtube",
+        "youtube_automation.application.youtube_auth",
         "create_authenticated_youtube_clients",
     ) in imports
 
 
-def test_upload_application_classes_are_owned_by_canonical_domain_modules() -> None:
+def test_upload_classes_are_owned_by_canonical_modules() -> None:
     owners = {
         name: getattr(importlib.import_module(module_name), name)
         for name, module_name in CANONICAL_UPLOAD_OWNERS.items()
     }
 
     assert {name: cls.__module__ for name, cls in owners.items()} == CANONICAL_UPLOAD_OWNERS
-    assert not (SRC / "application" / "uploads").exists()
+    # Shorts composes settings and I/O in application; retain exactly one implementation.
+    assert not (SRC / "domains" / "uploads" / "shorts.py").exists()
+    assert (SRC / "application" / "uploads" / "shorts.py").is_file()
 
 
 def test_canonical_upload_owner_contains_implementation() -> None:
@@ -372,7 +381,7 @@ def test_benchmark_script_uses_instance_scoped_youtube_clients(monkeypatch) -> N
     handler = object()
 
     monkeypatch.setattr(
-        "youtube_automation.infrastructure.auth.youtube.YouTubeOAuthHandler",
+        "youtube_automation.application.youtube_auth.YouTubeOAuthHandler",
         lambda: handler,
     )
     monkeypatch.setattr(

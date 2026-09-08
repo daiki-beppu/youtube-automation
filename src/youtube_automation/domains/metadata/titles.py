@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import string
+from collections.abc import Mapping, Sequence
 from typing import Dict
 
 from youtube_automation.core.errors import ValidationError
@@ -11,6 +12,27 @@ from youtube_automation.core.errors import ValidationError
 # `pattern-b1-` のような variation 接尾辞を保持する。
 _PATTERN_KEY_RE = re.compile(r"^\d+-pattern-([a-d]\d*)-", re.IGNORECASE)
 _EXTRA_VARIATION_RE = re.compile(r"^\d+-extra-v(\d+)(?:[-.]|$)", re.IGNORECASE)
+
+
+def requires_scene_phrases(supported_languages: Sequence[str]) -> bool:
+    """チャンネルが workflow-state.json.scene_phrases を必要とするかどうか (#1470).
+
+    scene_phrases は多言語 localizations のタイトル生成にのみ使われるため、
+    `supported_languages` が 1 言語以下のチャンネルでは不要。populate
+    （`yt-populate-scene-phrases` の no-op 判定）と検証側（preflight /
+    metadata audit / localizations 生成）はこの判定を共有する。
+    """
+    return len(set(supported_languages)) > 1
+
+
+def missing_scene_phrase_languages(
+    scene_phrases: Mapping[str, object], supported_languages: Sequence[str]
+) -> list[str]:
+    """Return missing multilingual phrases once per language, in configured order."""
+    if not requires_scene_phrases(supported_languages):
+        return []
+    required = dict.fromkeys(supported_languages)
+    return [language for language in required if not scene_phrases.get(language)]
 
 
 def build_collection_title(template: str, values: Dict[str, str], *, context: str) -> str:

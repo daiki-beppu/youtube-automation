@@ -18,8 +18,8 @@ from youtube_automation.application.documents.migration import (
 from youtube_automation.application.documents.projection import publish_and_project
 from youtube_automation.core.errors import DocumentMigrationError
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
+from youtube_automation.domains.documents.published import read_published_json_document
 from youtube_automation.domains.documents.schema_registry import RepositorySchema, validate_repository_document
-from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 
 _SELECTED = frozenset({"selected", "auto_selected"})
 SelectionSource = Literal["web", "terminal", "automatic"]
@@ -225,6 +225,18 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _validate_constraint_references(constraint: object, evidence_ids: set[object]) -> None:
+    """Require each constraint reference to identify evidence from its candidate."""
+    if not isinstance(constraint, dict):
+        raise DocumentMigrationError("constraint compliance は object で指定してください")
+    references = constraint["evidence_ids"]
+    if not isinstance(references, list) or not all(isinstance(item, str) for item in references):
+        raise DocumentMigrationError("constraint evidence_ids は string array で指定してください")
+    missing = sorted(set(references) - evidence_ids)
+    if missing:
+        raise DocumentMigrationError(f"constraint evidence_ids に未定義 ID があります: {', '.join(missing)}")
+
+
 def _validate_references(document: object) -> None:
     if not isinstance(document, dict):
         raise DocumentMigrationError("collection plan は JSON object で指定してください")
@@ -242,13 +254,6 @@ def _validate_references(document: object) -> None:
             raise DocumentMigrationError("candidate evidence/constraint_compliance は array が必要です")
         evidence_ids = {item["id"] for item in evidence if isinstance(item, dict)}
         for constraint in constraints:
-            if not isinstance(constraint, dict):
-                raise DocumentMigrationError("constraint compliance は object で指定してください")
-            references = constraint["evidence_ids"]
-            if not isinstance(references, list) or not all(isinstance(item, str) for item in references):
-                raise DocumentMigrationError("constraint evidence_ids は string array で指定してください")
-            missing = sorted(set(references) - evidence_ids)
-            if missing:
-                raise DocumentMigrationError(f"constraint evidence_ids に未定義 ID があります: {', '.join(missing)}")
+            _validate_constraint_references(constraint, evidence_ids)
     if len(plan_ids) != len(set(plan_ids)):
         raise DocumentMigrationError("collection plan の plan_id は一意である必要があります")

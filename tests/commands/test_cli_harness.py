@@ -1,8 +1,9 @@
 import argparse
+import logging
 
 import pytest
 
-from youtube_automation.commands._shared.cli_harness import run_cli
+from youtube_automation.commands._shared.cli_harness import run_cli, run_logged_command, run_report_command
 from youtube_automation.core.errors import AutomationError
 
 
@@ -80,3 +81,35 @@ def test_run_cli_parses_help_before_running_operation(capsys):
     assert exc_info.value.code == 0
     assert not called
     assert "usage:" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("command", ["logged", "report"])
+def test_logged_boundaries_do_not_hide_programming_errors(command):
+    def fail():
+        raise RuntimeError("programming failure")
+
+    logger = logging.getLogger(__name__)
+    with pytest.raises(RuntimeError, match="programming failure"):
+        if command == "logged":
+            run_logged_command(fail, logger)
+        else:
+            run_report_command(
+                fail, text=False, render_text=lambda report: None, logger=logger, failure_message="report failed: %s"
+            )
+
+
+@pytest.mark.parametrize("command", ["logged", "report"])
+@pytest.mark.parametrize("error", [OSError("read failed"), ValueError("invalid input")])
+def test_logged_boundaries_preserve_operational_error_exit_codes(command, error, caplog):
+    def fail():
+        raise error
+
+    logger = logging.getLogger(__name__)
+    if command == "logged":
+        result = run_logged_command(fail, logger)
+    else:
+        result = run_report_command(
+            fail, text=False, render_text=lambda report: None, logger=logger, failure_message="report failed: %s"
+        )
+    assert result == 1
+    assert str(error) in caplog.text

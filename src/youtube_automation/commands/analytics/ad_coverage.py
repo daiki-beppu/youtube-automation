@@ -13,8 +13,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from statistics import median
 
-from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.commands._shared.cli_harness import print_json_or_text_report, run_cli
+from youtube_automation.core.channel_context import channel_dir as _channel_dir
 from youtube_automation.core.errors import ConfigError
 
 logger = logging.getLogger(__name__)
@@ -111,6 +111,23 @@ def analyze_ad_coverage(
     eligible = [video for video in videos if video.monetized_playbacks >= min_playbacks]
     median_value = float(median(video.ads_per_playback for video in eligible)) if eligible else None
 
+    warnings = _ad_coverage_warnings(eligible, median_value, threshold)
+
+    return {
+        "status": "available",
+        "threshold": threshold,
+        "min_playbacks": min_playbacks,
+        "eligible_video_count": len(eligible),
+        "median_ads_per_playback": median_value,
+        "warning_count": len(warnings),
+        "warnings": warnings,
+    }
+
+
+def _ad_coverage_warnings(
+    eligible: list[VideoAdCoverage], median_value: float | None, threshold: float
+) -> list[dict[str, object]]:
+    """Rank eligible videos below the requested fraction of a positive median."""
     warnings: list[dict[str, object]] = []
     if median_value is not None and median_value > 0:
         for video in eligible:
@@ -125,15 +142,7 @@ def analyze_ad_coverage(
                 )
         warnings.sort(key=lambda warning: (float(warning["median_ratio"]), str(warning["video_id"])))
 
-    return {
-        "status": "available",
-        "threshold": threshold,
-        "min_playbacks": min_playbacks,
-        "eligible_video_count": len(eligible),
-        "median_ads_per_playback": median_value,
-        "warning_count": len(warnings),
-        "warnings": warnings,
-    }
+    return warnings
 
 
 def load_latest_revenue(channel_root: Path) -> Mapping[str, object]:
@@ -220,10 +229,7 @@ def run(args: argparse.Namespace) -> int:
     try:
         revenue = load_latest_revenue(_channel_dir())
         analysis = analyze_ad_coverage(revenue, threshold=args.threshold, min_playbacks=args.min_playbacks)
-        if args.text:
-            _print_text(analysis)
-        else:
-            print(json.dumps(analysis, ensure_ascii=False, indent=2))
+        print_json_or_text_report(analysis, text=args.text, render_text=_print_text)
         return 0
     except ConfigError as error:
         logger.error(str(error))

@@ -18,8 +18,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from youtube_automation.core.adapters.media import CollectionPaths, probe_duration
+from youtube_automation.core.adapters.media import probe_duration
 from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
@@ -28,6 +29,7 @@ from youtube_automation.domains.suno.name_matching import (
     SunoNameIndex,
     split_suno_duplicate_stem,
     suno_name_lookup_candidates,
+    suno_prompt_lookup_candidates,
 )
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
 
@@ -319,14 +321,11 @@ def load_prompts(collection_dir: Path) -> list[PromptEntry]:
             raise ValidationError(f"{SUNO_PROMPTS_JSON_FILENAME}: entry {i}.name must be a non-empty string")
         if title is not None and not isinstance(title, str):
             raise ValidationError(f"{SUNO_PROMPTS_JSON_FILENAME}: entry {i}.title must be a string")
-        sources = (name, title) if title and title.strip() else (name,)
         prompts.append(
             PromptEntry(
                 index=i,
                 has_lyrics=_has_substantive_lyrics(entry.get("lyrics")),
-                aliases=tuple(
-                    dict.fromkeys(candidate for source in sources for candidate in suno_name_lookup_candidates(source))
-                ),
+                aliases=suno_prompt_lookup_candidates(name, title),
             )
         )
     return prompts
@@ -438,6 +437,34 @@ def _winner_destination(candidate: Candidate) -> Path:
     return candidate.path.with_name(f"{candidate.prompt_index:02d}-{candidate.title}{candidate.path.suffix.lower()}")
 
 
+def _restore_over_limit_candidates(
+    missing_after_filter: list[int],
+    grouped: dict[int, list[Candidate]],
+    dropped: list[Candidate],
+    stocked: list[tuple[Candidate, Path]],
+    deleted: list[Candidate],
+    pair: PairSelectionConfig,
+) -> tuple[list[int], list[tuple[Candidate, Path]], list[Candidate], list[OverLimitException]]:
+    """Restore eligible over-limit candidates and reconcile their planned disposition."""
+    exceptions_over_limit: list[OverLimitException] = []
+    selected = _shortest_over_limit_candidates(missing_after_filter, dropped, pair)
+    missing_after_filter = [index for index in missing_after_filter if index not in selected]
+    restored = set(selected.values())
+    stocked = [(candidate, dest) for candidate, dest in stocked if candidate not in restored]
+    deleted = [candidate for candidate in deleted if candidate not in restored]
+    for prompt_index, candidate in selected.items():
+        grouped.setdefault(prompt_index, []).append(candidate)
+        dropped.remove(candidate)
+        exceptions_over_limit.append(
+            OverLimitException(
+                candidate=candidate,
+                max_song_sec=pair.max_song_sec,
+                reason="all_candidates_over_max_song_sec; selected_shortest_over_limit",
+            )
+        )
+    return missing_after_filter, stocked, deleted, exceptions_over_limit
+
+
 def _plan_suno_selection(
     *,
     collection_dir: Path,
@@ -448,65 +475,18 @@ def _plan_suno_selection(
 ) -> SelectionPlan:
     seed = cfg.pair.random_seed if cfg.pair.random_seed is not None else random.SystemRandom().randrange(2**32)
     rng = random.Random(seed)
-    grouped: dict[int, list[Candidate]] = {}
-    dropped: list[Candidate] = []
-    stocked: list[tuple[Candidate, Path]] = []
-    deleted: list[Candidate] = []
+    grouped, dropped, stocked, deleted = _filter_selection_candidates(candidates, prompts, cfg, collection_dir)
     kept: list[Path] = []
     winners: list[Candidate] = []
     renames: list[tuple[Candidate, Path]] = []
     exceptions_over_limit: list[OverLimitException] = []
     mode_counts = {"vocal": 0, "instrumental": 0}
 
-    for candidate in candidates:
-        if candidate.prompt_index not in prompts:
-            raise ValidationError(f"prompts に存在しない track index の音源です: {candidate.path.name}")
-        if _is_duration_out_of_range(
-            candidate,
-            min_song_sec=cfg.pair.min_song_sec,
-            max_song_sec=cfg.pair.max_song_sec,
-        ):
-            dropped.append(candidate)
-            if cfg.pair.out_of_range_action == "stock":
-                stocked.append((candidate, _stock_destination(candidate, collection_dir, cfg.stock)))
-            else:
-                deleted.append(candidate)
-            continue
-        grouped.setdefault(candidate.prompt_index, []).append(candidate)
-
     missing_after_filter = [p.index for p in prompts.values() if p.index not in grouped]
     if missing_after_filter and allow_best_effort_over_max:
-        dropped_by_prompt: dict[int, list[Candidate]] = {}
-        for candidate in dropped:
-            dropped_by_prompt.setdefault(candidate.prompt_index, []).append(candidate)
-
-        still_missing: list[int] = []
-        for prompt_index in missing_after_filter:
-            prompt_dropped = dropped_by_prompt.get(prompt_index, [])
-            all_dropped_are_over_max_only = bool(prompt_dropped) and all(
-                _is_over_max_only(
-                    candidate,
-                    min_song_sec=cfg.pair.min_song_sec,
-                    max_song_sec=cfg.pair.max_song_sec,
-                )
-                for candidate in prompt_dropped
-            )
-            if not all_dropped_are_over_max_only:
-                still_missing.append(prompt_index)
-                continue
-            selected = sorted(prompt_dropped, key=lambda c: (c.duration, c.path.name))[0]
-            grouped.setdefault(prompt_index, []).append(selected)
-            dropped.remove(selected)
-            stocked = [(candidate, dest) for candidate, dest in stocked if candidate != selected]
-            deleted = [candidate for candidate in deleted if candidate != selected]
-            exceptions_over_limit.append(
-                OverLimitException(
-                    candidate=selected,
-                    max_song_sec=cfg.pair.max_song_sec,
-                    reason="all_candidates_over_max_song_sec; selected_shortest_over_limit",
-                )
-            )
-        missing_after_filter = still_missing
+        missing_after_filter, stocked, deleted, exceptions_over_limit = _restore_over_limit_candidates(
+            missing_after_filter, grouped, dropped, stocked, deleted, cfg.pair
+        )
 
     if missing_after_filter:
         raise ValidationError(
@@ -548,6 +528,53 @@ def _plan_suno_selection(
         exceptions_over_limit=exceptions_over_limit,
         mode_counts=mode_counts,
     )
+
+
+def _filter_selection_candidates(
+    candidates: list[Candidate], prompts: Mapping[int, PromptEntry], cfg: SelectionConfig, collection_dir: Path
+) -> tuple[dict[int, list[Candidate]], list[Candidate], list[tuple[Candidate, Path]], list[Candidate]]:
+    """Group eligible candidates and plan disposition of duration-rejected files."""
+    grouped: dict[int, list[Candidate]] = {}
+    dropped: list[Candidate] = []
+    stocked: list[tuple[Candidate, Path]] = []
+    deleted: list[Candidate] = []
+    for candidate in candidates:
+        if candidate.prompt_index not in prompts:
+            raise ValidationError(f"prompts に存在しない track index の音源です: {candidate.path.name}")
+        if _is_duration_out_of_range(
+            candidate,
+            min_song_sec=cfg.pair.min_song_sec,
+            max_song_sec=cfg.pair.max_song_sec,
+        ):
+            dropped.append(candidate)
+            if cfg.pair.out_of_range_action == "stock":
+                stocked.append((candidate, _stock_destination(candidate, collection_dir, cfg.stock)))
+            else:
+                deleted.append(candidate)
+            continue
+        grouped.setdefault(candidate.prompt_index, []).append(candidate)
+
+    return grouped, dropped, stocked, deleted
+
+
+def _shortest_over_limit_candidates(
+    missing_indices: list[int], dropped: list[Candidate], pair: PairSelectionConfig
+) -> dict[int, Candidate]:
+    """Find the shortest fallback only when every rejected candidate exceeds the maximum."""
+    dropped_by_prompt: dict[int, list[Candidate]] = {}
+    for candidate in dropped:
+        dropped_by_prompt.setdefault(candidate.prompt_index, []).append(candidate)
+    selected: dict[int, Candidate] = {}
+    for prompt_index in missing_indices:
+        prompt_dropped = dropped_by_prompt.get(prompt_index, [])
+        if prompt_dropped and all(
+            _is_over_max_only(candidate, min_song_sec=pair.min_song_sec, max_song_sec=pair.max_song_sec)
+            for candidate in prompt_dropped
+        ):
+            selected[prompt_index] = min(
+                prompt_dropped, key=lambda candidate: (candidate.duration, candidate.path.name)
+            )
+    return selected
 
 
 def _validate_plan_destinations(

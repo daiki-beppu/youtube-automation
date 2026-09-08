@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
 from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.domains.collections.paths import resolve_collection_dir
 from youtube_automation.domains.collections.workflow_state import (
     AssetKey,
     HandoffPoint,
@@ -22,7 +23,6 @@ from youtube_automation.domains.collections.workflow_state import (
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
 from youtube_automation.infrastructure.filesystem import JSONValue
-from youtube_automation.infrastructure.media.collection_paths import resolve_collection_dir
 
 _PHASE_CHOICES: tuple[Phase, ...] = ("planning", "prepared", "mastered", "publishing", "complete")
 _STAGE_CHOICES: tuple[Stage, ...] = ("planning", "live")
@@ -208,37 +208,29 @@ def run(args: argparse.Namespace) -> int:
     if args.command == "get":
         value = _get_keypath(read_workflow_state(state_path).to_dict(), args.keypath)
         print(json.dumps(value, ensure_ascii=False))
-    elif args.command == "set-phase":
-        phase = cast(Phase, args.phase)
-        update_workflow_state(state_path, lambda state: _set_phase(state, phase))
-    elif args.command == "set-stage":
-        stage = cast(Stage, args.stage)
-        update_workflow_state(state_path, lambda state: _set_stage(state, stage))
-    elif args.command == "set-upload":
-        update_workflow_state(state_path, lambda state: _set_upload(state, args))
-    elif args.command == "set-asset":
-        key = cast(AssetKey, args.key)
-        update_workflow_state(state_path, lambda state: _set_asset(state, key, _json_value(args.value)))
-    elif args.command == "set-planning":
-        key = cast(PlanningKey, args.key)
-        update_workflow_state(state_path, lambda state: _set_planning(state, key, _json_value(args.value)))
-    elif args.command == "set-thumbnail-approved":
-        update_workflow_state(state_path, lambda state: _set_completion_flag(state, thumbnail=args.value == "true"))
-    elif args.command == "set-description-generated":
-        update_workflow_state(state_path, lambda state: _set_completion_flag(state, description=args.value == "true"))
-    elif args.command == "set-post-upload-shorts":
-        update_workflow_state(state_path, lambda state: _set_post_upload_shorts(state, _json_value(args.value)))
-    elif args.command == "record-handoff":
-        update_workflow_state(state_path, lambda state: _record_handoff(state, args))
-    elif args.command == "record-distrokid-submission":
+        return 0
+    if args.command == "record-distrokid-submission":
         config_path = _channel_root_for_collection(collection_dir) / "config" / "channel" / "distrokid.json"
         if config_path.is_symlink() or not config_path.is_file():
             raise WorkflowStateError(
                 f"DistroKid提出記録には config/channel/distrokid.json の通常ファイルが必要です: {config_path}"
             )
-        update_workflow_state(state_path, _record_distrokid_submission)
-    elif args.command == "touch":
-        update_workflow_state(state_path, _touch)
+    mutations: dict[str, Callable[[WorkflowState], None]] = {
+        "set-phase": lambda state: _set_phase(state, cast(Phase, args.phase)),
+        "set-stage": lambda state: _set_stage(state, cast(Stage, args.stage)),
+        "set-upload": lambda state: _set_upload(state, args),
+        "set-asset": lambda state: _set_asset(state, cast(AssetKey, args.key), _json_value(args.value)),
+        "set-planning": lambda state: _set_planning(state, cast(PlanningKey, args.key), _json_value(args.value)),
+        "set-thumbnail-approved": lambda state: _set_completion_flag(state, thumbnail=args.value == "true"),
+        "set-description-generated": lambda state: _set_completion_flag(state, description=args.value == "true"),
+        "set-post-upload-shorts": lambda state: _set_post_upload_shorts(state, _json_value(args.value)),
+        "record-handoff": lambda state: _record_handoff(state, args),
+        "record-distrokid-submission": _record_distrokid_submission,
+        "touch": _touch,
+    }
+    mutation = mutations.get(args.command)
+    if mutation is not None:
+        update_workflow_state(state_path, mutation)
     return 0
 
 

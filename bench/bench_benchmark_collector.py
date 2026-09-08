@@ -25,7 +25,7 @@ CHANNEL_IDS = [
 
 
 def _youtube_client():
-    from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
+    from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
     from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
     return YouTubeClients(full_handler=YouTubeOAuthHandler()).youtube

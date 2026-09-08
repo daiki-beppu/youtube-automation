@@ -147,7 +147,7 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 **dashboard**: 全 first-party チャンネルの analytics スナップショットを起動時に最新化して一覧表示するローカル Web UI。Python HTTP server が registry、全チャンネルの直列収集、read model/API/build asset 配信を担い、`dashboard/` の React + Vite + shadcn/ui 表示層は同一 origin の API だけを読む。SSOT は各チャンネルの `data/analytics_data_*.json`（将来は local store）。channel registry で対象チャンネルを解決し、失敗はチャンネル単位の部分エラーとして隔離する。
 
-**audio studio**: 1 collection の `02-Individual-music/` を loopback 限定で一覧・再生し、後続の非破壊編集操作を載せるローカル Web UI。Python server が filesystem allowlist、probe、Range 配信、編集値の検証・保存、lifecycle を所有し、`audio-studio/` の React + Vite + shadcn/ui 表示層は同一 origin API だけを利用する。
+**audio studio**: 1 collection の `02-Individual-music/` を loopback 限定で一覧・再生し、後続の非破壊編集操作を載せるローカル Web UI。Python server が filesystem allowlist、probe、Range 配信、編集値の検証・保存、lifecycle を所有し、`audio-studio/` の React + Vite + shadcn/ui 表示層は同一 origin API だけを利用する。 静的 build asset のパス検証・SPA fallback・配信は `infrastructure.localserver.assets` を dashboard と共有し、404 応答と CORS は各 server が所有する。
 
 **audio adjustments document**: collection の `20-documentation/audio-adjustments.json` に置く Audio Studio 編集意図の正本。`tracks.<filename>` は skill-config 既定から変えた cleanup 値だけを保持し、`order` / `shuffle_seed` / `pin_first` は master と概要欄チャプターが共有する確定曲順を保持する。`master` は master.mp3 全体へ適用する EQ・loudnorm・limiter、`finalize` は ambient layer の対象・音量・fade-in・loudnorm・mix の完全設定を保持する。原音・生成済み音声そのものは正本にしない。
 
@@ -195,7 +195,7 @@ CLAUDE.md の「アーキテクチャ」節の詳細版。要点は CLAUDE.md �
 
 #### 層と許可される依存方向
 
-依存は外側から内側へ一方向に流す。`commands/` は `application/`、`domains/`、`infrastructure/`、`configuration/`、`core/` を利用できるが、domain や infrastructure は commands を import しない。`domains/` は `core/` と設定の契約に依存する。`domains/` から `infrastructure/` への direct import は、provider-neutral な authoritative module である `infrastructure.filesystem`、`infrastructure.process`、`infrastructure.quota`、`infrastructure.browser`、`infrastructure.google.youtube`、`infrastructure.google.upload` の完全一致だけを許可する。外部 SDK・認証・network・subprocess と、列挙外の infrastructure module は引き続き adapter 境界の外へ漏らさない。SDK・認証の禁止 inventory は project dependency と infrastructure の実使用に基づく `google.auth`、`google.genai`、`google.oauth2`、`google_auth_httplib2`、`google_auth_oauthlib`、`googleapiclient`、`httplib2`、`oauthlib`、`openai` の exact namespace とその子であり、無関係な `google` namespace 全体には拡張しない。移行前から残る `domains/metadata/service.py` の `subprocess` edge は新規許可ではなく、consumer migration を行わない段階の exact baseline exception として固定し、別 domain・別 module への拡張を拒否する。`application/` は workflow 単位の orchestration を持ち、commands から呼び出される。`configuration/` は設定の読み込み・検証と dataclass を所有する。設定境界で必要な正規化処理に限り `configuration/` から `infrastructure/` の provider-neutral な utility を利用するが、`infrastructure/` から設定機能層へは依存しない。
+依存は外側から内側へ一方向に流す。`commands/` は `application/`、`domains/`、`infrastructure/`、`configuration/`、`core/` を利用できるが、domain や infrastructure は commands を import しない。`domains/` は `core/` と設定の契約に依存する。`domains/` から `infrastructure/` への direct import は、provider-neutral な authoritative module である `infrastructure.filesystem`、`infrastructure.process`、`infrastructure.quota`、`infrastructure.browser`、`infrastructure.google.youtube`、`infrastructure.google.upload` の完全一致だけを許可する。外部 SDK・認証・network・subprocess と、列挙外の infrastructure module は引き続き adapter 境界の外へ漏らさない。SDK・認証の禁止 inventory は project dependency と infrastructure の実使用に基づく `google.auth`、`google.genai`、`google.oauth2`、`google_auth_httplib2`、`google_auth_oauthlib`、`googleapiclient`、`httplib2`、`oauthlib`、`openai` の exact namespace とその子であり、無関係な `google` namespace 全体には拡張しない。メタデータ生成の外部処理は `application/metadata/service.py` へ移し、domain の外部 I/O import に例外は設けない。`application/` は workflow 単位の orchestration を持ち、commands から呼び出される。`configuration/` は設定の読み込み・検証と dataclass を所有する。設定境界で必要な正規化処理に限り `configuration/` から `infrastructure/` の provider-neutral な utility を利用するが、`infrastructure/` から設定機能層へは依存しない。
 
 Python 版 skill-config の正規キーは `configuration/skills.py` が所有する。アプリケーションコードから読むキーは `SKILL_CONFIG_KEYS`、SKILL.md の実行手順からだけ読むキーは `SKILL_ONLY_CONFIG_KEYS` に分け、両集合と `.claude/skills/<key>/config.default.yaml` の双方向一致を `yt-skills lint` で検証する。`music.prompt` のような名前空間キーは `.claude/skills/music/config.default.yaml` と `config/skills/music.yaml` を deep-merge した後に `prompt` 節だけを返す。
 
@@ -209,13 +209,14 @@ Python 版 skill-config の正規キーは `configuration/skills.py` が所有�
 
 <!-- core-adapter-surface:start -->
 - `src/youtube_automation/core/adapters/__init__.py`
-- `src/youtube_automation/core/adapters/google/__init__.py`
 - `src/youtube_automation/core/adapters/media.py`
 - `src/youtube_automation/core/adapters/observability.py`
 - `src/youtube_automation/core/adapters/runtime.py`
 - `src/youtube_automation/core/adapters/security.py`
 - `src/youtube_automation/core/adapters/youtube.py`
 <!-- core-adapter-surface:end -->
+
+旧 `core.adapters.google` は子 facade の移行後に空になったため削除した。利用者は `infrastructure.google.youtube` / `infrastructure.google.upload` の正本を参照する。空パッケージを含む facade の再導入は、この明示集合の検査で引き続き拒否する。
 
 `runtime.py`、`media.py`、`youtube.py` を含む各明示 adapter の symbol と runtime behavior はこの最終 surface 固定では変更しない。`infrastructure/legacy_utils/` の compatibility facade は別契約であり、この集合には含めない。
 
@@ -249,8 +250,17 @@ Python 版 skill-config の正規キーは `configuration/skills.py` が所有�
 移動や owner 変更を伴う場合は、`docs/architecture/repository-reorganization-receipt.json`、参照元全体、下流公開 import、CLI、設定パス、package resource を追加で確認する。履歴監査文書の旧 path は履歴証跡として保持するが、active source・tests・skills・案内文書には canonical path だけを記載する。
 
 - `src/youtube_automation/configuration/` — 設定 loader / dataclass owner
+- `src/youtube_automation/domains/uploads/scheduling.py` — アップロード記録の timezone 付き日時と、チャンネル既定の予約公開時刻の計算を所有する。設定ローダー・API 実行には依存せず、呼び出し側から渡された設定を使う。旧 runtime と adapter の公開関数は明示再公開で維持する
+- `src/youtube_automation/domains/analytics/video_analysis.py` — 動画解析の入力モデル・保存先名・監査文書と互換 Markdown の整形。Gemini SDK に依存せず、Suno の設定読み込みと文書出力から共有する。SDK 実行と解析結果キャッシュは `infrastructure/media/video_analyzer.py` が所有する
+- `src/youtube_automation/domains/collections/paths.py` — コレクションのディレクトリ骨格・必須ディレクトリ・成果物の探索順を所有する。外部メディア SDK に依存せず、作成・検証・制作・公開の各処理で同じルールを共有する。旧 infrastructure と adapter の import 経路は互換用に明示再公開する
+- `src/youtube_automation/core/channel_context.py` — プロセス内のチャンネルルート解決・キャッシュ。設定JSONの読み込みから独立し、公開の `configuration.channel_dir` も同じ状態を参照する。解決順は `CHANNEL_DIR` → cwd 祖先
+- `src/youtube_automation/domains/uploads/quota.py` — upload の API call 見積もりと、入力済み履歴に基づくリセット日単位のクォータ不足判定。履歴 I/O や API 実行は行わず、旧 infrastructure と YouTube adapter の公開経路は明示再公開で保持する
+- `src/youtube_automation/core/youtube_tags.py` — 設定と metadata で共有するタグ表記の正規化・文字数計算。I/O 非依存の primitive とし、設定から domain への依存を作らない。コレクション／Shorts のタグ組立は `domains/metadata/tags.py` が所有し、旧 infrastructure と adapter の公開経路は明示再公開で維持する
+- `src/youtube_automation/core/time_utils.py` — 時刻・時間長の表示、locale 単位の選択、timezone 付き UTC 日時の検証。I/O 非依存の横断 primitive として共有し、既存の infrastructure と runtime adapter の import 経路は明示再公開で維持する
+- `src/youtube_automation/core/redaction.py` — 診断文から token・秘密値・絶対パスをマスクする横断 primitive。外部 I/O に依存せず、認証・通知・CLI で共有する。既存の `infrastructure.auth.redaction` と `core.adapters.security` は同じ関数を再公開する互換経路として保持する
+- `src/youtube_automation/core/colors.py` — 設定検証と画像生成で共有する RGB 色の構文検証・正規化。外部画像ライブラリには依存しない
 - `src/youtube_automation/infrastructure/legacy_utils/` — 再配置後も下流公開 import を維持する compatibility adapter 群
-- `src/youtube_automation/commands/` — `yt-*` CLI の thin adapter。`analytics` / `channel` / `collections` / `distrokid` / `documents` / `media` / `metadata` / `suno` / `system` / `thumbnail` / `uploads` / `youtube` の 12 domain に分割し、argparse・stdio・exit・composition を所有する。アップロード CLI（Auto / Collection / Shorts）は `commands/uploads/` が入口で、実装は `domains/uploads/` が持つ
+- `src/youtube_automation/commands/` — `yt-*` CLI の thin adapter。`analytics` / `channel` / `collections` / `distrokid` / `documents` / `media` / `metadata` / `suno` / `system` / `thumbnail` / `uploads` / `youtube` の 12 domain に分割し、argparse・stdio・exit・composition を所有する。アップロード CLI（Auto / Collection / Shorts）は `commands/uploads/` が入口で、再開可能な共通 upload core は `domains/uploads/youtube.py`、設定・履歴・transport を組み合わせる Auto / Collection / Shorts 投稿 orchestration は `application/uploads/` が持つ
 - `src/youtube_automation/domains/media/audio_adjustments.py` — `audio-adjustments.json` の cleanup 差分・確定曲順・master 全体調整・ambient finalize 調整を検証し、実ファイル集合との一致確認と他段キーを保つ原子的更新を所有する
 - `src/youtube_automation/entrypoints.py` — console script wrapper。`pyproject.toml [project.scripts]` の全 `yt-*` がここを経由し、**例外なく** `commands/` 配下の module を `import_module` して `main` を呼ぶ
 - `src/youtube_automation/commands/channel/channel_init_templates.py` — channel-init が生成する設定テンプレート
@@ -299,16 +309,23 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `configuration.{meta,content,youtube,analytics,playlists,workflow,shorts,audio,localizations,comments,pinned_comment,distrokid,community_draft}` | 責務別 dataclass |
 | `infrastructure.google.youtube` | YouTube API clients（instance-scoped） |
 | `domains.uploads.youtube` | 再開可能アップロード・サムネイル圧縮の共通コア |
+| `application.uploads.youtube` | チャンネル本人性・事前検証・メタデータ・予約公開設定を組み合わせる動画投稿 |
+| `application.uploads.preflight` | 設定・音声・既存投稿・メタデータを読み集め、domain のアップロード前検証ルールへ渡す |
+| `application.uploads.shorts` | Shorts 投稿の設定・予約計算・履歴・再開 journal・upload transport の組み立て |
+| `application.uploads.collection` / `_complete_collection_executor` | Collection 投稿の設定・予約・履歴・クォータ確認・アップロード・公開後処理を組み合わせて実行 |
+| `domains.uploads.master_video` | workflow-state の明示値を優先する公開用マスター選択。事前検証とアップロード strategy が共有し、Preview は対象外 |
 | `core.errors` | ドメイン例外（`AutomationError` 基底、`ConfigError` / `YouTubeAPIError` / `ValidationError` / `UploadError`） |
 | `infrastructure.media.collection_paths` | コレクションディレクトリ構造の解決 |
 | `infrastructure.media_store` | 境界転送専用の fail-closed Local / Cloudflare R2 adapter（工程内部へは注入しない） |
 | `domains.suno` | Suno 設定、歌詞、プロンプト、プレイリスト、選曲の生成・検証 |
+| `domains.suno.config` | Suno 設定解決、モード推定、Style 文字数検証（upload preflight は互換再公開） |
 | `domains.suno.downloaded` | downloaded payload、workflow、検証、archive、apply transaction |
 | `domains.suno.name_matching` | prompt・playlist・downloaded filename 共通の名前正規化と曖昧性検出 |
 | `domains.skills` | skill 列挙、frontmatter、Markdown セクション、reference 解決の provider-neutral inventory |
 | `domains.metadata` | `service` の状態付き orchestration と titles / descriptions / tags / localizations leaf |
 | `domains.analytics` | Analytics の Protocol、収集、分析、レポート、時系列 policy。SDK/client は adapter 境界で解決 |
-| `domains.channel_readiness` | TTP 対象・branding・benchmark・制作設定の provider-neutral なチャンネル準備判定 |
+| `domains.channel_readiness` | チャンネル準備判定の結果型と、取得済みテキストに対する TTP 承認済み例外の判定 |
+| `application.channel_readiness.readiness` | 設定・persona・branding・benchmark・制作成果物を読み集め、初期設定と制作開始の準備状況を評価 |
 | `domains.thumbnail` | サムネ特徴量、相関、参照、archive、選択 policy（Pillow） |
 | `domains.media` | 音声、字幕、画像、動画の provider-neutral model / policy |
 | `domains.media_store` | 工程境界の `<channel>/<collection>/<handoff>/` key、checksum metadata、push / pull / exists port |
@@ -326,6 +343,9 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `application.media_handoff` | 全 object の remote metadata/content 検証、manifest-last push、manifest-only pull、local rollback を調停 |
 | `application.pipeline_notifications` | 各pipeline ownerのtyped eventと公開・guard結果をprovider-neutral通知eventへ写像し、配送sinkへ委譲 |
 | `application.human_tasks` | collection stateを列挙し、固定`human-tasks.md`の原子公開後にprovider-neutral notifierへ要約を渡す |
+| `application.analytics.competitor_discovery` | 競合探索の設定による除外・検索・評価を調停。API 通信と検索キャッシュは infrastructure.analytics.competitor_discovery が所有 |
+| `application.youtube_auth` | チャンネル設定付きの OAuth 表示ラベルと認証済みクライアント生成。トークン処理・API 接続は infrastructure.auth / infrastructure.google が所有 |
+| `application.analytics.dashboard_refresh` | チャンネル設定の切替と Analytics・公開履歴の更新を調停。保存・集計 adapter は infrastructure.analytics が所有 |
 | `application.analytics.video_report` | 動画解析結果を audit report schema へ写像し、共通運用文書 migration による JSON+HTML 公開を調停 |
 | `.claude/skills/channel-research/references/channel-research-report.schema.json` | benchmark / market / viewer voice / thumbnail 調査の比較表・勝ちパターン・根拠・適用候補を共通定義し、skill writer と全 downstream reader の正本になる |
 | `infrastructure.filesystem` | provider-neutral な filesystem I/O と、複数 text file の fsync・rollback・公開後 verifier 付き transaction |
@@ -333,6 +353,7 @@ assets/stock/           # ボツ画像ストック (#364)。<theme-slug>/ 配下
 | `infrastructure.documents.publishing` | 構造化 JSON と同 basename の HTML を temp・fsync・再読込検証・replace で原子的に公開し、consumer 向けに schema 検証済み JSON+HTML 対応 pair を再読込する |
 | `commands.documents.migrate` | skill writer の未公開 candidate JSON と明示 yes/no を共通移行 workflow へ渡す `yt-document-migrate` adapter |
 | `commands.documents.render` | 固定 schema registry から選択して HTML を生成する `yt-document-render` adapter |
+| `configuration.image_generation` | skill-config を画像生成設定へ変換。下流の utils.image_provider 互換経路も同じローダーを公開 |
 | `infrastructure.media.image_provider` | 画像生成プロバイダー抽象化（Gemini / OpenAI 切り替え） |
 | `infrastructure.media.stock` | ボツ画像ストック化（`assets/stock/<theme>/` への退避・列挙・整理、隣接 `.meta.json` 管理） |
 | `infrastructure.auth` | OAuth 2.0 token の読み込み・refresh・atomic 永続化、scope と YouTube service 生成 |
@@ -391,9 +412,9 @@ B3 の owner と後続 handoff は機械可読な
 [`b3-owner-receipt.json`](architecture/b3-owner-receipt.json) に固定する。domain は
 SDK・ADC・network・subprocess の実装を持たず、それらは B4 の adapter 境界へ渡す。
 
-Issue #2305 で Suno の旧 `utils.suno_*` 14 module と `utils.metadata_generator` を削除し、実行 consumer と patch seam を新 owner へ移行した。`domains.metadata.__all__` は次の9 symbolに固定する。
+Issue #2305 で Suno の旧 `utils.suno_*` 14 module と `utils.metadata_generator` を削除し、実行 consumer と patch seam を新 owner へ移行した。設定・音声解析・ワークフロー更新を組み合わせる `BAHMetadataGenerator` とモジュール実行入口は `application.metadata.service` が所有する。`domains.metadata.__all__` は次の8 symbolに固定する。
 
-`BAHMetadataGenerator`, `LOCALIZED_TITLE_PLACEHOLDERS`, `SceneTitleViolation`, `build_short_description`, `build_short_localizations`, `format_scene_title_violations`, `format_title_template`, `validate_localizations_title_templates`, `validate_scene_phrases`.
+`LOCALIZED_TITLE_PLACEHOLDERS`, `SceneTitleViolation`, `build_short_description`, `build_short_localizations`, `format_scene_title_violations`, `format_title_template`, `validate_localizations_title_templates`, `validate_scene_phrases`.
 
 B3 が直接利用する leaf API は `domains.metadata.descriptions.build_short_description` / `domains.metadata.localizations.build_short_localizations` と、placeholder 検証の `domains.metadata.titles.format_title_template` / `domains.metadata.localizations.validate_localizations_title_templates`。既知 downstream の `wf_batch_runner.py` と `bulk_update_collection_localizations.py` は、旧 metadata import を `domains.metadata`（または owner leaf）へ置換する。
 

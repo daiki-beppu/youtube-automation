@@ -362,9 +362,8 @@ def test_channel_status_fallback_requests_ten_latest_uploads(monkeypatch) -> Non
 def test_analytics_public_selector_and_all_video_api_are_preserved() -> None:
     """K-01 selectors remain domain-facing operations after the move."""
     module = importlib.import_module("youtube_automation.domains.analytics.collection.strategic_analytics")
-    collector = MagicMock()
-    collector.get_all_channel_videos.return_value = []
-    collector.get_all_video_analytics = module.StrategicAnalyticsMixin.get_all_video_analytics.__get__(collector)
+    collector = module.StrategicAnalyticsMixin()
+    collector.get_all_channel_videos = MagicMock(return_value=[])
     assert collector.get_all_video_analytics("2026-01-01", "2026-01-02") == []
 
 

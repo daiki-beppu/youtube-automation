@@ -14,9 +14,9 @@ import contextlib
 import logging
 import sys
 
+from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
 from youtube_automation.configuration import load_config
 from youtube_automation.infrastructure import cost_tracker
-from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 logger = logging.getLogger(__name__)

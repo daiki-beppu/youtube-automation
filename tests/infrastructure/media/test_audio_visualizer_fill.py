@@ -192,3 +192,11 @@ def test_cli_converts_value_error_to_usage_error(
     stderr = capsys.readouterr().err
     assert "usage: yt-audio-visualizer-fill" in stderr
     assert "invalid visualizer size" in stderr
+
+
+@pytest.mark.parametrize("name", ["white", "black", "red", "green", "blue", "yellow", "cyan", "magenta"])
+def test_named_colors_match_renderer_rgb_values(name):
+    from youtube_automation.core.colors import parse_color as parse_core_color
+
+    assert parse_core_color(name.upper(), allow_named=True) == Image.new("RGB", (1, 1), name).getpixel((0, 0))
+    assert parse_color is parse_core_color

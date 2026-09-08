@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import math
-import os
 import warnings
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -67,13 +66,19 @@ from youtube_automation.configuration.youtube import (
     YoutubeApi,
     YoutubeSection,
 )
+from youtube_automation.core.channel_context import (
+    channel_dir as channel_dir,
+)
+from youtube_automation.core.channel_context import (
+    refresh_channel_dir,
+    reset_channel_context,
+)
+from youtube_automation.core.colors import normalize_ffmpeg_color, parse_color
 from youtube_automation.core.errors import ConfigError
-from youtube_automation.infrastructure.media.audio_visualizer_fill import normalize_ffmpeg_color, parse_color
 
 logger = logging.getLogger(__name__)
 
 _instance: ChannelConfig | None = None
-_channel_dir: Path | None = None
 
 __all__ = ["load_schedule_config", "resolve_existing_target_dir"]
 
@@ -105,48 +110,19 @@ _REQUIRED_KEYS_BY_SECTION: dict[str, list[str]] = {
 }
 
 
-def _find_channel_ancestor(start: Path) -> Path | None:
-    current = start.expanduser().resolve()
-    for parent in [current, *current.parents]:
-        if (parent / "config" / "channel").is_dir():
-            return parent
-    return None
-
-
-def _resolve_channel_dir() -> Path:
-    """設定ルートを CHANNEL_DIR → cwd 祖先の優先順で解決する."""
-    env_dir = os.environ.get("CHANNEL_DIR")
-    if env_dir:
-        return Path(env_dir).expanduser()
-    cwd_channel = _find_channel_ancestor(Path.cwd())
-    if cwd_channel is not None:
-        return cwd_channel
-    raise ConfigError("CHANNEL_DIR 環境変数を設定するか、config/channel/ を持つディレクトリ配下で実行してください")
-
-
-def channel_dir() -> Path:
-    """`config/channel/` を含むプロジェクトルートを返す（シングルトン解決）."""
-    global _channel_dir
-    if _channel_dir is None:
-        _channel_dir = _resolve_channel_dir()
-    return _channel_dir
-
-
 def reset() -> None:
-    """シングルトン state をリセットする."""
-    global _instance, _channel_dir
+    """シングルトン state と共有ルートキャッシュをリセットする."""
+    global _instance
     _instance = None
-    _channel_dir = None
+    reset_channel_context()
 
 
 def load_config() -> ChannelConfig:
     """`config/channel/*.json` を glob ロードし `ChannelConfig` を返す（シングルトン）."""
-    global _instance, _channel_dir
+    global _instance
     if _instance is not None:
         return _instance
-
-    _channel_dir = _resolve_channel_dir()
-    _instance = _build(_channel_dir)
+    _instance = _build(refresh_channel_dir())
     return _instance
 
 
@@ -160,6 +136,15 @@ def load_schedule_config(channel_dir_path: Path) -> ScheduleConfig:
     return load_schedule_config_from_file(channel_dir_path.resolve() / "config" / "schedule_config.json")
 
 
+def _read_config_object(path: Path, *, invalid_root_message: str) -> dict:
+    """Decode one UTF-8 configuration object; callers own I/O and parse diagnostics."""
+    with path.open(encoding="utf-8") as stream:
+        data = json.load(stream)
+    if not isinstance(data, dict):
+        raise ConfigError(invalid_root_message)
+    return data
+
+
 def load_schedule_config_from_file(path: Path) -> ScheduleConfig:
     """schedule_config JSON をファイルパス直指定で読み、既定値と優先順位を解決する.
 
@@ -169,12 +154,9 @@ def load_schedule_config_from_file(path: Path) -> ScheduleConfig:
     if not path.exists():
         return _build_schedule({})
     try:
-        with path.open(encoding="utf-8") as file:
-            raw = json.load(file)
+        raw = _read_config_object(path, invalid_root_message=f"{path} のトップレベルは object でなければなりません")
     except (OSError, json.JSONDecodeError) as exc:
         raise ConfigError(f"schedule_config.json の読み込みに失敗しました: {path}: {exc}") from exc
-    if not isinstance(raw, dict):
-        raise ConfigError(f"{path} のトップレベルは object でなければなりません")
     return _build_schedule(raw)
 
 
@@ -268,12 +250,11 @@ def _load_and_merge(files: list[Path]) -> dict:
     key_origin: dict[str, str] = {}
     for path in files:
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            data = _read_config_object(
+                path, invalid_root_message=f"{path} のトップレベルは object でなければなりません"
+            )
         except json.JSONDecodeError as e:
             raise ConfigError(f"JSON パース失敗: {path}: {e}") from e
-        if not isinstance(data, dict):
-            raise ConfigError(f"{path} のトップレベルは object でなければなりません")
         for key, value in data.items():
             if key in merged:
                 raise ConfigError(f"トップレベルキー '{key}' が {key_origin[key]} と {path.name} の両方に存在します")
@@ -442,83 +423,12 @@ def _build_overlays(raw: object) -> Overlays:
         raise ConfigError("overlays.audio_visualizer.bars は整数でなければなりません") from exc
     if av_bars <= 0:
         raise ConfigError("overlays.audio_visualizer.bars は 1 以上でなければなりません")
-    av_ring_raw = av_raw.get("ring") or {}
-    if not isinstance(av_ring_raw, dict):
-        raise ConfigError(
-            f"overlays.audio_visualizer.ring は object でなければなりません（got {type(av_ring_raw).__name__}）"
-        )
-    av_arc_raw = av_ring_raw.get("arc_deg", [0, 360])
-    if not isinstance(av_arc_raw, (list, tuple)) or len(av_arc_raw) != 2:
-        raise ConfigError("overlays.audio_visualizer.ring.arc_deg は [start, end] の 2 要素配列でなければなりません")
-    try:
-        av_ring = OverlayAudioVisualizerRing(
-            inner_r=int(av_ring_raw.get("inner_r", 120)),
-            length=int(av_ring_raw.get("length", 160)),
-            arc_deg=(float(av_arc_raw[0]), float(av_arc_raw[1])),
-        )
-    except (TypeError, ValueError) as exc:
-        raise ConfigError("overlays.audio_visualizer.ring の値は数値でなければなりません") from exc
-    if av_ring.inner_r < 0 or av_ring.length <= 0:
-        raise ConfigError("overlays.audio_visualizer.ring の inner_r は 0 以上、length は 1 以上でなければなりません")
-    if not 0 <= av_ring.arc_deg[0] < av_ring.arc_deg[1] <= 360:
-        raise ConfigError("overlays.audio_visualizer.ring.arc_deg は 0 <= start < end <= 360 でなければなりません")
+    av_ring = _build_visualizer_ring(av_raw)
+    fill = _build_visualizer_fill(av_raw)
 
-    fill_raw = av_raw.get("fill")
-    if fill_raw is not None and not isinstance(fill_raw, dict):
-        raise ConfigError("overlays.audio_visualizer.fill は object でなければなりません")
-    fill = None
-    if fill_raw is not None:
-        fill_type = str(fill_raw.get("type", "solid"))
-        if fill_type not in {"solid", "gradient", "rainbow", "conical"}:
-            raise ConfigError(
-                "overlays.audio_visualizer.fill.type は solid / gradient / rainbow / conical のいずれかです"
-            )
-        fill_color = str(fill_raw.get("color", av_raw.get("colors", "white")))
-        fill_top = str(fill_raw.get("top", "0xA9CBF0"))
-        fill_bottom = str(fill_raw.get("bottom", fill_raw.get("bot", "0x3A5696")))
-        try:
-            if fill_type == "solid":
-                normalize_ffmpeg_color(fill_color)
-            elif fill_type == "gradient":
-                parse_color(fill_top)
-                parse_color(fill_bottom)
-        except ValueError as exc:
-            raise ConfigError(f"overlays.audio_visualizer.fill の色指定が不正です: {exc}") from exc
-        fill = AudioVisualizerFill(
-            type=fill_type,
-            color=fill_color,
-            top=fill_top,
-            bottom=fill_bottom,
-        )
+    rounding = _build_visualizer_rounding(av_raw.get("rounding"))
 
-    rounding_raw = av_raw.get("rounding")
-    if rounding_raw is not None and not isinstance(rounding_raw, dict):
-        raise ConfigError("overlays.audio_visualizer.rounding は object でなければなりません")
-    rounding = (
-        AudioVisualizerRounding(
-            blur=float(rounding_raw.get("blur", 2.3)),
-            contrast=float(rounding_raw.get("contrast", 3.2)),
-        )
-        if rounding_raw is not None
-        else None
-    )
-    if rounding is not None and (rounding.blur < 0 or rounding.contrast <= 0):
-        raise ConfigError("overlays.audio_visualizer.rounding の blur は 0 以上、contrast は 0 より大きい値です")
-
-    glow_raw = av_raw.get("glow")
-    if glow_raw is not None and not isinstance(glow_raw, dict):
-        raise ConfigError("overlays.audio_visualizer.glow は object でなければなりません")
-    glow = (
-        AudioVisualizerGlow(
-            enabled=bool(glow_raw.get("enabled", True)),
-            sigma=float(glow_raw.get("sigma", av_raw.get("glow_sigma", 12.0))),
-            opacity=float(glow_raw.get("opacity", av_raw.get("glow_opacity", 0.45))),
-        )
-        if glow_raw is not None
-        else None
-    )
-    if glow is not None and (glow.sigma < 0 or not 0 <= glow.opacity <= 1):
-        raise ConfigError("overlays.audio_visualizer.glow の sigma は 0 以上、opacity は 0〜1 の値です")
+    glow = _build_visualizer_glow(av_raw)
     audio_visualizer = OverlayAudioVisualizer(
         enabled=bool(av_raw.get("enabled", False)),
         style=av_style,
@@ -583,6 +493,91 @@ def _build_overlays(raw: object) -> Overlays:
     )
 
 
+def _build_visualizer_glow(av_raw: dict) -> AudioVisualizerGlow | None:
+    glow_raw = av_raw.get("glow")
+    if glow_raw is None:
+        return None
+    if not isinstance(glow_raw, dict):
+        raise ConfigError("overlays.audio_visualizer.glow は object でなければなりません")
+    glow = AudioVisualizerGlow(
+        enabled=bool(glow_raw.get("enabled", True)),
+        sigma=float(glow_raw.get("sigma", av_raw.get("glow_sigma", 12.0))),
+        opacity=float(glow_raw.get("opacity", av_raw.get("glow_opacity", 0.45))),
+    )
+    if glow.sigma < 0 or not 0 <= glow.opacity <= 1:
+        raise ConfigError("overlays.audio_visualizer.glow の sigma は 0 以上、opacity は 0〜1 の値です")
+    return glow
+
+
+def _build_visualizer_rounding(rounding_raw: object) -> AudioVisualizerRounding | None:
+    if rounding_raw is None:
+        return None
+    if not isinstance(rounding_raw, dict):
+        raise ConfigError("overlays.audio_visualizer.rounding は object でなければなりません")
+    rounding = AudioVisualizerRounding(
+        blur=float(rounding_raw.get("blur", 2.3)),
+        contrast=float(rounding_raw.get("contrast", 3.2)),
+    )
+    if rounding.blur < 0 or rounding.contrast <= 0:
+        raise ConfigError("overlays.audio_visualizer.rounding の blur は 0 以上、contrast は 0 より大きい値です")
+    return rounding
+
+
+def _build_visualizer_ring(av_raw: dict) -> OverlayAudioVisualizerRing:
+    av_ring_raw = av_raw.get("ring") or {}
+    if not isinstance(av_ring_raw, dict):
+        raise ConfigError(
+            f"overlays.audio_visualizer.ring は object でなければなりません（got {type(av_ring_raw).__name__}）"
+        )
+    av_arc_raw = av_ring_raw.get("arc_deg", [0, 360])
+    if not isinstance(av_arc_raw, (list, tuple)) or len(av_arc_raw) != 2:
+        raise ConfigError("overlays.audio_visualizer.ring.arc_deg は [start, end] の 2 要素配列でなければなりません")
+    try:
+        av_ring = OverlayAudioVisualizerRing(
+            inner_r=int(av_ring_raw.get("inner_r", 120)),
+            length=int(av_ring_raw.get("length", 160)),
+            arc_deg=(float(av_arc_raw[0]), float(av_arc_raw[1])),
+        )
+    except (TypeError, ValueError) as exc:
+        raise ConfigError("overlays.audio_visualizer.ring の値は数値でなければなりません") from exc
+    if av_ring.inner_r < 0 or av_ring.length <= 0:
+        raise ConfigError("overlays.audio_visualizer.ring の inner_r は 0 以上、length は 1 以上でなければなりません")
+    if not 0 <= av_ring.arc_deg[0] < av_ring.arc_deg[1] <= 360:
+        raise ConfigError("overlays.audio_visualizer.ring.arc_deg は 0 <= start < end <= 360 でなければなりません")
+    return av_ring
+
+
+def _build_visualizer_fill(av_raw: dict) -> AudioVisualizerFill | None:
+    fill_raw = av_raw.get("fill")
+    if fill_raw is not None and not isinstance(fill_raw, dict):
+        raise ConfigError("overlays.audio_visualizer.fill は object でなければなりません")
+    fill = None
+    if fill_raw is not None:
+        fill_type = str(fill_raw.get("type", "solid"))
+        if fill_type not in {"solid", "gradient", "rainbow", "conical"}:
+            raise ConfigError(
+                "overlays.audio_visualizer.fill.type は solid / gradient / rainbow / conical のいずれかです"
+            )
+        fill_color = str(fill_raw.get("color", av_raw.get("colors", "white")))
+        fill_top = str(fill_raw.get("top", "0xA9CBF0"))
+        fill_bottom = str(fill_raw.get("bottom", fill_raw.get("bot", "0x3A5696")))
+        try:
+            if fill_type == "solid":
+                normalize_ffmpeg_color(fill_color)
+            elif fill_type == "gradient":
+                parse_color(fill_top)
+                parse_color(fill_bottom)
+        except ValueError as exc:
+            raise ConfigError(f"overlays.audio_visualizer.fill の色指定が不正です: {exc}") from exc
+        fill = AudioVisualizerFill(
+            type=fill_type,
+            color=fill_color,
+            top=fill_top,
+            bottom=fill_bottom,
+        )
+    return fill
+
+
 def _build_analytics(merged: dict) -> Analytics:
     an = merged.get("analytics") or {}
     bm = merged.get("benchmark") or {}
@@ -639,10 +634,7 @@ def _build_workflow(merged: dict) -> Workflow:
     # 旧 top-level `post_upload` / `short` キーが残っていても silently ignore する
     # （`_REQUIRED_KEYS_BY_SECTION` に workflow.json キーを登録していないため）。
     # Shorts スケジュール公開時刻は `shorts.publish_time` に移動。
-    if "workflow" in merged:
-        wf = merged["workflow"]
-    else:
-        wf = {}
+    wf = merged.get("workflow", {})
     if not isinstance(wf, dict):
         raise ConfigError(f"workflow セクションは object でなければなりません（got {type(wf).__name__}）")
     unexpected = set(wf) - {
@@ -659,10 +651,7 @@ def _build_workflow(merged: dict) -> Workflow:
         names = ", ".join(sorted(unexpected))
         raise ConfigError(f"workflow に未知のキーがあります: {names}")
 
-    if "wf_new" in wf:
-        wf_new_raw = wf["wf_new"]
-    else:
-        wf_new_raw = {}
+    wf_new_raw = wf.get("wf_new", {})
     if not isinstance(wf_new_raw, dict):
         raise ConfigError(f"workflow.wf_new は object でなければなりません（got {type(wf_new_raw).__name__}）")
     unexpected = set(wf_new_raw) - {"skip_plan_selection"}
@@ -670,10 +659,7 @@ def _build_workflow(merged: dict) -> Workflow:
         names = ", ".join(sorted(unexpected))
         raise ConfigError(f"workflow.wf_new に未知のキーがあります: {names}")
 
-    if "wf_next" in wf:
-        wf_next_raw = wf["wf_next"]
-    else:
-        wf_next_raw = {}
+    wf_next_raw = wf.get("wf_next", {})
     if not isinstance(wf_next_raw, dict):
         raise ConfigError(f"workflow.wf_next は object でなければなりません（got {type(wf_next_raw).__name__}）")
 
@@ -698,52 +684,7 @@ def _build_workflow(merged: dict) -> Workflow:
     )
 
     post_publish_configured = "post-publish" in wf
-    post_publish_raw = wf.get("post-publish", {})
-    if not isinstance(post_publish_raw, dict):
-        raise ConfigError(
-            f"workflow.post-publish は object でなければなりません（got {type(post_publish_raw).__name__}）"
-        )
-    unexpected = set(post_publish_raw) - {"skip_approvals", "approval_gates"}
-    if unexpected:
-        names = ", ".join(sorted(unexpected))
-        raise ConfigError(f"workflow.post-publish に未知のキーがあります: {names}")
-    post_publish_skip_raw = post_publish_raw.get("skip_approvals", {})
-    if not isinstance(post_publish_skip_raw, dict):
-        raise ConfigError(
-            "workflow.post-publish.skip_approvals は object でなければなりません"
-            f"（got {type(post_publish_skip_raw).__name__}）"
-        )
-    post_publish_gates_raw = post_publish_raw.get("approval_gates", {})
-    if not isinstance(post_publish_gates_raw, dict):
-        raise ConfigError(
-            "workflow.post-publish.approval_gates は object でなければなりません"
-            f"（got {type(post_publish_gates_raw).__name__}）"
-        )
-    for key, values in (
-        ("skip_approvals", post_publish_skip_raw),
-        ("approval_gates", post_publish_gates_raw),
-    ):
-        if "metadata-audit" in values:
-            warnings.warn(
-                f"workflow.post-publish.{key}.metadata-audit は非推奨です。"
-                "メタデータ監査は読み取り専用の /audit --metadata へ移行しました",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-    post_publish_steps = {"community-post", "pinned-comment", "metadata-audit"}
-    for key, values in (
-        ("skip_approvals", post_publish_skip_raw),
-        ("approval_gates", post_publish_gates_raw),
-    ):
-        unknown_steps = set(values) - post_publish_steps
-        if unknown_steps:
-            names = ", ".join(sorted(unknown_steps))
-            raise ConfigError(f"workflow.post-publish.{key} に未知の step があります: {names}")
-
-    post_publish_skips = {
-        step: _resolve_post_publish_skip_approval(post_publish_skip_raw, post_publish_gates_raw, step)
-        for step in post_publish_steps
-    }
+    post_publish_skips = _post_publish_skip_settings(wf)
 
     return Workflow(
         wf_new=WfNew(
@@ -778,6 +719,57 @@ def _build_workflow(merged: dict) -> Workflow:
         scheduled_automation=_build_scheduled_automation(wf),
         manual_baseline_minutes=_build_manual_baseline_minutes(wf),
     )
+
+
+def _post_publish_skip_settings(wf: dict) -> dict[str, bool]:
+    """Validate post-publish settings and resolve legacy approval aliases."""
+    post_publish_raw = wf.get("post-publish", {})
+    if not isinstance(post_publish_raw, dict):
+        raise ConfigError(
+            f"workflow.post-publish は object でなければなりません（got {type(post_publish_raw).__name__}）"
+        )
+    unexpected = set(post_publish_raw) - {"skip_approvals", "approval_gates"}
+    if unexpected:
+        names = ", ".join(sorted(unexpected))
+        raise ConfigError(f"workflow.post-publish に未知のキーがあります: {names}")
+    post_publish_skip_raw = post_publish_raw.get("skip_approvals", {})
+    if not isinstance(post_publish_skip_raw, dict):
+        raise ConfigError(
+            "workflow.post-publish.skip_approvals は object でなければなりません"
+            f"（got {type(post_publish_skip_raw).__name__}）"
+        )
+    post_publish_gates_raw = post_publish_raw.get("approval_gates", {})
+    if not isinstance(post_publish_gates_raw, dict):
+        raise ConfigError(
+            "workflow.post-publish.approval_gates は object でなければなりません"
+            f"（got {type(post_publish_gates_raw).__name__}）"
+        )
+    for key, values in (
+        ("skip_approvals", post_publish_skip_raw),
+        ("approval_gates", post_publish_gates_raw),
+    ):
+        if "metadata-audit" in values:
+            warnings.warn(
+                f"workflow.post-publish.{key}.metadata-audit は非推奨です。"
+                "メタデータ監査は読み取り専用の /audit --metadata へ移行しました",
+                DeprecationWarning,
+                stacklevel=3,
+            )
+    post_publish_steps = {"community-post", "pinned-comment", "metadata-audit"}
+    for key, values in (
+        ("skip_approvals", post_publish_skip_raw),
+        ("approval_gates", post_publish_gates_raw),
+    ):
+        unknown_steps = set(values) - post_publish_steps
+        if unknown_steps:
+            names = ", ".join(sorted(unknown_steps))
+            raise ConfigError(f"workflow.post-publish.{key} に未知の step があります: {names}")
+
+    post_publish_skips = {
+        step: _resolve_post_publish_skip_approval(post_publish_skip_raw, post_publish_gates_raw, step)
+        for step in post_publish_steps
+    }
+    return post_publish_skips
 
 
 def _build_manual_baseline_minutes(wf: dict) -> dict[str, float] | None:
@@ -1300,12 +1292,12 @@ def _load_localizations(channel_dir_path: Path, fallback_language: str) -> Local
             default_language="",
         )
     try:
-        with open(loc_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        data = _read_config_object(
+            loc_path,
+            invalid_root_message=f"localizations.json のトップレベルは object でなければなりません: {loc_path}",
+        )
     except json.JSONDecodeError as e:
         raise ConfigError(f"localizations.json の JSON パース失敗: {loc_path}: {e}") from e
-    if not isinstance(data, dict):
-        raise ConfigError(f"localizations.json のトップレベルは object でなければなりません: {loc_path}")
     return Localizations(
         data=data,
         exists=True,

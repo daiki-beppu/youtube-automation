@@ -109,7 +109,8 @@ def test_main_error_prints_message_and_exits_one(monkeypatch, capsys):
     assert capsys.readouterr().out == "❌ 取得エラー: unavailable\n"
 
 
-def test_get_status_falls_back_to_uploads_when_collection_playlists_are_empty(monkeypatch):
+@pytest.mark.parametrize("analytics_error", [False, True])
+def test_get_status_falls_back_to_uploads_when_collection_playlists_are_empty(monkeypatch, analytics_error):
     config = SimpleNamespace(
         meta=SimpleNamespace(channel_short="ref"),
         analytics=SimpleNamespace(collection_filter_keywords=("Complete", "Collection")),
@@ -148,6 +149,8 @@ def test_get_status_falls_back_to_uploads_when_collection_playlists_are_empty(mo
         ]
     }
     collector.analytics_service.query.return_value = {"rows": [["video-fallback", 321, 42.5, 100]]}
+    if analytics_error:
+        collector.analytics_service.query.side_effect = channel_status.YouTubeAPIError("unavailable")
     monkeypatch.setattr(channel_status, "YouTubeAnalyticsCollector", MagicMock(return_value=collector))
 
     result = channel_status.get_channel_latest_status()
@@ -155,17 +158,13 @@ def test_get_status_falls_back_to_uploads_when_collection_playlists_are_empty(mo
     query = collector.analytics_service.query.call_args.kwargs
     assert query["metrics"] == "engagedViews,estimatedMinutesWatched,averageViewDuration"
     assert query["sort"] == "-engagedViews"
-    assert result["recent_collections"] == [
-        {
-            "collection_name": "Fallback upload",
-            "published_at": "2026-07-30",
-            "video_id": "video-fallback",
-            "url": "https://youtu.be/video-fallback",
-            "stats": {
-                "views": 321,
-                "watch_time_min": 42.5,
-                "avg_view_duration_sec": 100,
-            },
-        }
-    ]
+    expected = {
+        "collection_name": "Fallback upload",
+        "published_at": "2026-07-30",
+        "video_id": "video-fallback",
+        "url": "https://youtu.be/video-fallback",
+    }
+    if not analytics_error:
+        expected["stats"] = {"views": 321, "watch_time_min": 42.5, "avg_view_duration_sec": 100}
+    assert result["recent_collections"] == [expected]
     collector.youtube_service.list_playlist_items_for_display.assert_called_once_with("UU_REF", max_results=10)

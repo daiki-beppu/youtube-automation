@@ -57,11 +57,8 @@ def fetch_video_status(youtube, video_ids: list[str]) -> dict[str, dict | None]:
     result: dict[str, dict | None] = {vid: None for vid in video_ids}
     for start in range(0, len(video_ids), _VIDEOS_LIST_CHUNK):
         chunk = video_ids[start : start + _VIDEOS_LIST_CHUNK]
-        try:
-            request = youtube.videos().list(part="status", id=",".join(chunk))
-            resp = execute_with_retry(request, "videos.list (status) failed")
-        except YouTubeAPIError:
-            raise
+        request = youtube.videos().list(part="status", id=",".join(chunk))
+        resp = execute_with_retry(request, "videos.list (status) failed")
         for item in resp.get("items", []):
             result[item["id"]] = item.get("status", {})
     return result
@@ -110,42 +107,26 @@ class CommentReplier:
         """owner_channel_id が未解決の場合に channels.list API で取得しキャッシュする."""
         if self._owner_channel_id is not None:
             return
-        try:
-            request = self._youtube.channels().list(part="id", mine=True)
-            resp = execute_with_retry(request, "channels.list (owner channel ID) failed")
-        except YouTubeAPIError:
-            raise
-        items = resp.get("items") or []
-        if not items:
-            raise YouTubeAPIError("channels.list が空を返しました — チャンネルが見つかりません")
-        self._owner_channel_id = items[0]["id"]
+        self._owner_channel_id = _fetch_own_channel(
+            self._youtube, part="id", context="channels.list (owner channel ID) failed"
+        )["id"]
 
     def _fetch_channel_info(self) -> tuple[str, str]:
         """channels().list(part="contentDetails") から (owner_id, uploads_playlist_id) を返す."""
-        try:
-            request = self._youtube.channels().list(part="contentDetails", mine=True)
-            resp = execute_with_retry(request, "channels.list (mine=True) failed")
-        except YouTubeAPIError:
-            raise
-        items = resp.get("items") or []
-        if not items:
-            raise YouTubeAPIError("channels.list が空を返しました — チャンネルが見つかりません")
-        return items[0]["id"], items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
+        channel = _fetch_own_channel(self._youtube, part="contentDetails", context="channels.list (mine=True) failed")
+        return channel["id"], channel["contentDetails"]["relatedPlaylists"]["uploads"]
 
     def _iter_uploaded_video_ids(self, uploads_playlist_id: str) -> Iterator[str]:
         """自チャンネルのアップロード動画 ID を generator で返す（早期 break 可能）."""
         page_token: str | None = None
         while True:
-            try:
-                request = self._youtube.playlistItems().list(
-                    part="contentDetails",
-                    playlistId=uploads_playlist_id,
-                    maxResults=50,
-                    pageToken=page_token,
-                )
-                resp = execute_with_retry(request, "playlistItems.list failed")
-            except YouTubeAPIError:
-                raise
+            request = self._youtube.playlistItems().list(
+                part="contentDetails",
+                playlistId=uploads_playlist_id,
+                maxResults=50,
+                pageToken=page_token,
+            )
+            resp = execute_with_retry(request, "playlistItems.list failed")
             for item in resp.get("items", []):
                 yield item["contentDetails"]["videoId"]
             page_token = resp.get("nextPageToken")
@@ -266,22 +247,9 @@ class CommentReplier:
                 else:
                     thread_comments = [first_comment]
                 thread_id = first_comment.parent_id or first_comment.comment_id
-                while True:
-                    try:
-                        comment = next(comments)
-                    except StopIteration:
-                        break
-                    if (comment.parent_id or comment.comment_id) != thread_id:
-                        next_comment = comment
-                        break
-                    thread_comments.append(comment)
-                owner_reply_times = tuple(
-                    published_at
-                    for comment in thread_comments
-                    if comment.parent_id is not None
-                    and comment.author_channel_id == self._owner_channel_id
-                    and (published_at := _parse_published_at(comment.published_at)) is not None
-                )
+                thread_tail, next_comment = _read_thread_tail(comments, thread_id)
+                thread_comments.extend(thread_tail)
+                owner_reply_times = self._owner_reply_times(thread_comments)
                 for comment in thread_comments:
                     if len(plan.planned) >= limit:
                         return
@@ -291,14 +259,20 @@ class CommentReplier:
                 raise
             plan.skipped.append(self._video_skip_record(video_id, _COMMENTS_DISABLED_SKIP_REASON))
 
+    def _owner_reply_times(self, comments: list[FetchedComment]) -> tuple[datetime, ...]:
+        return tuple(
+            published_at
+            for comment in comments
+            if comment.parent_id is not None
+            and comment.author_channel_id == self._owner_channel_id
+            and (published_at := _parse_published_at(comment.published_at)) is not None
+        )
+
     def _get_title(self, video_id: str) -> str:
         if video_id in self._title_cache:
             return self._title_cache[video_id]
-        try:
-            request = self._youtube.videos().list(part="snippet", id=video_id)
-            resp = execute_with_retry(request, f"videos.list failed (video_id={video_id})")
-        except YouTubeAPIError:
-            raise
+        request = self._youtube.videos().list(part="snippet", id=video_id)
+        resp = execute_with_retry(request, f"videos.list failed (video_id={video_id})")
         title = ""
         for item in resp.get("items", []):
             title = item["snippet"].get("title", "")
@@ -341,14 +315,8 @@ class CommentReplier:
 
         record = {
             "comment_id": comment.comment_id,
-            "video_id": comment.video_id,
-            "video_title": video_title,
-            "comment_author": comment.author,
             "comment_text": comment.text,
-            **self._generator_metadata(),
-            "reply_policy": "all_comments",
-            "language": language,
-            "reply_text": reply_text,
+            **self._reply_metadata(comment, video_title, reply_text, language=language),
         }
         if export_candidates:
             record.update(
@@ -517,40 +485,11 @@ class CommentReplier:
             )
             return False
 
-        metadata = {
-            "video_id": comment.video_id,
-            "video_title": video_title,
-            "comment_author": comment.author,
-            **self._generator_metadata(),
-            "reply_policy": "all_comments",
-            "language": self._config.language or self._default_language,
-            "replied_at": datetime.now(timezone.utc).isoformat(),
-            "reply_text": reply_text,
-        }
-        if reply_source is not None:
-            metadata["reply_source"] = reply_source
-        self._history.mark_replied(comment.comment_id, metadata)
-        # insert→save 間で save が失敗すると次回実行で二重返信するため、リトライで確実に永続化 (#382)
-        save_failed = False
-        for save_attempt in range(_SAVE_MAX_RETRIES):
-            try:
-                self._history.save()
-                break
-            except OSError as e:
-                logger.warning(
-                    "履歴保存リトライ %d/%d (comment_id=%s): %s",
-                    save_attempt + 1,
-                    _SAVE_MAX_RETRIES,
-                    comment.comment_id,
-                    e,
-                )
-        else:
-            save_failed = True
-            logger.error(
-                "履歴保存が %d 回失敗 (comment_id=%s) — 次回実行で二重返信の可能性あり",
-                _SAVE_MAX_RETRIES,
-                comment.comment_id,
-            )
+        metadata = self._reply_metadata(
+            comment, video_title, reply_text, language=self._config.language or self._default_language
+        )
+        save_failed = not _persist_reply_metadata(self._history, comment.comment_id, metadata, reply_source)
+        if save_failed:
             plan.errors.append(
                 self._error_record(
                     comment,
@@ -563,6 +502,18 @@ class CommentReplier:
             record["save_failed"] = True
         plan.replied.append(record)
         return True
+
+    def _reply_metadata(self, comment: FetchedComment, video_title: str, reply_text: str, *, language: str) -> dict:
+        """Use the same content and provider metadata for previews and persisted replies."""
+        return {
+            "video_id": comment.video_id,
+            "video_title": video_title,
+            "comment_author": comment.author,
+            **self._generator_metadata(),
+            "reply_policy": "all_comments",
+            "language": language,
+            "reply_text": reply_text,
+        }
 
     def _generator_metadata(self) -> dict:
         """planned / replied 両レコードで共通する provider メタデータを返す."""
@@ -594,6 +545,54 @@ class CommentReplier:
             "comment_author": comment.author,
             "error": message,
         }
+
+
+def _fetch_own_channel(youtube, *, part: str, context: str) -> dict:
+    """Fetch the authenticated channel and reject an empty API result consistently."""
+    request = youtube.channels().list(part=part, mine=True)
+    response = execute_with_retry(request, context)
+    items = response.get("items") or []
+    if not items:
+        raise YouTubeAPIError("channels.list が空を返しました — チャンネルが見つかりません")
+    return items[0]
+
+
+def _persist_reply_metadata(history: ReplyHistory, comment_id: str, metadata: dict, reply_source: str | None) -> bool:
+    """Record a successful remote reply and retry its local persistence."""
+    metadata["replied_at"] = datetime.now(timezone.utc).isoformat()
+    if reply_source is not None:
+        metadata["reply_source"] = reply_source
+    history.mark_replied(comment_id, metadata)
+    for save_attempt in range(_SAVE_MAX_RETRIES):
+        try:
+            history.save()
+            return True
+        except OSError as error:
+            logger.warning(
+                "履歴保存リトライ %d/%d (comment_id=%s): %s",
+                save_attempt + 1,
+                _SAVE_MAX_RETRIES,
+                comment_id,
+                error,
+            )
+    logger.error(
+        "履歴保存が %d 回失敗 (comment_id=%s) — 次回実行で二重返信の可能性あり",
+        _SAVE_MAX_RETRIES,
+        comment_id,
+    )
+    return False
+
+
+def _read_thread_tail(
+    comments: Iterator[FetchedComment], thread_id: str
+) -> tuple[list[FetchedComment], FetchedComment | None]:
+    """Read the rest of one thread, retaining the first comment of the next thread."""
+    thread_comments: list[FetchedComment] = []
+    for comment in comments:
+        if (comment.parent_id or comment.comment_id) != thread_id:
+            return thread_comments, comment
+        thread_comments.append(comment)
+    return thread_comments, None
 
 
 def _is_comments_disabled_error(error: YouTubeAPIError) -> bool:

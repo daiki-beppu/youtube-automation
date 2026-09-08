@@ -75,7 +75,7 @@
       "old_owner": "legacy.audio_formats",
       "exact_new_owner": "src/youtube_automation/domains/media/audio_formats.py",
       "symbols": ["AUDIO_EXTS"],
-      "consumers": ["src/youtube_automation/domains/metadata/service.py", "src/youtube_automation/commands/suno/suno_audio_cleanup.py"],
+      "consumers": ["src/youtube_automation/application/metadata/service.py", "src/youtube_automation/commands/suno/suno_audio_cleanup.py"],
       "handoff": "B4"
     },
     {

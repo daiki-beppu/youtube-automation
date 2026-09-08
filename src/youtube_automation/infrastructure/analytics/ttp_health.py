@@ -134,115 +134,29 @@ def evaluate_ttp_health(
             )
             continue
 
-        alerts: list[dict] = []
-        insufficiencies: list[dict] = []
-        parsed_videos: list[tuple[date, int]] = []
         raw_scan_videos = upload_scan.get("videos") or []
-        for index, video in enumerate(raw_scan_videos):
-            published_at = video.get("published_at")
-            try:
-                parsed_date = date.fromisoformat(published_at)
-            except (TypeError, ValueError):
-                insufficiencies.append(
-                    {
-                        "kind": "invalid_upload_date",
-                        "detail": f"upload_scan.videos[{index}].published_at を解釈できません: {published_at!r}",
-                    }
-                )
-                continue
-            parsed_videos.append((parsed_date, int(video.get("views", 0))))
+        parsed_videos, insufficiencies = _parse_scan_videos(raw_scan_videos)
 
         recent_window = _window(recent_start, reference_date, parsed_videos)
         prior_window = _window(prior_start, prior_end, parsed_videos)
 
         latest_upload_at = upload_scan.get("latest_upload_at")
-        days_since_last_upload = None
-        if not raw_scan_videos:
-            insufficiencies.append({"kind": "no_scanned_uploads", "detail": "走査できた投稿がありません。"})
-        else:
-            try:
-                latest_date = date.fromisoformat(latest_upload_at)
-            except (TypeError, ValueError):
-                insufficiencies.append(
-                    {
-                        "kind": "invalid_latest_upload_at",
-                        "detail": f"latest_upload_at を解釈できません: {latest_upload_at!r}",
-                    }
-                )
-            else:
-                days_since_last_upload = (reference_date - latest_date).days
-                if days_since_last_upload >= stale_days:
-                    alerts.append(
-                        {
-                            "type": "stale_posting",
-                            "reason": (
-                                f"最終投稿 {latest_upload_at} から {days_since_last_upload} 日経過"
-                                f"（閾値 {stale_days} 日）"
-                            ),
-                            "days_since_last_upload": days_since_last_upload,
-                            "threshold_days": stale_days,
-                        }
-                    )
+        days_since_last_upload, alerts, recency_insufficiencies = _posting_recency(
+            latest_upload_at, has_uploads=bool(raw_scan_videos), reference_date=reference_date, stale_days=stale_days
+        )
+        insufficiencies.extend(recency_insufficiencies)
 
-        coverage_complete = upload_scan.get("complete") is True
-        if not coverage_complete:
-            oldest_upload_at = upload_scan.get("oldest_upload_at")
-            try:
-                oldest_date = date.fromisoformat(oldest_upload_at)
-            except (TypeError, ValueError):
-                oldest_date = None
-            coverage_complete = oldest_date is not None and oldest_date <= prior_start
-
-        if not coverage_complete:
-            recommendation = _coverage_recommendation(upload_scan, reference_date, prior_start)
-            recommended_scan_recent = recommendation["recommended_scan_recent"]
-            insufficiencies.append(
-                {
-                    "kind": "incomplete_window_coverage",
-                    "detail": (
-                        f"走査範囲が前期開始日 {prior_start.isoformat()} まで到達していません"
-                        f"（oldest_upload_at={upload_scan.get('oldest_upload_at')!r}）。"
-                        f" {_BENCHMARK_CONFIG_PATH} に scan_recent: {recommended_scan_recent} 以上を設定して"
-                        " /channel-research --benchmark を再実行してください。"
-                    ),
-                    **recommendation,
-                }
-            )
-        elif prior_window["video_count"] == 0:
-            insufficiencies.append(
-                {"kind": "no_prior_window_uploads", "detail": "前期ウィンドウに比較対象の投稿がありません。"}
-            )
-        elif prior_window["avg_views"] <= 0:
-            insufficiencies.append(
-                {"kind": "nonpositive_prior_average", "detail": "前期平均再生数が 0 以下のため比較できません。"}
-            )
-        else:
-            recent_average = recent_window["avg_views"] if recent_window["avg_views"] is not None else 0
-            prior_average = prior_window["avg_views"]
-            ratio = recent_average / prior_average
-            if ratio <= decline_ratio:
-                if recent_window["video_count"] == 0:
-                    reason = (
-                        f"直近{window_days}日に投稿なし。前期平均 {prior_average:,} に対する比率は 0%"
-                        f"（閾値 {decline_ratio:.0%}）"
-                    )
-                else:
-                    reason = (
-                        f"直近{window_days}日平均 {recent_average:,} は前期平均 {prior_average:,} の "
-                        f"{ratio:.0%}（閾値 {decline_ratio:.0%}）"
-                    )
-                alerts.append(
-                    {
-                        "type": "views_decline",
-                        "reason": reason,
-                        "recent_avg_views": recent_average,
-                        "prior_avg_views": prior_average,
-                        "ratio": round(ratio, 2),
-                        "threshold_ratio": decline_ratio,
-                        "recent_window": recent_window,
-                        "prior_window": prior_window,
-                    }
-                )
+        comparison_alerts, comparison_insufficiencies = _compare_windows(
+            upload_scan,
+            reference_date=reference_date,
+            prior_start=prior_start,
+            recent_window=recent_window,
+            prior_window=prior_window,
+            window_days=window_days,
+            decline_ratio=decline_ratio,
+        )
+        alerts.extend(comparison_alerts)
+        insufficiencies.extend(comparison_insufficiencies)
 
         status = "alert" if alerts else "insufficient_data" if insufficiencies else "healthy"
         results.append(
@@ -271,3 +185,130 @@ def evaluate_ttp_health(
         },
         "channels": results,
     }
+
+
+def _parse_scan_videos(raw_scan_videos: list[dict]) -> tuple[list[tuple[date, int]], list[dict]]:
+    insufficiencies: list[dict] = []
+    parsed_videos: list[tuple[date, int]] = []
+    for index, video in enumerate(raw_scan_videos):
+        published_at = video.get("published_at")
+        try:
+            parsed_date = date.fromisoformat(published_at)
+        except (TypeError, ValueError):
+            insufficiencies.append(
+                {
+                    "kind": "invalid_upload_date",
+                    "detail": f"upload_scan.videos[{index}].published_at を解釈できません: {published_at!r}",
+                }
+            )
+            continue
+        parsed_videos.append((parsed_date, int(video.get("views", 0))))
+    return parsed_videos, insufficiencies
+
+
+def _posting_recency(
+    latest_upload_at: str | None, *, has_uploads: bool, reference_date: date, stale_days: int
+) -> tuple[int | None, list[dict], list[dict]]:
+    alerts: list[dict] = []
+    insufficiencies: list[dict] = []
+    days_since_last_upload = None
+    if not has_uploads:
+        insufficiencies.append({"kind": "no_scanned_uploads", "detail": "走査できた投稿がありません。"})
+    else:
+        try:
+            latest_date = date.fromisoformat(latest_upload_at)
+        except (TypeError, ValueError):
+            insufficiencies.append(
+                {
+                    "kind": "invalid_latest_upload_at",
+                    "detail": f"latest_upload_at を解釈できません: {latest_upload_at!r}",
+                }
+            )
+        else:
+            days_since_last_upload = (reference_date - latest_date).days
+            if days_since_last_upload >= stale_days:
+                alerts.append(
+                    {
+                        "type": "stale_posting",
+                        "reason": (
+                            f"最終投稿 {latest_upload_at} から {days_since_last_upload} 日経過（閾値 {stale_days} 日）"
+                        ),
+                        "days_since_last_upload": days_since_last_upload,
+                        "threshold_days": stale_days,
+                    }
+                )
+    return days_since_last_upload, alerts, insufficiencies
+
+
+def _compare_windows(
+    upload_scan: dict,
+    *,
+    reference_date: date,
+    prior_start: date,
+    recent_window: dict,
+    prior_window: dict,
+    window_days: int,
+    decline_ratio: float,
+) -> tuple[list[dict], list[dict]]:
+    alerts: list[dict] = []
+    insufficiencies: list[dict] = []
+    coverage_complete = upload_scan.get("complete") is True
+    if not coverage_complete:
+        oldest_upload_at = upload_scan.get("oldest_upload_at")
+        try:
+            oldest_date = date.fromisoformat(oldest_upload_at)
+        except (TypeError, ValueError):
+            oldest_date = None
+        coverage_complete = oldest_date is not None and oldest_date <= prior_start
+
+    if not coverage_complete:
+        recommendation = _coverage_recommendation(upload_scan, reference_date, prior_start)
+        recommended_scan_recent = recommendation["recommended_scan_recent"]
+        insufficiencies.append(
+            {
+                "kind": "incomplete_window_coverage",
+                "detail": (
+                    f"走査範囲が前期開始日 {prior_start.isoformat()} まで到達していません"
+                    f"（oldest_upload_at={upload_scan.get('oldest_upload_at')!r}）。"
+                    f" {_BENCHMARK_CONFIG_PATH} に scan_recent: {recommended_scan_recent} 以上を設定して"
+                    " /channel-research --benchmark を再実行してください。"
+                ),
+                **recommendation,
+            }
+        )
+    elif prior_window["video_count"] == 0:
+        insufficiencies.append(
+            {"kind": "no_prior_window_uploads", "detail": "前期ウィンドウに比較対象の投稿がありません。"}
+        )
+    elif prior_window["avg_views"] <= 0:
+        insufficiencies.append(
+            {"kind": "nonpositive_prior_average", "detail": "前期平均再生数が 0 以下のため比較できません。"}
+        )
+    else:
+        recent_average = recent_window["avg_views"] if recent_window["avg_views"] is not None else 0
+        prior_average = prior_window["avg_views"]
+        ratio = recent_average / prior_average
+        if ratio <= decline_ratio:
+            if recent_window["video_count"] == 0:
+                reason = (
+                    f"直近{window_days}日に投稿なし。前期平均 {prior_average:,} に対する比率は 0%"
+                    f"（閾値 {decline_ratio:.0%}）"
+                )
+            else:
+                reason = (
+                    f"直近{window_days}日平均 {recent_average:,} は前期平均 {prior_average:,} の "
+                    f"{ratio:.0%}（閾値 {decline_ratio:.0%}）"
+                )
+            alerts.append(
+                {
+                    "type": "views_decline",
+                    "reason": reason,
+                    "recent_avg_views": recent_average,
+                    "prior_avg_views": prior_average,
+                    "ratio": round(ratio, 2),
+                    "threshold_ratio": decline_ratio,
+                    "recent_window": recent_window,
+                    "prior_window": prior_window,
+                }
+            )
+    return alerts, insufficiencies

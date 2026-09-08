@@ -6,11 +6,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
 
+from youtube_automation.commands._shared.arguments import add_optional_collection_argument
 from youtube_automation.core.errors import ValidationError
+from youtube_automation.domains.collections.paths import resolve_collection_dir
 from youtube_automation.domains.suno.downloaded.archive import (
     _AUDIO_EXTENSIONS,
     _CANONICAL_MUSIC_FILENAME_RE,
@@ -23,12 +25,12 @@ from youtube_automation.domains.suno.name_matching import (
 )
 from youtube_automation.domains.suno.playlist import (
     format_verification_report,
+    iter_entry_titles,
     load_entry_names,
     normalize_title,
     verify_playlist_titles,
 )
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
-from youtube_automation.infrastructure.media.collection_paths import resolve_collection_dir
 
 _TITLE_SOURCE_ERROR = (
     "playlist 曲名の入力元は --titles / --titles-file / --music-dir / stdin のいずれか 1 つにしてください"
@@ -54,29 +56,14 @@ def _suno_title_aliases(value: str) -> tuple[str, ...]:
 
 
 def _load_entry_title_identities(collection_dir: Path) -> list[SunoPromptTitleIdentity]:
-    try:
-        entries = read_suno_prompt_entries(collection_dir)
-    except (OSError, ValueError) as exc:
-        raise ValidationError(str(exc)) from exc
     identities: list[SunoPromptTitleIdentity] = []
-    for index, entry in enumerate(entries, 1):
-        if not isinstance(entry, Mapping):
-            raise ValidationError(f"suno-prompts.json: entry {index} must be an object")
-        name = entry.get("name")
-        title = entry.get("title")
-        if title is not None and not isinstance(title, str):
-            raise ValidationError(f"suno-prompts.json: entry {index} title must be a string")
-        if not isinstance(name, str) or not name.strip():
-            raise ValidationError(f"suno-prompts.json: entry {index} has no name")
-        canonical_title = title if title is not None and title.strip() else name
+    for name, canonical_title in iter_entry_titles(collection_dir):
         aliases: list[str] = []
         for source in (name, canonical_title):
             for alias in _suno_title_aliases(source):
                 if alias not in aliases:
                     aliases.append(alias)
         identities.append(SunoPromptTitleIdentity(canonical_title.strip(), tuple(aliases)))
-    if not identities:
-        raise ValidationError("suno-prompts.json に entry がありません")
     return identities
 
 
@@ -91,6 +78,33 @@ def _build_music_dir_title_lookups(
             exact_lookup.setdefault(alias, set()).add(identity.canonical_title)
             normalized_lookup.setdefault(normalize_suno_name_for_lookup(alias), set()).add(identity.canonical_title)
     return exact_lookup, normalized_lookup
+
+
+def _music_file_identity(
+    audio_path: Path,
+    identities: list[SunoPromptTitleIdentity],
+    exact_title_lookup: dict[str, set[str]],
+    normalized_title_lookup: dict[str, set[str]],
+) -> tuple[str, str] | None:
+    """Resolve the indexed prompt title and variant, rejecting ambiguous aliases."""
+    match = _CANONICAL_MUSIC_FILENAME_RE.fullmatch(audio_path.stem)
+    if match is None:
+        return None
+    entry_index = int(match.group("index"))
+    title = match.group("title")
+    if entry_index < 1 or entry_index > len(identities):
+        return None
+    indexed_title = identities[entry_index - 1].canonical_title
+    canonical_titles = exact_title_lookup.get(title)
+    if canonical_titles is None:
+        canonical_titles = normalized_title_lookup.get(normalize_suno_name_for_lookup(title), set())
+        if len(canonical_titles) > 1:
+            matches = ", ".join(sorted(canonical_titles))
+            raise ValidationError(f"ambiguous Suno name {title!r}: matches {matches}")
+    canonical_title = indexed_title if indexed_title in canonical_titles else None
+    if canonical_title is None:
+        return None
+    return canonical_title, match.group("variant")
 
 
 def _read_music_dir_titles(
@@ -117,27 +131,12 @@ def _read_music_dir_titles(
     for audio_path in sorted(path.iterdir()):
         if not audio_path.is_file() or audio_path.suffix.lower() not in _AUDIO_EXTENSIONS:
             continue
-        match = _CANONICAL_MUSIC_FILENAME_RE.fullmatch(audio_path.stem)
-        if match is None:
+        identity = _music_file_identity(audio_path, identities, exact_title_lookup, normalized_title_lookup)
+        if identity is None:
             titles.append(audio_path.name)
             continue
-        entry_index = int(match.group("index"))
-        title = match.group("title")
-        if entry_index < 1 or entry_index > len(identities):
-            titles.append(audio_path.name)
-            continue
-        indexed_title = identities[entry_index - 1].canonical_title
-        canonical_titles = exact_title_lookup.get(title)
-        if canonical_titles is None:
-            canonical_titles = normalized_title_lookup.get(normalize_suno_name_for_lookup(title), set())
-            if len(canonical_titles) > 1:
-                matches = ", ".join(sorted(canonical_titles))
-                raise ValidationError(f"ambiguous Suno name {title!r}: matches {matches}")
-        canonical_title = indexed_title if indexed_title in canonical_titles else None
-        if canonical_title is None:
-            titles.append(audio_path.name)
-            continue
-        variant_key = (normalize_title(canonical_title), match.group("variant"))
+        canonical_title, variant = identity
+        variant_key = (normalize_title(canonical_title), variant)
         if variant_key not in seen_variants:
             titles.append(canonical_title)
             seen_variants.add(variant_key)
@@ -146,11 +145,8 @@ def _read_music_dir_titles(
     return titles
 
 
-def _read_titles(
-    args: argparse.Namespace,
-    collection_dir: Path,
-    identities: list[SunoPromptTitleIdentity],
-) -> list[str]:
+def _validate_title_sources(args: argparse.Namespace) -> None:
+    """Reject conflicting explicit inputs before reading the selected source."""
     explicit_sources = [name for name in ("titles_file", "music_dir") if getattr(args, name)]
     if args.titles or (args.music_dir and args.titles is not None):
         explicit_sources.append("titles")
@@ -158,30 +154,47 @@ def _read_titles(
         raise ValidationError(_TITLE_SOURCE_ERROR)
 
     if args.music_dir and not sys.stdin.isatty():
-        stdin_titles = [line for line in sys.stdin.read().splitlines() if line.strip()]
+        stdin_titles = _nonblank_titles(sys.stdin.read().splitlines())
         if stdin_titles:
             raise ValidationError(_TITLE_SOURCE_ERROR)
 
+
+def _nonblank_titles(titles: Iterable[str]) -> list[str]:
+    """Exclude blank titles without trimming or reordering the supplied names."""
+    return [title for title in titles if title.strip()]
+
+
+def _read_titles_file(path: Path) -> list[str]:
+    """Read a JSON array or one-title-per-line text, preserving nonblank titles."""
+    if not path.is_file():
+        raise ValidationError(f"--titles-file が見つかりません: {path}")
+    raw = path.read_text(encoding="utf-8")
+    if path.suffix.lower() == ".json":
+        data = json.loads(raw)
+        if not isinstance(data, list) or not all(isinstance(t, str) for t in data):
+            raise ValidationError("--titles-file (JSON) は文字列の配列にしてください")
+        return _nonblank_titles(data)
+    return _nonblank_titles(raw.splitlines())
+
+
+def _read_titles(
+    args: argparse.Namespace,
+    collection_dir: Path,
+    identities: list[SunoPromptTitleIdentity],
+) -> list[str]:
+    _validate_title_sources(args)
+
     if args.titles is not None:
-        titles = [t for t in args.titles if t.strip()]
+        titles = _nonblank_titles(args.titles)
         if not titles:
             raise ValidationError("--titles には 1 件以上の曲名を指定してください")
         return titles
     if args.titles_file:
-        path = Path(args.titles_file)
-        if not path.is_file():
-            raise ValidationError(f"--titles-file が見つかりません: {path}")
-        raw = path.read_text(encoding="utf-8")
-        if path.suffix.lower() == ".json":
-            data = json.loads(raw)
-            if not isinstance(data, list) or not all(isinstance(t, str) for t in data):
-                raise ValidationError("--titles-file (JSON) は文字列の配列にしてください")
-            return [t for t in data if t.strip()]
-        return [line for line in raw.splitlines() if line.strip()]
+        return _read_titles_file(Path(args.titles_file))
     if args.music_dir:
         return _read_music_dir_titles(args.music_dir, collection_dir, identities)
     if not sys.stdin.isatty():
-        titles = [line for line in sys.stdin.read().splitlines() if line.strip()]
+        titles = _nonblank_titles(sys.stdin.read().splitlines())
         if titles:
             return titles
     raise ValidationError("playlist 曲名を --titles / --titles-file / --music-dir / stdin のいずれかで渡してください")
@@ -194,7 +207,7 @@ def main() -> int:
             "混入（unknown）と未生成（missing）を fail-loud で検出する"
         )
     )
-    parser.add_argument("collection", nargs="?", help="コレクションディレクトリ (省略時は CWD)")
+    add_optional_collection_argument(parser)
     parser.add_argument("--titles", nargs="*", help="playlist の曲名（複数指定）")
     parser.add_argument("--titles-file", help="曲名リストのファイル（1行1曲、または JSON 配列）")
     parser.add_argument(

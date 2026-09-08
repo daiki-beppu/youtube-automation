@@ -78,11 +78,10 @@ def merge_benchmark_channel(analytics: dict, entry: dict) -> dict:
 
 
 def _resolve_channel_item(youtube, raw: str) -> dict:
-    channel_id = _channel_id_from_raw(raw)
+    channel_id, handle = _channel_reference(raw)
     if channel_id:
         return _fetch_channel_by_id(youtube, channel_id)
 
-    handle = _handle_from_raw(raw)
     if handle:
         return _fetch_channel_by_handle(youtube, handle)
 
@@ -90,52 +89,43 @@ def _resolve_channel_item(youtube, raw: str) -> dict:
     return _fetch_channel_by_id(youtube, scraped_channel_id)
 
 
-def _channel_id_from_raw(raw: str) -> str | None:
+def _channel_reference(raw: str) -> tuple[str | None, str | None]:
+    """入力を一度解析し、優先される channel ID または handle を返す。"""
     value = raw.strip()
     if CHANNEL_ID_RE.fullmatch(value):
-        return value
+        return value, None
 
     parsed = parse_url(value)
     path_parts = [part for part in parsed.path.split("/") if part]
     if len(path_parts) >= 2 and path_parts[0] == "channel" and path_parts[1].startswith(CHANNEL_ID_PREFIX):
-        return path_parts[1]
-    return None
-
-
-def _handle_from_raw(raw: str) -> str | None:
-    value = raw.strip()
+        return path_parts[1], None
     if value.startswith("@"):
-        return value[1:]
-
-    parsed = parse_url(value)
-    path_parts = [part for part in parsed.path.split("/") if part]
+        return None, value[1:]
     if path_parts and path_parts[0].startswith("@"):
-        return path_parts[0][1:]
+        return None, path_parts[0][1:]
     if not parsed.scheme and not parsed.netloc and "/" not in value:
-        return value
-    return None
+        return None, value
+    return None, None
 
 
 def _fetch_channel_by_id(youtube, channel_id: str) -> dict:
-    try:
-        response = execute_youtube_request(
-            youtube.channels().list(part=CHANNELS_PART, id=channel_id),
-            "channels.list failed",
-        )
-    except HttpError as e:
-        raise YouTubeAPIError.from_http_error(e, f"channels.list failed (id={channel_id})") from e
-    return _single_channel_item(response, channel_id)
+    return _fetch_channel(youtube, channel_id, f"id={channel_id}", id=channel_id)
 
 
 def _fetch_channel_by_handle(youtube, handle: str) -> dict:
+    return _fetch_channel(youtube, f"@{handle}", f"handle=@{handle}", forHandle=handle)
+
+
+def _fetch_channel(youtube, label: str, error_selector: str, **lookup: str) -> dict:
+    """Query one channel and preserve lookup-specific failure context."""
     try:
         response = execute_youtube_request(
-            youtube.channels().list(part=CHANNELS_PART, forHandle=handle),
+            youtube.channels().list(part=CHANNELS_PART, **lookup),
             "channels.list failed",
         )
-    except HttpError as e:
-        raise YouTubeAPIError.from_http_error(e, f"channels.list failed (handle=@{handle})") from e
-    return _single_channel_item(response, f"@{handle}")
+    except HttpError as error:
+        raise YouTubeAPIError.from_http_error(error, f"channels.list failed ({error_selector})") from error
+    return _single_channel_item(response, label)
 
 
 def _single_channel_item(response: dict, label: str) -> dict:

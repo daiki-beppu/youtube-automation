@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Mapping
 
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.domains.media._config_enum import parse_config_enum
 
 
 class VideoType(str, Enum):
@@ -22,13 +22,7 @@ class VideoType(str, Enum):
     @classmethod
     def parse(cls, value: object, *, config_path: str = "video_type") -> "VideoType":
         """設定値を enum に変換し、不正値は設定エラーとして報告する。"""
-        if isinstance(value, cls):
-            return value
-        try:
-            return cls(str(value).strip().lower())
-        except ValueError as exc:
-            allowed = ", ".join(item.value for item in cls)
-            raise ConfigError(f"{config_path} must be one of: {allowed} (got: {value!r})") from exc
+        return parse_config_enum(cls, value, config_path=config_path)
 
 
 @dataclass(frozen=True)

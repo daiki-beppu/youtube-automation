@@ -6,6 +6,7 @@ Gemini / OpenAI の差を吸収するための薄い抽象化レイヤ。Provide
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, Sequence, runtime_checkable
@@ -64,4 +65,5 @@ class ImageProvider(Protocol):
     name: str
     supported_aspect_ratios: tuple[str, ...]
 
+    @abstractmethod
     def generate(self, req: ImageGenerationRequest) -> ImageGenerationResult: ...

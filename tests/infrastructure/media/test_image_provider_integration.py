@@ -22,11 +22,11 @@ from PIL import Image
 
 from youtube_automation.configuration import reset as reset_config
 from youtube_automation.configuration import skills as skill_config
+from youtube_automation.configuration.image_generation import load_image_generation_config
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.media.image import ImageGenerationRequest
 from youtube_automation.infrastructure.media.image_provider import (
     get_provider,
-    load_image_generation_config,
 )
 from youtube_automation.infrastructure.media.image_provider.composition import resolve_composition_source
 from youtube_automation.infrastructure.media.image_provider.gemini import GeminiImageProvider

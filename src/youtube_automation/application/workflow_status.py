@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import WorkflowState, read_or_none
 from youtube_automation.domains.documents.workflow_status import (
     ArtifactStatus,
@@ -14,7 +15,6 @@ from youtube_automation.domains.documents.workflow_status import (
     CollectionStatusView,
     WorkflowStatusSnapshot,
 )
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 
 def build_workflow_status_snapshot(channel_dir: Path, *, now: datetime) -> WorkflowStatusSnapshot:

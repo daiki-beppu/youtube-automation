@@ -26,10 +26,10 @@ from datetime import datetime
 from typing import Iterable
 
 from youtube_automation.application.comments import CommentReplier
-from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
 from youtube_automation.configuration import load_config
+from youtube_automation.core.channel_context import channel_dir as _channel_dir
 from youtube_automation.core.errors import AutomationError, ConfigError
-from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 logger = logging.getLogger(__name__)

@@ -10,10 +10,11 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from youtube_automation.commands._shared.cli_harness import run_report_command
 from youtube_automation.commands.analytics import vpd_rank
 from youtube_automation.configuration import load_config
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.errors import AutomationError, ValidationError
+from youtube_automation.core.errors import ValidationError
 from youtube_automation.infrastructure.analytics.win_pattern import (
     build_automatic_attributes,
     build_win_pattern_result,
@@ -95,24 +96,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.ranking is not None and (args.min_age_days != 7 or args.top_count is not None):
         parser.error("--ranking と --min-age-days / --top-count は同時指定できません")
-    try:
-        result = _load_result(
+    return run_report_command(
+        lambda: _load_result(
             ranking_path=args.ranking,
             annotations_path=args.annotations,
             min_age_days=args.min_age_days,
             top_count=args.top_count,
-        )
-        if args.text:
-            _print_text(result)
-        else:
-            print(json.dumps(result, ensure_ascii=False, indent=2))
-        return 0
-    except AutomationError as error:
-        logger.error(str(error))
-        return 2
-    except Exception as error:
-        logger.exception("win pattern の作成に失敗しました: %s", error)
-        return 1
+        ),
+        text=args.text,
+        render_text=_print_text,
+        logger=logger,
+        failure_message="win pattern の作成に失敗しました: %s",
+    )
 
 
 if __name__ == "__main__":

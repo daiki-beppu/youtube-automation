@@ -13,8 +13,6 @@ from youtube_automation.domains.documents.schema_registry import RepositorySchem
 def read_video_description_metadata(json_path: Path) -> dict[str, object]:
     """validated JSON+HTML pair から upload 用 metadata だけを返す。"""
     document = read_video_description_document(json_path)
-    if not isinstance(document, Mapping):
-        raise DocumentMigrationError("動画説明は JSON object で指定してください")
     return {
         "title": document["title"],
         "description": document["description"],
@@ -26,14 +24,16 @@ def read_video_description_metadata(json_path: Path) -> dict[str, object]:
 def read_video_description_document(json_path: Path) -> Mapping[str, object]:
     """validated pair の完全な JSON document を返す。"""
     document = read_published_json_document(json_path, RepositorySchema.VIDEO_DESCRIPTION)
-    require_quality_pass(document)
-    if not isinstance(document, Mapping):
-        raise DocumentMigrationError("動画説明は JSON object で指定してください")
-    return document
+    return _quality_checked_document(document)
 
 
 def require_quality_pass(document: object) -> None:
     """全 quality check が成功していない文書を downstream から拒否する。"""
+    _quality_checked_document(document)
+
+
+def _quality_checked_document(document: object) -> Mapping[str, object]:
+    """品質検証を通過した文書を object から mapping へ絞り込む。"""
     if not isinstance(document, Mapping):
         raise DocumentMigrationError("動画説明は JSON object で指定してください")
     quality = document.get("quality")
@@ -44,3 +44,4 @@ def require_quality_pass(document: object) -> None:
         not isinstance(check, Mapping) or check.get("status") != "pass" for check in checks
     ):
         raise DocumentMigrationError("動画説明の quality check に FAIL があります")
+    return document

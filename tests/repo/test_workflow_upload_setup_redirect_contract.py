@@ -185,7 +185,7 @@ EXPECTED_ACTIVE_ROUTES = (
         "video/references/describe.md",
         "### 必須要素",
         "4. **ハッシュタグ**: `config/channel/content.json::descriptions.hashtags` が単一ソース"
-        "（実装 `domains/metadata/service.py` は設定値をそのまま出力する。個数の目安は "
+        "（実装 `application/metadata/service.py` は設定値をそのまま出力する。個数の目安は "
         "`/setup --regenerate` の config-generation-rules と同じ **5 個程度**）— YouTube は概要欄の最初の"
         "3ハッシュタグをタイトル下に表示するため、順序が重要",
     ),

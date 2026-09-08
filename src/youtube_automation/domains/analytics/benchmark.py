@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from pathlib import Path
 
 from youtube_automation.core.errors import ConfigError
@@ -88,6 +89,23 @@ def is_short_benchmark_video(video: dict) -> bool:
     return is_short_benchmark_duration(str(video.get("duration_iso") or ""))
 
 
+def summarize_benchmark_videos(videos: list[dict]) -> dict:
+    """Summarize long-video performance and tags across all selected videos."""
+    long_videos = [video for video in videos if not is_short_benchmark_video(video)]
+    summary = {"avg_views": 0, "avg_daily_views": 0, "avg_engagement_rate": 0}
+    if long_videos:
+        summary["avg_views"] = round(sum(video["views"] for video in long_videos) / len(long_videos))
+        summary["avg_daily_views"] = round(sum(video["daily_views"] for video in long_videos) / len(long_videos), 1)
+        summary["avg_engagement_rate"] = round(
+            sum(video["engagement_rate"] for video in long_videos) / len(long_videos), 2
+        )
+    tag_counts = Counter(tag.lower() for video in videos for tag in video["tags"])
+    return {
+        **summary,
+        "top_tags": [{"tag": tag, "count": count} for tag, count in tag_counts.most_common(15)],
+    }
+
+
 def is_live_benchmark_video(video: dict) -> bool:
     """Return whether a benchmark entry is an active/live stream."""
     return str(video.get("duration_iso") or "") == LIVE_DURATION_ISO
@@ -116,4 +134,5 @@ __all__ = [
     "is_short_benchmark_video",
     "load_benchmark_videos",
     "select_top_vod_benchmark_videos",
+    "summarize_benchmark_videos",
 ]

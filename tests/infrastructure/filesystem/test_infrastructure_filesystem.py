@@ -85,3 +85,29 @@ def test_verified_transaction_rolls_back_all_targets_when_verification_fails(tmp
 
     assert first.read_bytes() == b"old-first"
     assert second.read_bytes() == b"old-second"
+
+
+def test_transaction_removes_earlier_temporary_when_later_encoding_fails(tmp_path: Path) -> None:
+    first = tmp_path / "first.txt"
+    second = tmp_path / "second.txt"
+    first.write_bytes(b"old-first")
+    second.write_bytes(b"old-second")
+
+    with pytest.raises(UnicodeEncodeError):
+        filesystem.write_text_files_transactionally({first: "new-first", second: "日本語"}, encoding="ascii")
+
+    assert first.read_bytes() == b"old-first"
+    assert second.read_bytes() == b"old-second"
+    assert set(tmp_path.iterdir()) == {first, second}
+
+
+@pytest.mark.parametrize("mode", [0o600, 0o640, 0o644])
+def test_atomic_text_write_preserves_requested_mode_and_unicode(tmp_path: Path, mode: int) -> None:
+    target = tmp_path / "settings.json"
+    target.write_text("original", encoding="utf-8")
+
+    filesystem.write_file_text_atomically(target, "日本語\n", mode=mode)
+
+    assert target.read_text(encoding="utf-8") == "日本語\n"
+    assert target.stat().st_mode & 0o777 == mode
+    assert sorted(tmp_path.iterdir()) == [target]

@@ -20,7 +20,7 @@ from pathlib import Path
 
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.infrastructure.media.fal_video_generator import (
     DEFAULT_ALLOWED_MODELS as DEFAULT_FAL_ALLOWED_MODELS,
 )

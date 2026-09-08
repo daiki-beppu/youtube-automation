@@ -7,12 +7,12 @@ import argparse
 import sys
 from pathlib import Path
 
-from youtube_automation.configuration import channel_dir
 from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.domains.collections.paths import resolve_collection_dir
 from youtube_automation.domains.suno.config import infer_suno_mode, resolve_suno_config
 from youtube_automation.domains.suno.downloaded.validation import verify_suno_collection
-from youtube_automation.infrastructure.media.collection_paths import resolve_collection_dir
 
 
 def _resolve_collection_argument(collection: str | None) -> Path:

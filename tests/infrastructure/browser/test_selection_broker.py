@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import http.client
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from urllib.parse import urlencode
 
 import pytest
 
+from youtube_automation.core.errors import ReviewError
 from youtube_automation.domains.documents.review import ReviewCandidate, SelectionManifest
 from youtube_automation.infrastructure.browser.selection_broker import SelectionBroker
 
@@ -81,3 +85,76 @@ def test_broker_rejects_untrusted_request_without_consuming_token(
 def test_broker_rejects_expired_manifest() -> None:
     with SelectionBroker(_manifest(expires=NOW), now=lambda: NOW) as broker:
         assert _post(broker)[0] == 410
+
+
+def test_broker_wakes_all_waiters_and_retains_the_selection() -> None:
+    with SelectionBroker(_manifest(), now=lambda: NOW) as broker:
+        ready = threading.Barrier(3)
+
+        def await_selection():
+            ready.wait(timeout=2)
+            return broker.wait(timeout=2)
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            waiters = [executor.submit(await_selection) for _ in range(2)]
+            ready.wait(timeout=2)
+            assert _post(broker)[0] == 200
+            selections = [waiter.result(timeout=2) for waiter in waiters]
+
+        assert selections[0] is selections[1]
+        assert broker.wait(timeout=0) is selections[0]
+
+
+def test_concurrent_posts_consume_the_token_exactly_once() -> None:
+    with SelectionBroker(_manifest(), now=lambda: NOW) as broker:
+        ready = threading.Barrier(3)
+
+        def post_together():
+            ready.wait(timeout=2)
+            return _post(broker)[0]
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            posts = [executor.submit(post_together) for _ in range(2)]
+            ready.wait(timeout=2)
+            statuses = [post.result(timeout=2) for post in posts]
+
+        assert sorted(statuses) == [200, 409]
+        assert broker.wait(timeout=0).candidate_id == "candidate-a"
+
+
+def test_slow_request_body_does_not_block_selection_timeout(monkeypatch) -> None:
+    reading = threading.Event()
+    release = threading.Event()
+    body = urlencode({"candidate_id": "candidate-a", "artifact_digest": "a" * 64}).encode()
+    responses = []
+
+    class SlowBody:
+        def read(self, length):
+            reading.set()
+            release.wait(timeout=2)
+            return body[:length]
+
+    with SelectionBroker(_manifest(), now=lambda: NOW) as broker:
+        handler = SimpleNamespace(
+            path=broker.selection_path,
+            headers={
+                "Host": broker.host_header,
+                "Origin": "null",
+                "Content-Type": "application/x-www-form-urlencoded",
+                "Content-Length": str(len(body)),
+            },
+            rfile=SlowBody(),
+        )
+        monkeypatch.setattr(broker, "_respond", lambda _handler, status, message: responses.append((status, message)))
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            request = executor.submit(broker._handle, handler)
+            assert reading.wait(timeout=2)
+            try:
+                with pytest.raises(ReviewError, match="timeout"):
+                    broker.wait(timeout=0.01)
+            finally:
+                release.set()
+            request.result(timeout=2)
+
+        assert responses[0][0] == 200
+        assert broker.wait(timeout=0).candidate_id == "candidate-a"

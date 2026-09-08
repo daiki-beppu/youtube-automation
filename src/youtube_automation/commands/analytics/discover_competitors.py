@@ -25,15 +25,16 @@ import csv
 import logging
 from pathlib import Path
 
+from youtube_automation.application.analytics.competitor_discovery import discover_competitors
+from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError
-from youtube_automation.infrastructure.analytics.competitor_discovery import SearchCacheMode, discover_competitors
+from youtube_automation.infrastructure.analytics.competitor_discovery import SearchCacheMode
 from youtube_automation.infrastructure.analytics.competitor_scoring import (
     CandidateChannel,
     DiscoveryParams,
     ScoredCandidate,
 )
-from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 logger = logging.getLogger(__name__)

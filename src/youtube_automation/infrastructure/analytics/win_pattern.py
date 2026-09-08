@@ -194,6 +194,46 @@ def evaluate_pattern(*, top_count: int, top_known: int, bottom_count: int, botto
     return "hold"
 
 
+def _aggregate_attribute(mapping: dict[str, str], top_ids: list[str], bottom_ids: list[str]) -> dict:
+    """Compare one attribute using only classified videos as each group's denominator."""
+    top_known = sum(mapping[video_id] != UNDETERMINED for video_id in top_ids)
+    bottom_known = sum(mapping[video_id] != UNDETERMINED for video_id in bottom_ids)
+    values = sorted(set(mapping.values()) - {UNDETERMINED})
+    value_results: dict[str, dict] = {}
+    for value in values:
+        top_matches = [video_id for video_id in top_ids if mapping[video_id] == value]
+        bottom_matches = [video_id for video_id in bottom_ids if mapping[video_id] == value]
+        top_ratio = Fraction(len(top_matches), top_known) if top_known else None
+        bottom_ratio = Fraction(len(bottom_matches), bottom_known) if bottom_known else None
+        pp = float((top_ratio - bottom_ratio) * 100) if top_ratio is not None and bottom_ratio is not None else None
+        value_results[value] = {
+            "top_count": len(top_matches),
+            "bottom_count": len(bottom_matches),
+            "top_known_count": top_known,
+            "bottom_known_count": bottom_known,
+            "top_percentage": round(float(top_ratio * 100), 6) if top_ratio is not None else None,
+            "bottom_percentage": round(float(bottom_ratio * 100), 6) if bottom_ratio is not None else None,
+            "pp_difference": round(pp, 6) if pp is not None else None,
+            "classification": evaluate_pattern(
+                top_count=len(top_matches),
+                top_known=top_known,
+                bottom_count=len(bottom_matches),
+                bottom_known=bottom_known,
+            ),
+            "undetermined_count": {
+                "top": len(top_ids) - top_known,
+                "bottom": len(bottom_ids) - bottom_known,
+            },
+            "representative_video_ids": sorted([*top_matches, *bottom_matches]),
+        }
+    return {
+        "top_known_count": top_known,
+        "bottom_known_count": bottom_known,
+        "undetermined_count": {"top": len(top_ids) - top_known, "bottom": len(bottom_ids) - bottom_known},
+        "values": value_results,
+    }
+
+
 def aggregate_patterns(ranking: dict, attributes: dict[str, dict[str, str]]) -> dict[str, dict]:
     """入力元を問わず全属性を同一の known-denominator 集計器へ通す。"""
     ranking = validate_ranking(ranking)
@@ -206,42 +246,7 @@ def aggregate_patterns(ranking: dict, attributes: dict[str, dict[str, str]]) -> 
             raise ValidationError(f"attribute {attribute} の video_id に欠落・未知 ID があります")
         if not all(isinstance(value, str) and value for value in mapping.values()):
             raise ValidationError(f"attribute {attribute} の分類値が不正です")
-        top_known = sum(mapping[video_id] != UNDETERMINED for video_id in top_ids)
-        bottom_known = sum(mapping[video_id] != UNDETERMINED for video_id in bottom_ids)
-        values = sorted(set(mapping.values()) - {UNDETERMINED})
-        value_results: dict[str, dict] = {}
-        for value in values:
-            top_matches = [video_id for video_id in top_ids if mapping[video_id] == value]
-            bottom_matches = [video_id for video_id in bottom_ids if mapping[video_id] == value]
-            top_ratio = Fraction(len(top_matches), top_known) if top_known else None
-            bottom_ratio = Fraction(len(bottom_matches), bottom_known) if bottom_known else None
-            pp = float((top_ratio - bottom_ratio) * 100) if top_ratio is not None and bottom_ratio is not None else None
-            value_results[value] = {
-                "top_count": len(top_matches),
-                "bottom_count": len(bottom_matches),
-                "top_known_count": top_known,
-                "bottom_known_count": bottom_known,
-                "top_percentage": round(float(top_ratio * 100), 6) if top_ratio is not None else None,
-                "bottom_percentage": round(float(bottom_ratio * 100), 6) if bottom_ratio is not None else None,
-                "pp_difference": round(pp, 6) if pp is not None else None,
-                "classification": evaluate_pattern(
-                    top_count=len(top_matches),
-                    top_known=top_known,
-                    bottom_count=len(bottom_matches),
-                    bottom_known=bottom_known,
-                ),
-                "undetermined_count": {
-                    "top": len(top_ids) - top_known,
-                    "bottom": len(bottom_ids) - bottom_known,
-                },
-                "representative_video_ids": sorted([*top_matches, *bottom_matches]),
-            }
-        result[attribute] = {
-            "top_known_count": top_known,
-            "bottom_known_count": bottom_known,
-            "undetermined_count": {"top": len(top_ids) - top_known, "bottom": len(bottom_ids) - bottom_known},
-            "values": value_results,
-        }
+        result[attribute] = _aggregate_attribute(mapping, top_ids, bottom_ids)
     return result
 
 

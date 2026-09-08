@@ -180,7 +180,17 @@ def test_v560_canonical_import_paths_are_importable_in_subprocess() -> None:
 
 def test_v560_removed_modules_are_unimportable_and_reference_apis_are_importable() -> None:
     legacy_paths = [old_path for old_path, _, _ in _V560_REDESIGN_MAPPINGS]
-    reference_apis = [(module_path, symbol) for _, module_path, symbol in _V560_REDESIGN_MAPPINGS]
+    # v5.6.0 の記録は維持し、その後の正本移動を現在の参照 API に適用する。
+    current_owners = {
+        (
+            "youtube_automation.infrastructure.google.youtube",
+            "create_authenticated_youtube_clients",
+        ): "youtube_automation.application.youtube_auth",
+    }
+    reference_apis = [
+        (current_owners.get((module_path, symbol), module_path), symbol)
+        for _, module_path, symbol in _V560_REDESIGN_MAPPINGS
+    ]
     script = "\n".join(
         [
             "import importlib",

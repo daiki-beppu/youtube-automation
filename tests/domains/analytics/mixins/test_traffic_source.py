@@ -10,6 +10,7 @@ import pytest
 
 from youtube_automation.core.errors import YouTubeAPIError
 from youtube_automation.domains.analytics.mixins.traffic_source_analytics import TrafficSourceMixin
+from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
 
 
 class StubCollector(TrafficSourceMixin):
@@ -21,9 +22,15 @@ class StubCollector(TrafficSourceMixin):
         pass
 
 
-@pytest.fixture
-def collector():
-    return StubCollector()
+@pytest.fixture(params=["mixin", "collector"])
+def collector(request, tmp_path):
+    if request.param == "mixin":
+        return StubCollector()
+    instance = YouTubeAnalyticsCollector(
+        youtube_client=MagicMock(), analytics_client=MagicMock(), reporting_client=MagicMock(), channel_root=tmp_path
+    )
+    instance.channel_id = "UC_TEST"
+    return instance
 
 
 class TestGetTrafficSourceAnalytics:
@@ -93,3 +100,23 @@ class TestGetTrafficSourceDetail:
         collector.analytics_service.query.side_effect = YouTubeAPIError("detail unavailable")
 
         assert collector.get_traffic_source_detail("2026-01-01", "2026-04-01", "YT_SEARCH") == []
+
+
+def test_traffic_queries_use_the_current_channel_and_requested_period(collector):
+    collector.analytics_service.query.return_value = {}
+    collector.get_traffic_source_analytics("2026-01-01", "2026-01-07")
+    collector.channel_id = "UC_CHANGED"
+    collector.get_traffic_source_detail("2026-02-01", "2026-02-14", "EXT_URL")
+
+    calls = collector.analytics_service.query.call_args_list
+    assert (calls[0].kwargs["ids"], calls[0].kwargs["startDate"], calls[0].kwargs["endDate"]) == (
+        "channel==UC_TEST",
+        "2026-01-01",
+        "2026-01-07",
+    )
+    assert (calls[1].kwargs["ids"], calls[1].kwargs["startDate"], calls[1].kwargs["endDate"]) == (
+        "channel==UC_CHANGED",
+        "2026-02-01",
+        "2026-02-14",
+    )
+    assert calls[1].kwargs["filters"] == "insightTrafficSourceType==EXT_URL"

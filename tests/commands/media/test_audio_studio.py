@@ -24,12 +24,12 @@ from youtube_automation.commands.media.audio_studio import (
     write_adjustment_route,
 )
 from youtube_automation.commands.suno.suno_audio_cleanup import CleanupConfig, cleanup_config_settings
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.media.audio_adjustments import (
     master_settings_from_cleanup,
     replace_master_adjustments,
 )
 from youtube_automation.infrastructure.localserver.app import Request
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 
 def _collection(tmp_path: Path) -> Path:

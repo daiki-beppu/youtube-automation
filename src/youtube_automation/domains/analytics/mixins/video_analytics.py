@@ -21,6 +21,19 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# Column order of the per-video Analytics query, with zero for absent columns.
+_VIDEO_METRIC_FIELDS = (
+    "views",
+    "estimated_minutes_watched",
+    "average_view_duration",
+    "likes",
+    "dislikes",
+    "comments",
+    "shares",
+    "subscribers_gained",
+)
+
+
 class VideoAnalyticsMixin:
     """動画別の統計データ取得・処理（コアメソッド）"""
 
@@ -99,6 +112,7 @@ class VideoAnalyticsMixin:
         Returns:
             Dict: 動画のアナリティクスデータ
         """
+        result = {"video_id": video_id, **dict.fromkeys(_VIDEO_METRIC_FIELDS, 0)}
         try:
             # 動画別メトリクス取得
             request = self.analytics_service.query(
@@ -111,45 +125,11 @@ class VideoAnalyticsMixin:
             response = request
 
             if response.get("rows"):
-                row = response["rows"][0]
-                return {
-                    "video_id": video_id,
-                    "views": row[0] if len(row) > 0 else 0,
-                    "estimated_minutes_watched": row[1] if len(row) > 1 else 0,
-                    "average_view_duration": row[2] if len(row) > 2 else 0,
-                    "likes": row[3] if len(row) > 3 else 0,
-                    "dislikes": row[4] if len(row) > 4 else 0,
-                    "comments": row[5] if len(row) > 5 else 0,
-                    "shares": row[6] if len(row) > 6 else 0,
-                    "subscribers_gained": row[7] if len(row) > 7 else 0,
-                }
-            else:
-                return {
-                    "video_id": video_id,
-                    "views": 0,
-                    "estimated_minutes_watched": 0,
-                    "average_view_duration": 0,
-                    "likes": 0,
-                    "dislikes": 0,
-                    "comments": 0,
-                    "shares": 0,
-                    "subscribers_gained": 0,
-                }
-
+                result.update(zip(_VIDEO_METRIC_FIELDS, response["rows"][0], strict=False))
         except YouTubeAPIError as e:
             logger.error(f"YouTube API エラー（動画ID {video_id}）: {e}")
-            return {
-                "video_id": video_id,
-                "views": 0,
-                "estimated_minutes_watched": 0,
-                "average_view_duration": 0,
-                "likes": 0,
-                "dislikes": 0,
-                "comments": 0,
-                "shares": 0,
-                "subscribers_gained": 0,
-                "error": str(e),
-            }
+            result["error"] = str(e)
+        return result
 
     def _get_video_details(self, video_ids: List[str]) -> Dict:
         """動画詳細情報取得"""

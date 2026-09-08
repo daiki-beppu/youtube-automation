@@ -37,6 +37,17 @@ def _list_language_captions(youtube, *, video_id: str, language: str) -> list[di
     return [item for item in response.get("items", []) if item.get("snippet", {}).get("language") == language]
 
 
+def _should_update_caption(
+    current: dict, existing_policy: ExistingPolicy, confirm_update: Callable[[dict], bool] | None
+) -> bool:
+    """Resolve the existing-track policy before preparing an upload request."""
+    if existing_policy == "ask":
+        if confirm_update is None:
+            raise ValidationError("existing_policy=ask には confirm_update が必要です")
+        return confirm_update(current)
+    return existing_policy == "update"
+
+
 def upload_caption(
     youtube,
     *,
@@ -61,14 +72,8 @@ def upload_caption(
         ids = ", ".join(str(item.get("id", "<unknown>")) for item in existing)
         raise ValidationError(f"同一言語 {language} の字幕が複数あり更新対象を一意に選べません: {ids}")
     current = existing[0] if existing else None
-    if current is not None:
-        should_update = existing_policy == "update"
-        if existing_policy == "ask":
-            if confirm_update is None:
-                raise ValidationError("existing_policy=ask には confirm_update が必要です")
-            should_update = confirm_update(current)
-        if existing_policy == "skip" or not should_update:
-            return CaptionUploadResult(action="skipped", caption_id=str(current["id"]) if current.get("id") else None)
+    if current is not None and not _should_update_caption(current, existing_policy, confirm_update):
+        return CaptionUploadResult(action="skipped", caption_id=str(current["id"]) if current.get("id") else None)
 
     media = MediaFileUpload(str(srt_path), mimetype="application/octet-stream", resumable=False)
     if current is None:

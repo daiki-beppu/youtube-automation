@@ -40,20 +40,18 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
+from youtube_automation.commands._shared.cli_harness import run_validated_command
 from youtube_automation.commands.media import generate_master
 from youtube_automation.configuration import load_config
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.domains.collections.paths import CollectionPaths, resolve_collection_dir
 from youtube_automation.domains.documents.published import read_published_json_document
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.domains.media.audio_adjustments import replace_track_order
 from youtube_automation.domains.media.audio_units import unit_for_audio
 from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.infrastructure.media import lyria_client
-from youtube_automation.infrastructure.media.collection_paths import (
-    CollectionPaths,
-    resolve_collection_dir,
-)
 from youtube_automation.infrastructure.media.lyria_client import Intensity, Mode
 
 # Lyria 3 Pro は 1 リクエスト最大約 184 秒の音源を返すため、コレクション尺から
@@ -428,127 +426,127 @@ def main() -> int:
     parser = _build_arg_parser()
     args = parser.parse_args()
 
-    try:
-        if args.loop is not None and args.loop < 1:
-            raise ValidationError("--loop は 1 以上を指定してください")
+    return run_validated_command(lambda: _run_generation(args))
 
-        collection_dir = resolve_collection_dir(args.collection)
-        paths = CollectionPaths(collection_dir)
-        music_dir = paths.music_dir
-        music_dir.mkdir(parents=True, exist_ok=True)
 
-        if args.prompt_document is not None:
-            document_path = args.prompt_document
-            if not document_path.is_absolute():
-                document_path = collection_dir / document_path
-            prompt_inputs = _load_lyria_prompt_inputs(document_path)
-        else:
-            if not args.prompt or not args.name:
-                raise ValidationError("legacy --prompt では --name も指定してください")
-            prompt_inputs = (
-                _LyriaPromptInput(
-                    prompt=args.prompt,
-                    name=args.name,
-                    model=args.model,
-                    target_duration=args.target_duration,
-                    padding_min=args.padding_min,
-                    bpm=args.bpm,
-                    intensity=args.intensity,
-                    mode=args.mode,
-                    reference_image=args.reference_image,
-                    lyrics=args.lyrics,
-                ),
-            )
+def _run_generation(args: argparse.Namespace) -> int:
+    """Execute the resumable audio generation pipeline for parsed CLI arguments."""
+    if args.loop is not None and args.loop < 1:
+        raise ValidationError("--loop は 1 以上を指定してください")
 
-        lyria_cfg = load_skill_config(_SKILL_LYRIA)
-        masterup_cfg = load_skill_config(_SKILL_MASTERUP).get("audio", {})
+    collection_dir = resolve_collection_dir(args.collection)
+    paths = CollectionPaths(collection_dir)
+    music_dir = paths.music_dir
+    music_dir.mkdir(parents=True, exist_ok=True)
 
-        crossfade, bitrate = _resolve_masterup_audio(masterup_cfg)
-        # 生成前に解決しておき、config 不備は Lyria 課金が走る前に落とす。
-        target_duration_max = _resolve_target_duration_max()
-        resolved_patterns = []
-        for prompt_input in prompt_inputs:
-            target_min = _resolve_target_duration(prompt_input.target_duration)
-            padding_min = _resolve_padding_min(prompt_input.padding_min, lyria_cfg)
-            resolved_patterns.append(
-                (
-                    prompt_input,
-                    target_min,
-                    padding_min,
-                    _resolve_segment_count(target_min, padding_min),
-                    _resolve_model(prompt_input.model, lyria_cfg),
-                    _resolve_reference_image(prompt_input.reference_image, collection_dir),
-                )
-            )
-        total_segments = sum(pattern[3] for pattern in resolved_patterns)
-        if total_segments > _MAX_SEGMENT_COUNT:
-            raise ValidationError(
-                f"prompt document 全体のセグメント数 {total_segments} が上限 {_MAX_SEGMENT_COUNT} を超えています"
-            )
-
-        generated_order: list[str] = []
-        global_index = 0
-        for pattern_index, (prompt_input, target_min, padding_min, n, model, reference_image) in enumerate(
-            resolved_patterns, start=1
-        ):
-            print()
-            print("  yt-generate-lyria-master")
-            print("  ──────────────────────────────────────────")
-            print(f"  Collection : {collection_dir}")
-            print(f"  Pattern    : {pattern_index}/{len(resolved_patterns)} ({prompt_input.name})")
-            print(
-                f"  Segments   : {n}  "
-                f"(target {target_min:g}min + padding {padding_min:g}min @ {_LYRIA_SEGMENT_SEC}s/seg)"
-            )
-            print(f"  Model      : {model}")
-            print()
-
-            for pattern_segment_index in range(1, n + 1):
-                global_index += 1
-                seg_path = _segment_path(music_dir, global_index, prompt_input.name)
-                ok = _generate_one_segment(
-                    index=pattern_segment_index,
-                    seg_path=seg_path,
-                    prompt=prompt_input.prompt,
-                    model=model,
-                    reference_image=reference_image,
-                    bpm=prompt_input.bpm,
-                    intensity=prompt_input.intensity,
-                    mode=prompt_input.mode,
-                    lyrics=prompt_input.lyrics,
-                    max_retries=args.max_retries,
-                )
-                if not ok:
-                    print()
-                    print("  成功済みセグメントは保持されています。再実行で続行できます。")
-                    return 1
-                generated_order.append(seg_path.name)
-
-        print()
-        print(f"  === セグメント生成完了 ({total_segments} segments) → クロスフェード結合 ===")
-        replace_track_order(paths.audio_adjustments_path, generated_order, None, [])
-        # 保存した order を結合にも明示的に渡す。省略するとファイル名のアルファベット順に
-        # フォールバックし、music_dir に残った無関係な音声まで master に混入しうる。
-        master_path = generate_master.generate_master(
-            collection_dir,
-            crossfade,
-            bitrate,
-            loops=args.loop,
-            no_loop=args.loop is None,
-            # `--loop` で尺を伸ばしても channel audio の目標尺上限を超えないよう、
-            # `yt-generate-master` と同じ安全弁を通す (超過時は ValidationError)。
-            target_duration_max=target_duration_max,
-            allow_duration_outside_target=args.allow_duration_outside_target,
-            order=generated_order,
+    if args.prompt_document is not None:
+        document_path = args.prompt_document
+        if not document_path.is_absolute():
+            document_path = collection_dir / document_path
+        prompt_inputs = _load_lyria_prompt_inputs(document_path)
+    else:
+        if not args.prompt or not args.name:
+            raise ValidationError("legacy --prompt では --name も指定してください")
+        prompt_inputs = (
+            _LyriaPromptInput(
+                prompt=args.prompt,
+                name=args.name,
+                model=args.model,
+                target_duration=args.target_duration,
+                padding_min=args.padding_min,
+                bpm=args.bpm,
+                intensity=args.intensity,
+                mode=args.mode,
+                reference_image=args.reference_image,
+                lyrics=args.lyrics,
+            ),
         )
+
+    lyria_cfg = load_skill_config(_SKILL_LYRIA)
+    masterup_cfg = load_skill_config(_SKILL_MASTERUP).get("audio", {})
+
+    crossfade, bitrate = _resolve_masterup_audio(masterup_cfg)
+    # 生成前に解決しておき、config 不備は Lyria 課金が走る前に落とす。
+    target_duration_max = _resolve_target_duration_max()
+    resolved_patterns = []
+    for prompt_input in prompt_inputs:
+        target_min = _resolve_target_duration(prompt_input.target_duration)
+        padding_min = _resolve_padding_min(prompt_input.padding_min, lyria_cfg)
+        resolved_patterns.append(
+            (
+                prompt_input,
+                target_min,
+                padding_min,
+                _resolve_segment_count(target_min, padding_min),
+                _resolve_model(prompt_input.model, lyria_cfg),
+                _resolve_reference_image(prompt_input.reference_image, collection_dir),
+            )
+        )
+    total_segments = sum(pattern[3] for pattern in resolved_patterns)
+    if total_segments > _MAX_SEGMENT_COUNT:
+        raise ValidationError(
+            f"prompt document 全体のセグメント数 {total_segments} が上限 {_MAX_SEGMENT_COUNT} を超えています"
+        )
+
+    generated_order: list[str] = []
+    global_index = 0
+    for pattern_index, (prompt_input, target_min, padding_min, n, model, reference_image) in enumerate(
+        resolved_patterns, start=1
+    ):
         print()
-        print(f"  Master audio: {master_path}")
+        print("  yt-generate-lyria-master")
+        print("  ──────────────────────────────────────────")
+        print(f"  Collection : {collection_dir}")
+        print(f"  Pattern    : {pattern_index}/{len(resolved_patterns)} ({prompt_input.name})")
+        print(
+            f"  Segments   : {n}  (target {target_min:g}min + padding {padding_min:g}min @ {_LYRIA_SEGMENT_SEC}s/seg)"
+        )
+        print(f"  Model      : {model}")
+        print()
 
-        cost_tracker.print_last_report()
+        for pattern_segment_index in range(1, n + 1):
+            global_index += 1
+            seg_path = _segment_path(music_dir, global_index, prompt_input.name)
+            ok = _generate_one_segment(
+                index=pattern_segment_index,
+                seg_path=seg_path,
+                prompt=prompt_input.prompt,
+                model=model,
+                reference_image=reference_image,
+                bpm=prompt_input.bpm,
+                intensity=prompt_input.intensity,
+                mode=prompt_input.mode,
+                lyrics=prompt_input.lyrics,
+                max_retries=args.max_retries,
+            )
+            if not ok:
+                print()
+                print("  成功済みセグメントは保持されています。再実行で続行できます。")
+                return 1
+            generated_order.append(seg_path.name)
 
-    except (ConfigError, ValidationError) as e:
-        print(f"ERROR: {e}", file=sys.stderr)
-        return 1
+    print()
+    print(f"  === セグメント生成完了 ({total_segments} segments) → クロスフェード結合 ===")
+    replace_track_order(paths.audio_adjustments_path, generated_order, None, [])
+    # 保存した order を結合にも明示的に渡す。省略するとファイル名のアルファベット順に
+    # フォールバックし、music_dir に残った無関係な音声まで master に混入しうる。
+    master_path = generate_master.generate_master(
+        collection_dir,
+        crossfade,
+        bitrate,
+        loops=args.loop,
+        no_loop=args.loop is None,
+        # `--loop` で尺を伸ばしても channel audio の目標尺上限を超えないよう、
+        # `yt-generate-master` と同じ安全弁を通す (超過時は ValidationError)。
+        target_duration_max=target_duration_max,
+        allow_duration_outside_target=args.allow_duration_outside_target,
+        order=generated_order,
+    )
+    print()
+    print(f"  Master audio: {master_path}")
+
+    cost_tracker.print_last_report()
+
     return 0
 
 

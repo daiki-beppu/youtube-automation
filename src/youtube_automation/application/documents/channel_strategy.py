@@ -11,8 +11,8 @@ from youtube_automation.application.documents.migration import (
     write_operational_document,
 )
 from youtube_automation.core.errors import DocumentMigrationError
+from youtube_automation.domains.documents.published import read_published_json_document
 from youtube_automation.domains.documents.schema_registry import RepositorySchema, validate_repository_document
-from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 
 _RELATIVE_TARGETS = {
     "direction": Path("docs/channel/channel-direction.json"),

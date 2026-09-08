@@ -7,11 +7,12 @@ import argparse
 import sys
 from pathlib import Path
 
-from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.configuration import load_config
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.documents.video_description import read_video_description_metadata
 from youtube_automation.domains.uploads.preflight import check_title_codepoint_limit, check_title_duplicate_warnings
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 
 def read_descriptions_title(collection_dir: Path) -> str:

@@ -188,6 +188,22 @@ def _operational_artifact_violations(root: Path, inventory: SkillInventory) -> l
     return lint_operational_artifacts(repository_root, inventory)
 
 
+def _lint_distribution_contracts(
+    root: Path, inventory: SkillInventory, *, selected_skills_only: bool
+) -> tuple[list[str], str | None, list[str]]:
+    """Run distribution-wide contracts only when lint covers all available skills."""
+    if selected_skills_only:
+        return [], None, []
+    skill_config_violations = [
+        *_lint_skill_config_contract(inventory),
+        *_lint_skill_config_migrations(_migrate_config.SKILL_CONFIG_MIGRATIONS),
+        *_lint_unmigrated_skill_configs(Path.cwd()),
+    ]
+    skill_count_violation = _skill_count_violation(inventory)
+    artifact_violations = _operational_artifact_violations(root, inventory)
+    return skill_config_violations, skill_count_violation, artifact_violations
+
+
 def cmd_lint(args: argparse.Namespace) -> int:
     """`yt-skills lint [<skill>...]` — skill 契約を検証し違反があれば非ゼロ exit。"""
     from youtube_automation.commands.system.skills_sync import _asset_root
@@ -206,52 +222,19 @@ def cmd_lint(args: argparse.Namespace) -> int:
     else:
         targets = available
 
-    skill_config_violations = (
-        []
-        if requested
-        else [
-            *_lint_skill_config_contract(inventory),
-            *_lint_skill_config_migrations(_migrate_config.SKILL_CONFIG_MIGRATIONS),
-            *_lint_unmigrated_skill_configs(Path.cwd()),
-        ]
+    skill_config_violations, skill_count_violation, artifact_violations = _lint_distribution_contracts(
+        root, inventory, selected_skills_only=bool(requested)
     )
-    skill_count_violation = None if requested else _skill_count_violation(inventory)
-    artifact_violations = [] if requested else _operational_artifact_violations(root, inventory)
-    for violation in skill_config_violations:
-        print(f"skill-config: {violation}")
-    if skill_count_violation is not None:
-        print(skill_count_violation)
-    for violation in artifact_violations:
-        print(f"operational-artifacts: {violation}")
+    _print_distribution_violations(skill_config_violations, skill_count_violation, artifact_violations)
 
     graph = DelegationGraph.load(inventory)
 
     failed_skills: set[str] = set()
     for name in targets:
-        skill_dir = root / name
-        violations = lint_skill_contract(skill_dir)
-        line_violation, line_count = _lint_skill_md_line_count(skill_dir)
-        if line_violation is not None:
-            violations.append(line_violation)
-        delegation_depth_violation = _lint_delegation_depth(graph, name)
-        if delegation_depth_violation is not None:
-            violations.append(delegation_depth_violation)
-        if name in graph.missing:
-            print(f"{name}: `委譲先` 行がありません")
+        if _lint_skill_target(root, name, graph):
             failed_skills.add(name)
-        blocking = [violation for violation in violations if not _is_allowlisted(name, violation, line_count)]
-        if blocking:
-            failed_skills.add(name)
-        for violation in violations:
-            suffix = " [allowlist]" if _is_allowlisted(name, violation, line_count) else ""
-            print(f"{name}: {violation.message}{suffix}")
 
-    target_set = set(targets)
-    for cycle in graph.cycles():
-        if not target_set.intersection(cycle[:-1]):
-            continue
-        print(f"委譲先に循環があります: {format_path(cycle)}")
-        failed_skills.update(target_set.intersection(cycle[:-1]))
+    failed_skills.update(_lint_target_cycles(graph, targets))
 
     if failed_skills:
         print(f"lint 失敗: {len(failed_skills)}/{len(targets)} skill に違反があります (source: {root})")
@@ -267,3 +250,49 @@ def cmd_lint(args: argparse.Namespace) -> int:
         return 1
     print(f"lint 合格: {len(targets)} skill (source: {root})")
     return 0
+
+
+def _print_distribution_violations(
+    skill_config_violations: list[str], skill_count_violation: str | None, artifact_violations: list[str]
+) -> None:
+    """Display distribution diagnostics in their established priority order."""
+    for violation in skill_config_violations:
+        print(f"skill-config: {violation}")
+    if skill_count_violation is not None:
+        print(skill_count_violation)
+    for violation in artifact_violations:
+        print(f"operational-artifacts: {violation}")
+
+
+def _lint_skill_target(root: Path, name: str, graph: DelegationGraph) -> bool:
+    """Print a skill's diagnostics and return whether any violation blocks lint."""
+    failed = False
+    skill_dir = root / name
+    violations = lint_skill_contract(skill_dir)
+    line_violation, line_count = _lint_skill_md_line_count(skill_dir)
+    if line_violation is not None:
+        violations.append(line_violation)
+    delegation_depth_violation = _lint_delegation_depth(graph, name)
+    if delegation_depth_violation is not None:
+        violations.append(delegation_depth_violation)
+    if name in graph.missing:
+        print(f"{name}: `委譲先` 行がありません")
+        failed = True
+    blocking = [violation for violation in violations if not _is_allowlisted(name, violation, line_count)]
+    if blocking:
+        failed = True
+    for violation in violations:
+        suffix = " [allowlist]" if _is_allowlisted(name, violation, line_count) else ""
+        print(f"{name}: {violation.message}{suffix}")
+    return failed
+
+
+def _lint_target_cycles(graph: DelegationGraph, targets: list[str]) -> set[str]:
+    failed_skills: set[str] = set()
+    target_set = set(targets)
+    for cycle in graph.cycles():
+        if not target_set.intersection(cycle[:-1]):
+            continue
+        print(f"委譲先に循環があります: {format_path(cycle)}")
+        failed_skills.update(target_set.intersection(cycle[:-1]))
+    return failed_skills

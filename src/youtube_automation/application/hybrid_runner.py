@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from abc import abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import Literal, Protocol
 
 from youtube_automation.application.media_handoff import HandoffSource, pull_handoff, push_handoff
 from youtube_automation.core.errors import AutomationError, ResourceLimitError, StateSyncError, ValidationError
+from youtube_automation.core.redaction import redact_sensitive_data
 from youtube_automation.domains.cloud_planning import PlanningStagePolicy
 from youtube_automation.domains.collections.workflow_state import read
 from youtube_automation.domains.hybrid_resource_guard import (
@@ -22,7 +24,6 @@ from youtube_automation.domains.media_handoff_manifest import MANIFEST_NAME, Han
 from youtube_automation.domains.media_store import MediaStore, validate_media_relative_path
 from youtube_automation.domains.notifications import NotificationEvent, NotificationEventKind
 from youtube_automation.domains.post_publish import PostPublishStagePolicy
-from youtube_automation.infrastructure.auth.redaction import redact_sensitive_data
 from youtube_automation.infrastructure.vcs.state_git import build_context
 from youtube_automation.infrastructure.vcs.state_sync import (
     ChangeValidator,
@@ -37,6 +38,7 @@ AgentRunner = Callable[[Agent, str, Path], None]
 
 
 class HybridResourceProbe(Protocol):
+    @abstractmethod
     def inspect(self) -> HybridResourceSnapshot: ...
 
 
@@ -115,15 +117,20 @@ class StagePolicy(Protocol):
     """Stage-specific execution semantics used by the sandwich pipeline."""
 
     @property
+    @abstractmethod
     def waiting(self) -> bool: ...
 
     @property
+    @abstractmethod
     def collection_name(self) -> str | None: ...
 
+    @abstractmethod
     def resolve(self) -> None: ...
 
+    @abstractmethod
     def prompt_for(self) -> str: ...
 
+    @abstractmethod
     def verify(self) -> str | None:
         """成果を検証し、確定した対象 collection 名を返す。
 
@@ -132,6 +139,7 @@ class StagePolicy(Protocol):
         """
         ...
 
+    @abstractmethod
     def allows(self, repository: Path, changed: set[str]) -> None: ...
 
 

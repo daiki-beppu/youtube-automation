@@ -14,8 +14,8 @@ from datetime import datetime
 from pathlib import Path
 
 from youtube_automation.configuration.distrokid import Distrokid
-from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.core.errors import ConfigError, WorkflowStateError
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.distrokid.metadata import (
     parse_album_metadata,

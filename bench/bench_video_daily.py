@@ -15,11 +15,11 @@ from typing import Sequence
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from bench.common import Stats, save_result, stats_from_samples
-from youtube_automation.configuration import channel_dir
+from youtube_automation.application.youtube_auth import create_readonly_youtube_clients
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import AuthError, ConfigError
 from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
 from youtube_automation.infrastructure.analytics_adapter import AnalyticsAdapter, YouTubeDataAdapter
-from youtube_automation.infrastructure.google.youtube import create_readonly_youtube_clients
 from youtube_automation.infrastructure.youtube.reporting_api import ReportingAPIClient
 
 

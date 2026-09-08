@@ -109,41 +109,29 @@ class LiveChatReplier:
             initial_page = page_token is None
             page_token = response.get("nextPageToken")
             messages = list(self._messages(response))
-            if initial_page and not self._config.process_initial_messages:
-                for message in messages:
-                    if not self._history.has_processed(message.message_id):
-                        self._history.mark(
-                            message.message_id,
-                            outcome="initial_backlog",
-                            recorded_at=self._now().isoformat(),
-                            author_channel_id=message.author_channel_id,
-                        )
-            else:
-                for message in messages:
-                    self._process(message, chat_id)
+            self._process_page_messages(messages, chat_id, initial_page)
 
             interval = max(0.0, float(response.get("pollingIntervalMillis", 5000)) / 1000.0)
             if max_polls is None or polls < max_polls:
                 self._sleep(interval)
 
+    def _process_page_messages(self, messages: list[LiveChatMessage], chat_id: str, initial_page: bool) -> None:
+        """Record an excluded initial backlog or process the fetched page in order."""
+        if initial_page and not self._config.process_initial_messages:
+            for message in messages:
+                if not self._history.has_processed(message.message_id):
+                    self._history.mark(
+                        message.message_id,
+                        outcome="initial_backlog",
+                        recorded_at=self._now().isoformat(),
+                        author_channel_id=message.author_channel_id,
+                    )
+        else:
+            for message in messages:
+                self._process(message, chat_id)
+
     def _messages(self, response: dict):
-        for item in response.get("items", []):
-            snippet = item.get("snippet", {})
-            author = item.get("authorDetails", {})
-            if snippet.get("type") != "textMessageEvent" or author.get("isChatOwner"):
-                continue
-            message_id = item.get("id")
-            text = snippet.get("textMessageDetails", {}).get("messageText")
-            author_id = author.get("channelId") or snippet.get("authorChannelId")
-            if not all(isinstance(value, str) and value for value in (message_id, text, author_id)):
-                continue
-            yield LiveChatMessage(
-                message_id=message_id,
-                author_channel_id=author_id,
-                author_name=str(author.get("displayName", "")),
-                text=text,
-                published_at=str(snippet.get("publishedAt", "")),
-            )
+        return _messages_from_response(response)
 
     def _process(self, message: LiveChatMessage, chat_id: str) -> None:
         if self._history.has_processed(message.message_id):
@@ -222,28 +210,55 @@ class LiveChatReplier:
 
     def _rate_limit_reason(self, author_channel_id: str) -> str | None:
         now = self._now()
-        replies = self._history.replied_records()
-        recent = [record for record in replies if _parse_time(record.get("recorded_at")) >= now - timedelta(hours=1)]
-        if len(recent) >= self._config.max_replies_per_hour:
-            return "hourly_reply_limit"
+        return _reply_limit_reason(self._history.replied_records(), author_channel_id, now, self._config)
 
-        consecutive = 0
-        for record in reversed(replies):
-            if record.get("author_channel_id") != author_channel_id:
-                break
-            consecutive += 1
-        if consecutive >= self._config.max_consecutive_per_user:
-            return "consecutive_user_limit"
 
-        today = now.astimezone(_PACIFIC).date()
-        quota_used = sum(
-            int(record.get("quota_cost", self._config.reply_quota_cost))
-            for record in replies
-            if _parse_time(record.get("recorded_at")).astimezone(_PACIFIC).date() == today
+def _messages_from_response(response: dict):
+    """Normalize eligible viewer text events independently of reply execution."""
+    for item in response.get("items", []):
+        snippet = item.get("snippet", {})
+        author = item.get("authorDetails", {})
+        if snippet.get("type") != "textMessageEvent" or author.get("isChatOwner"):
+            continue
+        message_id = item.get("id")
+        text = snippet.get("textMessageDetails", {}).get("messageText")
+        author_id = author.get("channelId") or snippet.get("authorChannelId")
+        if not all(isinstance(value, str) and value for value in (message_id, text, author_id)):
+            continue
+        yield LiveChatMessage(
+            message_id=message_id,
+            author_channel_id=author_id,
+            author_name=str(author.get("displayName", "")),
+            text=text,
+            published_at=str(snippet.get("publishedAt", "")),
         )
-        if quota_used + self._config.reply_quota_cost > self._config.daily_quota_budget:
-            return "daily_quota_budget"
-        return None
+
+
+def _reply_limit_reason(
+    replies: list[dict], author_channel_id: str, now: datetime, config: LiveChatConfig
+) -> str | None:
+    """Evaluate hourly, consecutive-author and Pacific-day quota limits in priority order."""
+    recent = [record for record in replies if _parse_time(record.get("recorded_at")) >= now - timedelta(hours=1)]
+    if len(recent) >= config.max_replies_per_hour:
+        return "hourly_reply_limit"
+
+    consecutive = 0
+    for record in reversed(replies):
+        if record.get("author_channel_id") != author_channel_id:
+            break
+        consecutive += 1
+    if consecutive >= config.max_consecutive_per_user:
+        return "consecutive_user_limit"
+
+    today = now.astimezone(_PACIFIC).date()
+    quota_used = sum(
+        int(record.get("quota_cost", config.reply_quota_cost))
+        for record in replies
+        if _parse_time(record.get("recorded_at")).astimezone(_PACIFIC).date() == today
+    )
+    if quota_used + config.reply_quota_cost > config.daily_quota_budget:
+        return "daily_quota_budget"
+    return None
 
 
 def _parse_time(value: object) -> datetime:

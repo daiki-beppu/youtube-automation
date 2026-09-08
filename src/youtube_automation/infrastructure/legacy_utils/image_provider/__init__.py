@@ -2,6 +2,9 @@
 
 import sys
 
+from youtube_automation.configuration.image_generation import (
+    load_image_generation_config as load_image_generation_config,
+)
 from youtube_automation.infrastructure.media.image_provider import *  # noqa: F403
 from youtube_automation.infrastructure.media.image_provider import (
     composition as composition,

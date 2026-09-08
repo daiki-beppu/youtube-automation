@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
@@ -65,7 +66,7 @@ _LEGACY_UNIT_BY_CATEGORY: dict[Category, str] = {
 
 def _channel_dir() -> Path:
     """チャンネルディレクトリを ChannelConfig 経由で解決。"""
-    from youtube_automation.configuration import channel_dir
+    from youtube_automation.core.channel_context import channel_dir
 
     return channel_dir()
 
@@ -111,23 +112,42 @@ def log_generation(
         "metadata": dict(metadata or {}),
     }
 
-    try:
-        path = _log_path(category)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with _file_lock(path):
-            with section("cost_tracker.read", category=category):
-                entries = _read_entries(path)
-            entries.append(entry)
-            with section("cost_tracker.write", category=category, count=len(entries)):
-                path.write_text(
-                    json.dumps(entries, indent=2, ensure_ascii=False) + "\n",
-                    encoding="utf-8",
-                )
-    except (OSError, RuntimeError, TimeoutError) as e:
-        print(f"  [Warn]   コストログ書き込み失敗 ({category}): {e}")
-        return None
+    return _try_append_log_entry(
+        entry,
+        lambda: _log_path(category),
+        category=category,
+        warning=f"コストログ書き込み失敗 ({category})",
+    )
 
+
+def _try_append_log_entry(
+    entry: dict,
+    resolve_path: Callable[[], Path],
+    *,
+    category: str,
+    warning: str,
+) -> dict | None:
+    """Keep telemetry path/lock/storage failures from interrupting the primary operation."""
+    try:
+        _append_log_entry(resolve_path(), entry, category=category)
+    except (OSError, RuntimeError, TimeoutError) as error:
+        print(f"  [Warn]   {warning}: {error}")
+        return None
     return entry
+
+
+def _append_log_entry(path: Path, entry: dict, *, category: str) -> None:
+    """Append one event under the file lock, preserving profiling and JSON format."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with _file_lock(path):
+        with section("cost_tracker.read", category=category):
+            entries = _read_entries(path)
+        entries.append(entry)
+        with section("cost_tracker.write", category=category, count=len(entries)):
+            path.write_text(
+                json.dumps(entries, indent=2, ensure_ascii=False) + "\n",
+                encoding="utf-8",
+            )
 
 
 def _read_entries(path: Path) -> list[dict]:
@@ -321,23 +341,7 @@ def log_quota(
         "metadata": dict(metadata or {}),
     }
 
-    try:
-        path = _quota_log_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with _file_lock(path):
-            with section("cost_tracker.read", category="quota"):
-                entries = _read_entries(path)
-            entries.append(entry)
-            with section("cost_tracker.write", category="quota", count=len(entries)):
-                path.write_text(
-                    json.dumps(entries, indent=2, ensure_ascii=False) + "\n",
-                    encoding="utf-8",
-                )
-    except (OSError, RuntimeError, TimeoutError) as e:
-        print(f"  [Warn]   quota ログ書き込み失敗: {e}")
-        return None
-
-    return entry
+    return _try_append_log_entry(entry, _quota_log_path, category="quota", warning="quota ログ書き込み失敗")
 
 
 def _normalize_quota_entry(entry: dict) -> dict:

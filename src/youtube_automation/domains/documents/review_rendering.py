@@ -148,6 +148,12 @@ class _ReviewHTMLParser(HTMLParser):
             self.has_main = True
         if tag == "meta" and attributes.get("http-equiv") == "Content-Security-Policy":
             self.csp = attributes.get("content")
+        self._read_form_control(tag, attributes)
+        if tag in {"img", "audio", "video"}:
+            self.media_uris.append(attributes.get("src", ""))
+
+    def _read_form_control(self, tag: str, attributes: dict[str, str | None]) -> None:
+        """Validate fixed selection controls and collect their submitted values."""
         if tag == "form":
             if attributes.get("method") != "post" or set(attributes) != {"method", "action"}:
                 raise DocumentRenderError("review formは固定POST契約だけを許可します")
@@ -160,8 +166,6 @@ class _ReviewHTMLParser(HTMLParser):
             if attributes.get("type") != "submit" or attributes.get("name") != "candidate_id":
                 raise DocumentRenderError("review buttonは候補ID送信だけを許可します")
             self.candidate_values.append(attributes.get("value", ""))
-        if tag in {"img", "audio", "video"}:
-            self.media_uris.append(attributes.get("src", ""))
 
 
 def validate_review_html(
@@ -182,13 +186,23 @@ def validate_review_html(
     )
     if not parser.has_main or parser.csp != expected_csp:
         raise DocumentRenderError("review HTMLのdocument/CSP境界が不正です")
-    expected_ids = [candidate.id for candidate in manifest.candidates] if endpoint is not None else []
-    if parser.candidate_values != expected_ids:
-        raise DocumentRenderError("review HTMLの候補allowlistがmanifestと一致しません")
-    if parser.actions != ([endpoint] * len(manifest.candidates) if endpoint is not None else []):
-        raise DocumentRenderError("review HTMLのloopback endpointが一致しません")
-    if parser.digest_values != ([manifest.artifact_digest] * len(manifest.candidates) if endpoint is not None else []):
-        raise DocumentRenderError("review HTMLのartifact digestが一致しません")
+    selectable = manifest.candidates if endpoint is not None else ()
+    controls = (
+        (
+            parser.candidate_values,
+            [candidate.id for candidate in selectable],
+            "review HTMLの候補allowlistがmanifestと一致しません",
+        ),
+        (parser.actions, [endpoint] * len(selectable), "review HTMLのloopback endpointが一致しません"),
+        (
+            parser.digest_values,
+            [manifest.artifact_digest] * len(selectable),
+            "review HTMLのartifact digestが一致しません",
+        ),
+    )
+    for actual, expected, message in controls:
+        if actual != expected:
+            raise DocumentRenderError(message)
     expected_media = [
         path.resolve().as_uri()
         for candidate in manifest.candidates

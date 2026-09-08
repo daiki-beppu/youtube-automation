@@ -29,10 +29,10 @@ import time
 
 from googleapiclient.errors import HttpError
 
+from youtube_automation.application.youtube_auth import create_authenticated_youtube_clients
 from youtube_automation.core.errors import YouTubeAPIError
-from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.cost_tracker import log_quota
-from youtube_automation.infrastructure.google.youtube import YouTubeClients
+from youtube_automation.infrastructure.google.youtube import execute_metered_request
 
 logger = logging.getLogger(__name__)
 
@@ -71,10 +71,9 @@ def _execute_with_quota(request, bucket: str, metadata: dict | None = None) -> d
     quota はリクエストの成否に関わらず消費されるため、失敗時も記録してから
     例外を伝播させる（Issue #2058）。
     """
-    try:
-        return request.execute()
-    finally:
-        log_quota(QUOTA_SERVICE, bucket, QUOTA_UNITS[bucket], metadata=metadata)
+    return execute_metered_request(
+        request, on_finish=lambda: log_quota(QUOTA_SERVICE, bucket, QUOTA_UNITS[bucket], metadata=metadata)
+    )
 
 
 def list_uploads_video_ids(youtube) -> list[str]:
@@ -203,7 +202,7 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
-        youtube = YouTubeClients(full_handler=YouTubeOAuthHandler()).youtube
+        youtube = create_authenticated_youtube_clients().youtube
         video_ids = list_uploads_video_ids(youtube)
         if not video_ids:
             print("❌ 対象動画が見つかりません（uploads playlist が空）")

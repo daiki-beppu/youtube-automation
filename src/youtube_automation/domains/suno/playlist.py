@@ -11,11 +11,11 @@ fail-loud で検出する。
 
 from __future__ import annotations
 
-import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Mapping
+from typing import Iterable, Iterator, Mapping
 
+from youtube_automation.core.display import format_terminal_text
 from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.suno.name_matching import normalize_suno_name_for_lookup
 from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
@@ -51,11 +51,15 @@ class PlaylistVerificationResult:
 
 def load_entry_names(collection_dir: Path) -> list[str]:
     """suno-prompts.json から Song Title 欄に入る title/name の一覧を読み出す."""
+    return [title.strip() for _, title in iter_entry_titles(collection_dir)]
+
+
+def iter_entry_titles(collection_dir: Path) -> Iterator[tuple[str, str]]:
+    """Yield validated prompt names and chosen song titles in document order."""
     try:
         entries = read_suno_prompt_entries(collection_dir)
     except (OSError, ValueError) as exc:
         raise ValidationError(str(exc)) from exc
-    names: list[str] = []
     for i, entry in enumerate(entries, 1):
         if not isinstance(entry, Mapping):
             raise ValidationError(f"suno-prompts.json: entry {i} must be an object")
@@ -66,10 +70,9 @@ def load_entry_names(collection_dir: Path) -> list[str]:
         if not isinstance(name, str) or not name.strip():
             raise ValidationError(f"suno-prompts.json: entry {i} has no name")
         song_title = title if title is not None and title.strip() else name
-        names.append(song_title.strip())
-    if not names:
+        yield name, song_title
+    if not entries:
         raise ValidationError("suno-prompts.json に entry がありません")
-    return names
 
 
 def verify_playlist_titles(
@@ -145,20 +148,4 @@ def format_verification_report(result: PlaylistVerificationResult) -> str:
 
 def format_display_text(value: str) -> str:
     """外部由来 title/name を stdout 用に制御文字 escape する."""
-    text = "".join(_escape_display_character(char) for char in value)
-    if len(text) <= _MAX_DISPLAY_TEXT_LEN:
-        return text
-    return text[: _MAX_DISPLAY_TEXT_LEN - 3] + "..."
-
-
-def _escape_display_character(char: str) -> str:
-    """通常文字は保持し、制御文字だけ Python escape 表記へ変換する."""
-    if char == "\n":
-        return "\\n"
-    if char == "\r":
-        return "\\r"
-    if char == "\t":
-        return "\\t"
-    if unicodedata.category(char)[0] == "C":
-        return char.encode("unicode_escape").decode("ascii")
-    return char
+    return format_terminal_text(value, max_length=_MAX_DISPLAY_TEXT_LEN)

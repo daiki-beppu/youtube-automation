@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Protocol, runtime_checkable
@@ -60,12 +61,17 @@ class MediaObjectMetadata:
 class MediaStore(Protocol):
     """工程境界でのみ使う push / pull / 存在確認 / metadata 参照 / 保持容量観測の最小 port。"""
 
+    @abstractmethod
     def push(self, source: Path, key: MediaKey) -> MediaObjectMetadata: ...
 
+    @abstractmethod
     def pull(self, key: MediaKey, destination: Path) -> MediaObjectMetadata: ...
 
+    @abstractmethod
     def exists(self, key: MediaKey) -> bool: ...
 
+    @abstractmethod
     def metadata(self, key: MediaKey) -> MediaObjectMetadata | None: ...
 
+    @abstractmethod
     def retained_bytes(self) -> int: ...

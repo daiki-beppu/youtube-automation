@@ -12,6 +12,16 @@ from youtube_automation.domains.documents.review import ReviewCandidate
 from youtube_automation.infrastructure.browser.selection_broker import BrokerSelection
 
 
+def test_explicit_review_adapter_cannot_inherit_unimplemented_operations() -> None:
+    class IncompleteSource(review_lifecycle.ReviewSource):
+        @property
+        def artifact(self):
+            return "thumbnail"
+
+    with pytest.raises(TypeError, match="abstract"):
+        IncompleteSource()
+
+
 def _digest(value: str) -> str:
     return hashlib.sha256(value.encode()).hexdigest()
 

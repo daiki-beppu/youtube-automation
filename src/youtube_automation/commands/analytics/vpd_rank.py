@@ -4,14 +4,14 @@
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import sys
 from collections.abc import Sequence
 from datetime import datetime
 
+from youtube_automation.commands._shared.cli_harness import run_report_command
 from youtube_automation.commands.analytics.analytics_system import AnalyticsSystem
-from youtube_automation.core.errors import AuthError, AutomationError
+from youtube_automation.core.errors import AuthError
 from youtube_automation.infrastructure.analytics.vpd_metrics import (
     build_vpd_ranking,
     collect_all_video_statistics,
@@ -56,19 +56,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--text", action="store_true", help="人間向けテキスト出力")
     args = parser.parse_args(argv)
 
-    try:
-        result = _load_ranking(min_age_days=args.min_age_days, top_count=args.top_count)
-        if args.text:
-            _print_text(result)
-        else:
-            print(json.dumps(result, ensure_ascii=False, indent=2))
-        return 0
-    except AutomationError as error:
-        logger.error(str(error))
-        return 2
-    except Exception as error:
-        logger.exception("VPD ranking の作成に失敗しました: %s", error)
-        return 1
+    return run_report_command(
+        lambda: _load_ranking(min_age_days=args.min_age_days, top_count=args.top_count),
+        text=args.text,
+        render_text=_print_text,
+        logger=logger,
+        failure_message="VPD ranking の作成に失敗しました: %s",
+    )
 
 
 if __name__ == "__main__":

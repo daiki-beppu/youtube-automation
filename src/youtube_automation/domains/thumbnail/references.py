@@ -246,23 +246,35 @@ def plan_ttp_reference_assignments(
         )
     selected_references = reference_images
     if rotate and channel_dir is not None and dedup_recent_collections:
-        recent_references, all_references = _reference_image_history(channel_dir, dedup_recent_collections)
-        unused_references = [ref for ref in reference_images if ref.resolve(strict=False) not in all_references]
-        references_outside_recent_window = [
-            ref for ref in reference_images if ref.resolve(strict=False) not in recent_references
-        ]
-        if unused_references:
-            selected_references = unused_references + [
-                ref for ref in references_outside_recent_window if ref not in unused_references
-            ]
-        elif references_outside_recent_window:
-            selected_references = references_outside_recent_window
-        selected_references += [ref for ref in reference_images if ref not in selected_references]
+        selected_references = _prioritize_reference_history(reference_images, channel_dir, dedup_recent_collections)
 
     selected_references = selected_references[:count]
     if benchmark_root is not None:
         selected_references = [canonicalize_benchmark_reference(ref, benchmark_root) for ref in selected_references]
 
+    _validate_ttp_reference_selection(selected_references, benchmark_root)
+    return list(selected_references)
+
+
+def _prioritize_reference_history(reference_images: list[Path], channel_dir: Path, recent_limit: int) -> list[Path]:
+    """Prefer never-used images, then those outside the recent collection window."""
+    selected_references = reference_images
+    recent_references, all_references = _reference_image_history(channel_dir, recent_limit)
+    unused_references = [ref for ref in reference_images if ref.resolve(strict=False) not in all_references]
+    references_outside_recent_window = [
+        ref for ref in reference_images if ref.resolve(strict=False) not in recent_references
+    ]
+    if unused_references:
+        selected_references = unused_references + [
+            ref for ref in references_outside_recent_window if ref not in unused_references
+        ]
+    elif references_outside_recent_window:
+        selected_references = references_outside_recent_window
+    selected_references += [ref for ref in reference_images if ref not in selected_references]
+    return selected_references
+
+
+def _validate_ttp_reference_selection(selected_references: list[Path], benchmark_root: Path | None) -> None:
     seen: set[Path] = set()
     duplicates: list[Path] = []
     for ref in selected_references:
@@ -292,4 +304,3 @@ def plan_ttp_reference_assignments(
             f"(detected={', '.join(sorted(detected_channels))})。"
             "別チャンネル由来の参照画像は別スコープとして明示してください。"
         )
-    return list(selected_references)

@@ -1,8 +1,10 @@
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import pytest
 from google.auth.exceptions import RefreshError, TransportError
 
+from youtube_automation.infrastructure import filesystem
 from youtube_automation.infrastructure.auth import tokens
 from youtube_automation.infrastructure.auth import youtube as youtube_auth
 
@@ -51,17 +53,18 @@ def test_transport_error_does_not_require_reauthentication(monkeypatch, tmp_path
     assert state.reauthentication_required is False
 
 
-def test_atomic_save_failure_preserves_existing_token(monkeypatch, tmp_path: Path) -> None:
+@pytest.mark.parametrize("operation", ["fsync", "replace"])
+def test_atomic_save_failure_preserves_existing_token(monkeypatch, tmp_path: Path, operation: str) -> None:
     token_path = tmp_path / "token.json"
     token_path.write_text('{"token": "original"}', encoding="utf-8")
     credentials = MagicMock()
     credentials.to_json.return_value = '{"token": "replacement"}'
-    monkeypatch.setattr(tokens.os, "replace", MagicMock(side_effect=OSError("replace failed")))
+    monkeypatch.setattr(filesystem.os, operation, MagicMock(side_effect=OSError(f"{operation} failed")))
 
     try:
         tokens.save_credentials(token_path, credentials)
     except OSError as error:
-        assert str(error) == "replace failed"
+        assert str(error) == f"{operation} failed"
     else:
         raise AssertionError("save_credentials must propagate atomic replacement failures")
 

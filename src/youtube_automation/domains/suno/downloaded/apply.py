@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from youtube_automation.core.adapters.media import CollectionPaths
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.suno.downloaded.archive import extract_downloaded_archive_detailed
 from youtube_automation.domains.suno.downloaded.models import (
     DownloadedArtifactError,

@@ -24,19 +24,22 @@ import sys
 import tempfile
 import time
 import urllib.request
-from collections import Counter
+from collections.abc import Callable, Iterable, Iterator
 from datetime import date, datetime
 from pathlib import Path
 
+from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
 from youtube_automation.commands._shared.arguments import CompetitorArgumentParser
-from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.configuration import load_config
 from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.channel_context import channel_dir as _channel_dir
 from youtube_automation.core.errors import ConfigError, YouTubeAPIError
 from youtube_automation.domains.analytics.benchmark import (
     is_short_benchmark_duration,
     is_short_benchmark_video,
+    summarize_benchmark_videos,
 )
+from youtube_automation.domains.documents.published import read_published_json_document
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
 from youtube_automation.infrastructure.analytics.benchmark_analyzer import (
     compute_daily_views,
@@ -45,9 +48,7 @@ from youtube_automation.infrastructure.analytics.benchmark_analyzer import (
     extract_description_keywords,
     parse_iso_duration,
 )
-from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.cost_tracker import log_quota
-from youtube_automation.infrastructure.documents.publishing import read_published_json_document
 from youtube_automation.infrastructure.filesystem import write_text_files_transactionally
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 from youtube_automation.infrastructure.observability.profile import section
@@ -62,16 +63,170 @@ _DEFAULT_SCAN_RECENT = 150
 # quota 記録（Issue #2056）: read 系 list operation は 1 request = 1 unit
 _QUOTA_SERVICE = "youtube-data-api"
 _READ_QUOTA_UNITS = 1
-_VIDEO_DESCRIPTION_FIELD = "description"
-_DESCRIPTION_TTP_SECTION_TITLE = "概要欄TTPサンプル"
-_DESCRIPTION_TTP_SAMPLE_LIMIT = 3
 _SHORT_THUMBNAIL_KEYS = ("high", "medium", "default")
 _DEFAULT_THUMBNAIL_KEYS = ("maxres", "standard", "high", "medium", "default")
+
+
+def estimate_collection_quota_units(*, channel_count: int, scan_recent: int) -> int:
+    """通常収集の Data API read quota 上限を 50 件ページ単位で返す。"""
+    if channel_count <= 0:
+        return 0
+    scan_pages = max(0, (scan_recent + _SCAN_PAGE_SIZE - 1) // _SCAN_PAGE_SIZE)
+    channel_batches = (channel_count + _CHANNELS_BATCH_SIZE - 1) // _CHANNELS_BATCH_SIZE
+    return channel_batches + channel_count * scan_pages * 2
+
+
+def _execute_read_with_quota(request, context: str, bucket: str, *, metadata: dict | None = None):
+    """read API request を実行し、成否に関わらず 1 request 分の quota を記録する。
+
+    quota は失敗した request でも消費されるため `finally` で記録し、
+    元例外はそのまま伝播させる。
+    """
+    try:
+        return execute_with_retry(request, context)
+    finally:
+        log_quota(_QUOTA_SERVICE, bucket, _READ_QUOTA_UNITS, metadata=metadata)
+
+
+def _create_benchmark_clients() -> YouTubeClients:
+    """Assemble the default OAuth clients without starting authentication."""
+    return YouTubeClients(
+        full_handler=YouTubeOAuthHandler(),
+        readonly_handler=YouTubeOAuthHandler.create_readonly(),
+    )
+
+
+def _stale_benchmark_channels(report_path: Path, channels: list[dict], today: date, freshness_days: int) -> list[dict]:
+    """Evaluate channel freshness against one snapshot of the published report pair."""
+    stale_channels = []
+    report_exists = report_path.exists() and report_path.with_suffix(".html").exists()
+    if report_exists:
+        report = read_published_json_document(report_path, RepositorySchema.CHANNEL_RESEARCH_REPORT)
+        if not isinstance(report, dict) or report.get("report_type") != "benchmark":
+            raise ConfigError(f"{report_path}: report_type は benchmark である必要があります")
+
+    age = None
+    if report_exists and channels:
+        mtime = datetime.fromtimestamp(
+            min(report_path.stat().st_mtime, report_path.with_suffix(".html").stat().st_mtime)
+        ).date()
+        age = (today - mtime).days
+
+    for ch in channels:
+        if not report_exists:
+            logger.info("ファイル未作成: %s → 初回収集対象", ch["slug"])
+            stale_channels.append(ch)
+            continue
+
+        if age >= freshness_days:
+            logger.info("%s: %d日前に更新 → 更新対象", ch["slug"], age)
+            stale_channels.append(ch)
+        else:
+            logger.info("%s: %d日前に更新 → 最新", ch["slug"], age)
+
+    return stale_channels
+
+
+def _merge_saved_benchmark(path: Path, data: dict) -> dict:
+    """Merge a partial channel collection while retaining prior channel and playlist fields."""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            existing_data = json.load(f)
+    except json.JSONDecodeError:
+        existing_data = None
+    if existing_data is not None:
+        incoming_by_slug = {channel.get("slug"): channel for channel in data.get("channels", [])}
+        merged_channels = []
+        for existing_channel in existing_data.get("channels", []):
+            incoming = incoming_by_slug.pop(existing_channel.get("slug"), None)
+            merged_channels.append({**existing_channel, **incoming} if incoming is not None else existing_channel)
+        merged_channels.extend(incoming_by_slug.values())
+        return {**existing_data, **data, "channels": merged_channels}
+    return data
+
+
+def _write_benchmark_json(path: Path, data: dict, *, label: str) -> None:
+    """Persist both video and playlist collections with the same JSON formatting."""
+    with open(path, "w", encoding="utf-8") as stream:
+        json.dump(data, stream, indent=2, ensure_ascii=False)
+        stream.write("\n")
+    logger.info("%s: %s", label, path)
+
+
+def _merge_playlist_results(data: dict, playlists_results: list[dict]) -> None:
+    """Update each channel once, retaining its existing video benchmark fields."""
+    channels_by_slug = {channel.get("slug"): channel for channel in data.get("channels", [])}
+    for result in playlists_results:
+        slug = result["slug"]
+        channel = channels_by_slug.get(slug)
+        if channel is None:
+            channel = {key: result[key] for key in ("channel_id", "name", "slug")}
+            data.setdefault("channels", []).append(channel)
+            channels_by_slug[slug] = channel
+        channel["playlists_collected_at"] = result["playlists_collected_at"]
+        channel["playlists"] = result["playlists"]
+
+
+def _find_competitor_channels(channels: Iterable[dict], slug: str) -> list[dict]:
+    """Resolve a configured competitor before collection makes API requests."""
+    targets = [channel for channel in channels if channel["slug"] == slug]
+    if not targets:
+        raise ConfigError(
+            f"指定された競合が見つかりません: {slug}。"
+            "config/channel/analytics.json の benchmark.channels に slug を登録してください。"
+        )
+    return targets
+
+
+def _require_channel_metadata(channel_info: dict, ch_item: dict) -> None:
+    """Reject a missing individual channel before reading its upload playlist."""
+    channel_id = channel_info["id"]
+    if not ch_item:
+        raise YouTubeAPIError(
+            f"ベンチマーク対象チャンネルが見つかりません: {channel_info.get('name', channel_id)} "
+            f"(id={channel_id})。削除・非公開・ID 誤りの可能性があります。"
+            "config/channel/analytics.json の benchmark.channels の id を確認してください。"
+        )
+
+
+def _require_all_channel_metadata(targets: list[dict], ch_items: dict[str, dict]) -> None:
+    """Reject an incomplete batch before collecting any channel's videos."""
+    # API レスポンスに含まれないチャンネル（削除・非公開・ID 誤り）を明示検知。
+    # 空辞書を黙ってスキップせず、欠落があれば収集失敗として停止する。
+    missing = [ch for ch in targets if ch["id"] not in ch_items]
+    if missing:
+        detail = ", ".join(f"{ch.get('name', ch['id'])} (id={ch['id']})" for ch in missing)
+        raise YouTubeAPIError(
+            f"ベンチマーク対象チャンネルが YouTube API レスポンスに見つかりません: {detail}。"
+            "削除・非公開・ID 誤りの可能性があります。"
+            "config/channel/analytics.json の benchmark.channels の id を確認してください。"
+        )
+
+
+_VIDEO_DESCRIPTION_FIELD = "description"
+
+
+_DESCRIPTION_TTP_SECTION_TITLE = "概要欄TTPサンプル"
+
+
+_DESCRIPTION_TTP_SAMPLE_LIMIT = 3
+
+
 _GENERATED_START = "<!-- benchmark:generated:start -->"
+
+
 _GENERATED_END = "<!-- benchmark:generated:end -->"
+
+
 _USER_START = "<!-- benchmark:user:start -->"
+
+
 _USER_END = "<!-- benchmark:user:end -->"
+
+
 _REPORT_MARKERS = (_GENERATED_START, _GENERATED_END, _USER_START, _USER_END)
+
+
 _LEGACY_USER_HEADING = "## サムネイル分析"
 
 
@@ -119,723 +274,48 @@ def _existing_user_content(path: Path) -> str:
     return "".join(lines[matches[0] :]).strip("\r\n") if matches else ""
 
 
-def estimate_collection_quota_units(*, channel_count: int, scan_recent: int) -> int:
-    """通常収集の Data API read quota 上限を 50 件ページ単位で返す。"""
-    if channel_count <= 0:
-        return 0
-    scan_pages = max(0, (scan_recent + _SCAN_PAGE_SIZE - 1) // _SCAN_PAGE_SIZE)
-    channel_batches = (channel_count + _CHANNELS_BATCH_SIZE - 1) // _CHANNELS_BATCH_SIZE
-    return channel_batches + channel_count * scan_pages * 2
-
-
 def _markdown_code_fence(content: str) -> str:
     max_backticks = max((len(match.group(0)) for match in re.finditer(r"`+", content)), default=0)
     return "`" * max(3, max_backticks + 1)
 
 
-def _execute_read_with_quota(request, context: str, bucket: str, *, metadata: dict | None = None):
-    """read API request を実行し、成否に関わらず 1 request 分の quota を記録する。
+def _posting_trend_lines(posting: dict) -> list[str]:
+    """Render posting cadence independently of video and thumbnail sections."""
+    lines: list[str] = []
+    trend_label = {"accelerating": "加速傾向", "decelerating": "減速傾向", "stable": "安定"}.get(
+        posting.get("trend"), "不明"
+    )
+    if posting.get("average_interval"):
+        lines.append(f"**投稿頻度**: 平均{posting['average_interval']:.1f}日おき（{trend_label}）")
+    lines.append("")
 
-    quota は失敗した request でも消費されるため `finally` で記録し、
-    元例外はそのまま伝播させる。
-    """
+    # 投稿間隔トレンド
+    if posting.get("intervals_days"):
+        lines.extend(
+            [
+                "## 投稿間隔トレンド",
+                "",
+                f"平均間隔: {posting['average_interval']:.1f}日（{trend_label}）",
+                f"直近{len(posting['intervals_days'])}本: " + " → ".join(f"{d}d" for d in posting["intervals_days"]),
+                "",
+            ]
+        )
+
+    return lines
+
+
+def _format_jst_time(utc_str: str) -> str:
+    """UTC ISO 8601 タイムスタンプから JST 時刻（HH:MM）を返す。"""
+    if not utc_str or len(utc_str) < 16:
+        return "—"
     try:
-        return execute_with_retry(request, context)
-    finally:
-        log_quota(_QUOTA_SERVICE, bucket, _READ_QUOTA_UNITS, metadata=metadata)
-
-
-class BenchmarkCollector:
-    """競合チャンネルのベンチマークデータ収集（YouTube Data API）"""
-
-    def __init__(self):
-        self.config = load_config()
-        self.youtube = None
-        self.youtube_clients = YouTubeClients(
-            full_handler=YouTubeOAuthHandler(),
-            readonly_handler=YouTubeOAuthHandler.create_readonly(),
-        )
-        self.benchmark_config = load_skill_config("benchmark")
-        self.channel_dir = _channel_dir()
-        self.benchmarks_dir = self.channel_dir / "docs" / "benchmarks"
-        self.data_dir = self.channel_dir / "data"
-        self.today = date.today()
-
-    def initialize(self):
-        """YouTube API 認証を実行する。"""
-        logger.info("YouTube API 認証中...")
-        self.youtube = self.youtube_clients.youtube_readonly
-        logger.info("認証完了")
-
-    def check_freshness(self) -> list[dict]:
-        """更新が必要なチャンネルを返す。
-
-        Returns:
-            freshness_days 以上未更新のチャンネル情報リスト
-        """
-        freshness_days = self.benchmark_config.get("freshness_days", 3)
-        stale_channels = []
-        report_path = self.benchmarks_dir / "benchmark-report.json"
-        report_exists = report_path.exists() and report_path.with_suffix(".html").exists()
-        if report_exists:
-            report = read_published_json_document(report_path, RepositorySchema.CHANNEL_RESEARCH_REPORT)
-            if not isinstance(report, dict) or report.get("report_type") != "benchmark":
-                raise ConfigError(f"{report_path}: report_type は benchmark である必要があります")
-
-        for ch in self.config.analytics.benchmark.channels:
-            if not report_exists:
-                logger.info("ファイル未作成: %s → 初回収集対象", ch["slug"])
-                stale_channels.append(ch)
-                continue
-
-            mtime = datetime.fromtimestamp(
-                min(report_path.stat().st_mtime, report_path.with_suffix(".html").stat().st_mtime)
-            ).date()
-            age = (self.today - mtime).days
-            if age >= freshness_days:
-                logger.info("%s: %d日前に更新 → 更新対象", ch["slug"], age)
-                stale_channels.append(ch)
-            else:
-                logger.info("%s: %d日前に更新 → 最新", ch["slug"], age)
-
-        return stale_channels
-
-    def _fetch_channels_metadata(self, channel_infos: list[dict]) -> dict[str, dict]:
-        """`channels.list` を `_CHANNELS_BATCH_SIZE` 件単位でバッチ呼び出しし、`{channel_id: item}` を返す。
-
-        Args:
-            channel_infos: `benchmark.channels` 相当のリスト（各要素に `id` を含む）
-
-        Returns:
-            channel_id をキーとした API レスポンス item の辞書。
-            削除済み等で API レスポンスに含まれない channel_id はキーに現れない。
-        """
-        channel_ids = [ch["id"] for ch in channel_infos]
-        items_by_id: dict[str, dict] = {}
-        for i in range(0, len(channel_ids), _CHANNELS_BATCH_SIZE):
-            batch = channel_ids[i : i + _CHANNELS_BATCH_SIZE]
-            with section("benchmark.channels_list", batch_size=len(batch)):
-                try:
-                    request = self.youtube.channels().list(
-                        part="snippet,statistics,contentDetails",
-                        id=",".join(batch),
-                    )
-                    resp = _execute_read_with_quota(
-                        request,
-                        f"benchmark.channels_list (id={','.join(batch)})",
-                        "channels.list",
-                        metadata={"context": "benchmark.channels_list", "batch_size": len(batch)},
-                    )
-                except YouTubeAPIError:
-                    raise
-            for item in resp.get("items", []):
-                items_by_id[item["id"]] = item
-        return items_by_id
-
-    def collect_channel(self, channel_info: dict, ch_item: dict) -> dict:
-        """1チャンネル分のデータを YouTube Data API で収集する。
-
-        Args:
-            channel_info: benchmark.channels の1要素
-            ch_item: `_fetch_channels_metadata` から渡される該当チャンネルの
-                `channels.list` レスポンス item。チャンネルが見つからなければ空辞書
-
-        Returns:
-            チャンネルデータ辞書（概要 + 動画リスト + 派生指標）。
-
-        Raises:
-            YouTubeAPIError: `ch_item` が空（チャンネルが API レスポンスに存在しない）のとき。
-                空辞書で握りつぶさず、欠落を呼び出し側へ伝播させる
-        """
-        channel_id = channel_info["id"]
-        scan_recent = self.benchmark_config.get("scan_recent", _DEFAULT_SCAN_RECENT)
-        min_views = self.benchmark_config.get("min_views", 10000)
-
-        if not ch_item:
-            raise YouTubeAPIError(
-                f"ベンチマーク対象チャンネルが見つかりません: {channel_info.get('name', channel_id)} "
-                f"(id={channel_id})。削除・非公開・ID 誤りの可能性があります。"
-                "config/channel/analytics.json の benchmark.channels の id を確認してください。"
-            )
-
-        uploads_playlist_id = ch_item["contentDetails"]["relatedPlaylists"]["uploads"]
-
-        channel_data = {
-            "channel_id": channel_id,
-            "name": channel_info["name"],
-            "slug": channel_info["slug"],
-            "relationship": channel_info.get("relationship", ""),
-            "subscribers": int(ch_item["statistics"].get("subscriberCount", 0)),
-            "total_videos": int(ch_item["statistics"].get("videoCount", 0)),
-            "collected_at": self.today.isoformat(),
-            "min_views_threshold": min_views,
-        }
-
-        # 最新動画ID取得（scan_recent 件を走査プールとする。50 件超は nextPageToken でページング）
-        video_ids: list[str] = []
-        page_token: str | None = None
-        remaining = scan_recent
-        upload_scan_complete = False
-        while remaining > 0:
-            with section("benchmark.playlist_items", page_size=min(50, remaining)):
-                try:
-                    request = self.youtube.playlistItems().list(
-                        part="contentDetails",
-                        playlistId=uploads_playlist_id,
-                        maxResults=min(50, remaining),
-                        pageToken=page_token,
-                    )
-                    playlist_resp = _execute_read_with_quota(
-                        request,
-                        "benchmark.playlist_items",
-                        "playlistItems.list",
-                        metadata={"context": "benchmark.playlist_items"},
-                    )
-                except YouTubeAPIError:
-                    raise
-            batch_ids = [item["contentDetails"]["videoId"] for item in playlist_resp.get("items", [])]
-            video_ids.extend(batch_ids)
-            page_token = playlist_resp.get("nextPageToken")
-            remaining -= len(batch_ids)
-            if not page_token or not batch_ids:
-                upload_scan_complete = True
-                break
-
-        channel_data["scanned_count"] = len(video_ids)
-
-        if not video_ids:
-            logger.warning("動画が見つかりません: %s", channel_info["name"])
-            channel_data["upload_scan"] = {
-                "scanned_count": 0,
-                "complete": upload_scan_complete,
-                "latest_upload_at": None,
-                "oldest_upload_at": None,
-                "videos": [],
-            }
-            channel_data["videos"] = []
-            channel_data["avg_views"] = 0
-            channel_data["avg_daily_views"] = 0
-            channel_data["avg_engagement_rate"] = 0
-            channel_data["top_tags"] = []
-            channel_data["posting_trend"] = {}
-            return channel_data
-
-        # 動画詳細取得（50件単位でバッチ）
-        raw_videos: list[dict] = []
-        for i in range(0, len(video_ids), 50):
-            batch = video_ids[i : i + 50]
-            with section("benchmark.videos_list", batch_size=len(batch)):
-                try:
-                    request = self.youtube.videos().list(
-                        part="snippet,statistics,contentDetails",
-                        id=",".join(batch),
-                    )
-                    videos_resp = _execute_read_with_quota(
-                        request,
-                        "benchmark.videos_list",
-                        "videos.list",
-                        metadata={"context": "benchmark.videos_list", "batch_size": len(batch)},
-                    )
-                except YouTubeAPIError:
-                    raise
-
-            for video in videos_resp.get("items", []):
-                snippet = video["snippet"]
-                stats = video["statistics"]
-                content = video["contentDetails"]
-
-                # ライブ配信・非公開動画等で duration が欠落することがあるためスキップ
-                duration_iso = content.get("duration")
-                if not duration_iso:
-                    logger.warning("duration 欠落のためスキップ: %s", video.get("id"))
-                    continue
-
-                is_short = is_short_benchmark_duration(duration_iso)
-                thumbnail_keys = _SHORT_THUMBNAIL_KEYS if is_short else _DEFAULT_THUMBNAIL_KEYS
-                v = {
-                    "video_id": video["id"],
-                    "title": snippet["title"],
-                    "published_at": snippet["publishedAt"][:10],
-                    "published_at_utc": snippet["publishedAt"],
-                    "views": int(stats.get("viewCount", 0)),
-                    "likes": int(stats.get("likeCount", 0)),
-                    "comments": int(stats.get("commentCount", 0)),
-                    "duration_iso": duration_iso,
-                    "duration_display": parse_iso_duration(duration_iso),
-                    "tags": snippet.get("tags", []),
-                    _VIDEO_DESCRIPTION_FIELD: snippet.get(_VIDEO_DESCRIPTION_FIELD, ""),
-                    "description_keywords": extract_description_keywords(snippet.get(_VIDEO_DESCRIPTION_FIELD, "")),
-                    "thumbnail_url": self._best_thumbnail_url(
-                        snippet.get("thumbnails", {}),
-                        keys=thumbnail_keys,
-                    ),
-                    "thumbnail_analysis": None,
-                }
-                v["daily_views"] = compute_daily_views(v, self.today)
-                v["engagement_rate"] = compute_engagement_rate(v)
-                raw_videos.append(v)
-
-        upload_dates = [video["published_at"] for video in raw_videos]
-        channel_data["upload_scan"] = {
-            "scanned_count": len(raw_videos),
-            "complete": upload_scan_complete,
-            "latest_upload_at": max(upload_dates) if upload_dates else None,
-            "oldest_upload_at": min(upload_dates) if upload_dates else None,
-            "videos": [
-                {
-                    key: video[key]
-                    for key in (
-                        "video_id",
-                        "title",
-                        "published_at",
-                        "views",
-                        "duration_iso",
-                        "thumbnail_url",
-                    )
-                }
-                for video in raw_videos
-            ],
-        }
-
-        # 視聴数フィルタ（min_views 以上のみベンチマーク対象）
-        videos = [v for v in raw_videos if v["views"] >= min_views]
-        # 視聴数降順で並べ替え（レポートの可読性向上）
-        videos.sort(key=lambda v: v["views"], reverse=True)
-
-        logger.info(
-            "%s: 走査 %d 本 → %d 本が %d 再生以上",
-            channel_info["name"],
-            len(raw_videos),
-            len(videos),
-            min_views,
-        )
-
-        channel_data["videos"] = videos
-        channel_data["posting_trend"] = compute_posting_intervals(videos) if videos else {}
-
-        # 集計（フィルタ後の Long 動画のみ対象）
-        long_videos = [v for v in videos if not is_short_benchmark_video(v)]
-        if long_videos:
-            channel_data["avg_views"] = round(sum(v["views"] for v in long_videos) / len(long_videos))
-            channel_data["avg_daily_views"] = round(sum(v["daily_views"] for v in long_videos) / len(long_videos), 1)
-            channel_data["avg_engagement_rate"] = round(
-                sum(v["engagement_rate"] for v in long_videos) / len(long_videos), 2
-            )
-        else:
-            channel_data["avg_views"] = 0
-            channel_data["avg_daily_views"] = 0
-            channel_data["avg_engagement_rate"] = 0
-
-        # タグ頻度分析（フィルタ後の動画のみ）
-        all_tags = []
-        for v in videos:
-            all_tags.extend(t.lower() for t in v["tags"])
-        tag_counts = Counter(all_tags)
-        channel_data["top_tags"] = [{"tag": tag, "count": count} for tag, count in tag_counts.most_common(15)]
-
-        return channel_data
-
-    def collect_all(self, force: bool = False, competitor_slug: str | None = None) -> dict:
-        """全チャンネル（または指定チャンネル）のデータを収集する。
-
-        Args:
-            force: True なら鮮度に関わらず全更新
-            competitor_slug: 指定時はその競合のみ
-
-        Returns:
-            全チャンネルの収集結果
-
-        Raises:
-            ConfigError: 指定 `competitor_slug` が benchmark.channels に存在しないとき
-            YouTubeAPIError: 収集対象の一部が API レスポンスに存在しない（欠落）とき
-        """
-        if competitor_slug:
-            targets = [ch for ch in self.config.analytics.benchmark.channels if ch["slug"] == competitor_slug]
-            if not targets:
-                raise ConfigError(
-                    f"指定された競合が見つかりません: {competitor_slug}。"
-                    "config/channel/analytics.json の benchmark.channels に slug を登録してください。"
-                )
-        elif force:
-            targets = list(self.config.analytics.benchmark.channels)
-        else:
-            targets = self.check_freshness()
-
-        if not targets:
-            logger.info("更新が必要なチャンネルはありません")
-            return {"channels": [], "collected_at": self.today.isoformat(), "skipped": True}
-
-        ch_items = self._fetch_channels_metadata(targets)
-
-        # API レスポンスに含まれないチャンネル（削除・非公開・ID 誤り）を明示検知。
-        # 空辞書を黙ってスキップせず、欠落があれば収集失敗として停止する。
-        missing = [ch for ch in targets if ch["id"] not in ch_items]
-        if missing:
-            detail = ", ".join(f"{ch.get('name', ch['id'])} (id={ch['id']})" for ch in missing)
-            raise YouTubeAPIError(
-                f"ベンチマーク対象チャンネルが YouTube API レスポンスに見つかりません: {detail}。"
-                "削除・非公開・ID 誤りの可能性があります。"
-                "config/channel/analytics.json の benchmark.channels の id を確認してください。"
-            )
-
-        results = []
-        for ch in targets:
-            logger.info("収集中: %s (%s)", ch["name"], ch["id"])
-            results.append(self.collect_channel(ch, ch_items[ch["id"]]))
-
-        return {
-            "channels": results,
-            "collected_at": self.today.isoformat(),
-        }
-
-    def collect_playlists(self, channel_info: dict) -> dict:
-        """1チャンネルの公開再生リスト構成を収集する。
-
-        playlists.list → 各 playlistItems.list → videos.list の 3 段で
-        再生リストごとの動画一覧と統計を取得する。
-
-        Args:
-            channel_info: benchmark.channels の1要素
-
-        Returns:
-            {channel_id, name, slug, playlists_collected_at, playlists: [...]}
-        """
-        channel_id = channel_info["id"]
-
-        # 1. 全再生リストを取得（ページング）
-        playlists_raw = []
-        page_token = None
-        while True:
-            request = self.youtube.playlists().list(
-                part="snippet,contentDetails",
-                channelId=channel_id,
-                maxResults=50,
-                pageToken=page_token,
-            )
-            resp = _execute_read_with_quota(
-                request,
-                "benchmark.playlists_list",
-                "playlists.list",
-                metadata={"context": "benchmark.playlists_list"},
-            )
-            playlists_raw.extend(resp.get("items", []))
-            page_token = resp.get("nextPageToken")
-            if not page_token:
-                break
-
-        logger.info("再生リスト取得: %d 件 (%s)", len(playlists_raw), channel_info["name"])
-
-        # 2. 各再生リストの動画 ID を取得し、video_id → 所属情報をマップ化
-        playlists_data = []
-        all_video_ids: set[str] = set()
-        for pl in playlists_raw:
-            playlist_id = pl["id"]
-            snippet = pl["snippet"]
-            content = pl["contentDetails"]
-
-            items = []
-            item_page_token = None
-            while True:
-                request = self.youtube.playlistItems().list(
-                    part="snippet,contentDetails",
-                    playlistId=playlist_id,
-                    maxResults=50,
-                    pageToken=item_page_token,
-                )
-                items_resp = _execute_read_with_quota(
-                    request,
-                    "benchmark.playlist_items",
-                    "playlistItems.list",
-                    metadata={"context": "benchmark.playlists_playlist_items"},
-                )
-                for item in items_resp.get("items", []):
-                    item_snip = item["snippet"]
-                    video_id = item["contentDetails"]["videoId"]
-                    items.append(
-                        {
-                            "position": item_snip.get("position", 0),
-                            "video_id": video_id,
-                            "title": item_snip.get("title", ""),
-                            "published_at": item["contentDetails"].get("videoPublishedAt", ""),
-                        }
-                    )
-                    all_video_ids.add(video_id)
-                item_page_token = items_resp.get("nextPageToken")
-                if not item_page_token:
-                    break
-
-            playlists_data.append(
-                {
-                    "playlist_id": playlist_id,
-                    "title": snippet.get("title", ""),
-                    "description": snippet.get("description", ""),
-                    "item_count": int(content.get("itemCount", len(items))),
-                    "items": items,
-                }
-            )
-
-        # 3. 動画 ID をバッチ（50件ずつ）で statistics + duration を取得
-        video_stats: dict[str, dict] = {}
-        video_id_list = list(all_video_ids)
-        for i in range(0, len(video_id_list), 50):
-            batch = video_id_list[i : i + 50]
-            request = self.youtube.videos().list(
-                part="statistics,contentDetails",
-                id=",".join(batch),
-            )
-            videos_resp = _execute_read_with_quota(
-                request,
-                "benchmark.videos_list",
-                "videos.list",
-                metadata={"context": "benchmark.playlists_videos_list", "batch_size": len(batch)},
-            )
-            for v in videos_resp.get("items", []):
-                stats = v.get("statistics", {})
-                content = v.get("contentDetails", {})
-                duration_iso = content.get("duration", "")
-                video_stats[v["id"]] = {
-                    "views": int(stats.get("viewCount", 0)),
-                    "likes": int(stats.get("likeCount", 0)),
-                    "comments": int(stats.get("commentCount", 0)),
-                    "duration_iso": duration_iso,
-                    "duration_display": parse_iso_duration(duration_iso) if duration_iso else "",
-                }
-
-        # 4. 各 playlist の items に統計をマージ
-        for pl in playlists_data:
-            for item in pl["items"]:
-                stats = video_stats.get(item["video_id"], {})
-                item.update(stats)
-
-        return {
-            "channel_id": channel_id,
-            "name": channel_info["name"],
-            "slug": channel_info["slug"],
-            "playlists_collected_at": self.today.isoformat(),
-            "playlists": playlists_data,
-        }
-
-    def save_json(self, data: dict, *, competitor_slug: str | None = None) -> Path:
-        """中間 JSON を data/ に保存する。
-
-        ``competitor_slug`` 指定時は同日ファイルの同一 slug だけを更新し、
-        他チャンネルと playlist 収集済みフィールドを保持する。
-
-        Returns:
-            保存先パス
-        """
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        filename = f"benchmark_{self.today.strftime('%Y%m%d')}.json"
-        path = self.data_dir / filename
-        if competitor_slug is not None and path.exists():
-            try:
-                with open(path, "r", encoding="utf-8") as f:
-                    existing_data = json.load(f)
-            except json.JSONDecodeError:
-                existing_data = None
-            if existing_data is not None:
-                incoming_by_slug = {channel.get("slug"): channel for channel in data.get("channels", [])}
-                merged_channels = []
-                for existing_channel in existing_data.get("channels", []):
-                    incoming = incoming_by_slug.pop(existing_channel.get("slug"), None)
-                    merged_channels.append(
-                        {**existing_channel, **incoming} if incoming is not None else existing_channel
-                    )
-                merged_channels.extend(incoming_by_slug.values())
-                data = {**existing_data, **data, "channels": merged_channels}
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-            f.write("\n")
-        logger.info("JSON 保存: %s", path)
-        return path
-
-    def merge_playlists_into_json(self, playlists_results: list[dict]) -> Path:
-        """既存の同日付 benchmark JSON に playlists フィールドをマージする。
-
-        既存ファイルがなければ playlists のみを含む新規ファイルを作成する。
-
-        Args:
-            playlists_results: collect_playlists() の結果リスト
-
-        Returns:
-            保存先パス
-        """
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        filename = f"benchmark_{self.today.strftime('%Y%m%d')}.json"
-        path = self.data_dir / filename
-
-        if path.exists():
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-        else:
-            data = {"channels": [], "collected_at": self.today.isoformat()}
-
-        # slug → channel オブジェクトを引けるようにする
-        channels_by_slug = {ch.get("slug"): ch for ch in data.get("channels", [])}
-
-        for pl_result in playlists_results:
-            slug = pl_result["slug"]
-            existing = channels_by_slug.get(slug)
-            if existing is not None:
-                existing["playlists_collected_at"] = pl_result["playlists_collected_at"]
-                existing["playlists"] = pl_result["playlists"]
-            else:
-                # 同日に動画ベンチマークが未収集のチャンネルは新規エントリで挿入
-                data.setdefault("channels", []).append(
-                    {
-                        "channel_id": pl_result["channel_id"],
-                        "name": pl_result["name"],
-                        "slug": slug,
-                        "playlists_collected_at": pl_result["playlists_collected_at"],
-                        "playlists": pl_result["playlists"],
-                    }
-                )
-
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-            f.write("\n")
-        logger.info("JSON マージ保存: %s", path)
-        return path
-
-    # --- 内部メソッド ---
-
-    @staticmethod
-    def _best_thumbnail_url(thumbnails: dict, *, keys: tuple[str, ...]) -> str:
-        for key in keys:
-            if key in thumbnails:
-                return thumbnails[key]["url"]
-        return ""
-
-    def download_thumbnails(self, data: dict, *, force: bool = False) -> None:
-        """サムネイル画像を docs/benchmarks/thumbnails/ にダウンロードする。
-
-        Args:
-            data: collect_all() の結果
-            force: True なら既存ファイルも再ダウンロード
-        """
-        thumbnails_dir = self.benchmarks_dir / "thumbnails"
-        thumbnails_dir.mkdir(parents=True, exist_ok=True)
-
-        downloaded = 0
-        skipped = 0
-        for channel in data.get("channels", []):
-            slug = channel["slug"]
-            for video in channel.get("upload_scan", {}).get("videos", []):
-                url = video.get("thumbnail_url")
-                if not url:
-                    continue
-
-                dest = thumbnails_dir / f"{slug}_{video['video_id']}.jpg"
-                if dest.exists() and not force:
-                    skipped += 1
-                    continue
-
-                try:
-                    urllib.request.urlretrieve(url, dest)
-                    downloaded += 1
-                except Exception as e:
-                    logger.warning("サムネイルDL失敗 [%s]: %s", video["title"][:30], e)
-
-        logger.info("サムネイルDL: %d 件（スキップ: %d 件）→ %s", downloaded, skipped, thumbnails_dir)
-
-
-_DEFAULT_THUMBNAIL_ANALYSIS_MODEL = "gemini-3.5-flash"
-
-
-class BenchmarkThumbnailAnalyzer:
-    """ベンチマークサムネイルの Gemini 分析"""
-
-    def __init__(self, benchmarks_dir: Path):
-        self.benchmarks_dir = benchmarks_dir
-        cfg = load_skill_config("benchmark").get("thumbnail_analysis", {})
-        self.model = cfg.get("model", _DEFAULT_THUMBNAIL_ANALYSIS_MODEL)
-        self.delay_sec = float(cfg.get("delay_sec", 5))
-        self.prompt = cfg.get("prompt", "").strip()
-
-    def analyze_thumbnails(self, data: dict, keep: bool = False) -> dict:
-        """サムネイル画像をダウンロードして Gemini で分析する。
-
-        Args:
-            data: collect_all() の結果
-            keep: True ならサムネイル画像を docs/benchmarks/thumbnails/ に保存
-
-        Returns:
-            thumbnail_analysis が追加された data
-        """
-        try:
-            from google.genai import types
-
-            from youtube_automation.infrastructure.media.genai_client import create_global_genai_client
-        except ImportError:
-            logger.warning("google-genai 未インストール — サムネイル分析をスキップ")
-            return data
-
-        try:
-            client = create_global_genai_client()
-        except ConfigError as e:
-            logger.warning("AI クライアント初期化失敗 — サムネイル分析をスキップ: %s", e)
-            return data
-        thumbnails_dir = self.benchmarks_dir / "thumbnails" if keep else None
-        if thumbnails_dir:
-            thumbnails_dir.mkdir(parents=True, exist_ok=True)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            for channel in data.get("channels", []):
-                slug = channel["slug"]
-                for i, video in enumerate(channel.get("videos", [])):
-                    url = video.get("thumbnail_url")
-                    if not url:
-                        continue
-
-                    # ダウンロード
-                    tmp_path = Path(tmp_dir) / f"{slug}_{i}.jpg"
-                    try:
-                        urllib.request.urlretrieve(url, tmp_path)
-                    except Exception as e:
-                        logger.warning("サムネイルDL失敗 [%s]: %s", video["title"][:30], e)
-                        continue
-
-                    # 保持する場合はコピー
-                    if thumbnails_dir:
-                        import shutil
-
-                        keep_path = thumbnails_dir / f"{slug}_{video['video_id']}.jpg"
-                        shutil.copy2(tmp_path, keep_path)
-
-                    # Gemini 分析
-                    try:
-                        image_bytes = tmp_path.read_bytes()
-                        response = client.models.generate_content(
-                            model=self.model,
-                            contents=[
-                                types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
-                                self.prompt,
-                            ],
-                        )
-                        # JSON パース
-                        text = response.text.strip()
-                        # コードフェンスを除去
-                        text = re.sub(r"^```(?:json)?\s*", "", text)
-                        text = re.sub(r"\s*```$", "", text)
-                        video["thumbnail_analysis"] = json.loads(text)
-                        logger.info("サムネイル分析完了: %s", video["title"][:40])
-                        from youtube_automation.infrastructure.cost_tracker import log_generation
-
-                        log_generation(
-                            "analysis",
-                            self.model,
-                            quantity=1,
-                            unit="call",
-                            metadata={"video_id": video["video_id"], "channel_slug": slug},
-                        )
-                    except json.JSONDecodeError as e:
-                        logger.warning("サムネイル分析JSONパース失敗 [%s]: %s", video["title"][:30], e)
-                    except Exception as e:
-                        logger.warning("サムネイル分析失敗 [%s]: %s", video["title"][:30], e)
-
-                    time.sleep(self.delay_sec)
-
-        return data
+        from datetime import datetime, timedelta, timezone
+
+        utc_dt = datetime.fromisoformat(utc_str.replace("Z", "+00:00"))
+        jst_dt = utc_dt.astimezone(timezone(timedelta(hours=9)))
+        return jst_dt.strftime("%H:%M")
+    except (ValueError, TypeError):
+        return "—"
 
 
 class BenchmarkReportGenerator:
@@ -973,17 +453,7 @@ class BenchmarkReportGenerator:
 
     @staticmethod
     def _utc_to_jst_time(utc_str: str) -> str:
-        """UTC ISO 8601 タイムスタンプから JST 時刻（HH:MM）を返す。"""
-        if not utc_str or len(utc_str) < 16:
-            return "—"
-        try:
-            from datetime import datetime, timedelta, timezone
-
-            utc_dt = datetime.fromisoformat(utc_str.replace("Z", "+00:00"))
-            jst_dt = utc_dt.astimezone(timezone(timedelta(hours=9)))
-            return jst_dt.strftime("%H:%M")
-        except (ValueError, TypeError):
-            return "—"
+        return _format_jst_time(utc_str)
 
     def _generate_channel_md(self, channel: dict) -> str:
         """個別チャンネルの Markdown を生成する。"""
@@ -1058,25 +528,7 @@ class BenchmarkReportGenerator:
                     f"**平均エンゲージメント率**: {channel['avg_engagement_rate']:.1f}%",
                 ]
             )
-        if posting.get("average_interval"):
-            trend_label = {"accelerating": "加速傾向", "decelerating": "減速傾向", "stable": "安定"}.get(
-                posting["trend"], "不明"
-            )
-            lines.append(f"**投稿頻度**: 平均{posting['average_interval']:.1f}日おき（{trend_label}）")
-        lines.append("")
-
-        # 投稿間隔トレンド
-        if posting.get("intervals_days"):
-            lines.extend(
-                [
-                    "## 投稿間隔トレンド",
-                    "",
-                    f"平均間隔: {posting['average_interval']:.1f}日（{trend_label}）",
-                    f"直近{len(posting['intervals_days'])}本: "
-                    + " → ".join(f"{d}d" for d in posting["intervals_days"]),
-                    "",
-                ]
-            )
+        lines.extend(_posting_trend_lines(posting))
 
         # タグ分析
         top_tags = channel.get("top_tags", [])
@@ -1103,6 +555,11 @@ class BenchmarkReportGenerator:
 
         self._append_description_ttp_samples(lines, long_videos)
 
+        self._append_thumbnail_analysis(lines, videos)
+
+        return "\n".join(lines)
+
+    def _append_thumbnail_analysis(self, lines: list[str], videos: list[dict]) -> None:
         # サムネイル分析
         analyzed = [
             v
@@ -1128,8 +585,6 @@ class BenchmarkReportGenerator:
                     ]
                 )
 
-        return "\n".join(lines)
-
     def _append_description_ttp_samples(self, lines: list[str], videos: list[dict]) -> None:
         description_videos = [
             v
@@ -1153,6 +608,32 @@ class BenchmarkReportGenerator:
                     "",
                 ]
             )
+
+    def _posting_time_sections(self, channels: list[dict]) -> list[str]:
+        """Render per-channel JST posting time tables when usable timestamps exist."""
+        lines: list[str] = []
+        for ch in channels:
+            videos = ch.get("videos", [])
+            jst_times = []
+            for v in videos:
+                utc_str = v.get("published_at_utc", "")
+                if utc_str and len(utc_str) >= 16:
+                    t = self._utc_to_jst_time(utc_str)
+                    if t != "—":
+                        jst_times.append(t)
+            if jst_times:
+                lines.append(f"### {ch['name']}")
+                lines.append("")
+                lines.append("| 動画 | 投稿時刻(JST) | 再生数 |")
+                lines.append("|------|---------------|--------|")
+                for v in videos:
+                    t = self._utc_to_jst_time(v.get("published_at_utc", ""))
+                    if t != "—":
+                        title_short = self._escape_md_table(v["title"][:40])
+                        lines.append(f"| {title_short} | {t} | {v['views']:,} |")
+                lines.append("")
+
+        return lines
 
     def _generate_common_patterns(self, data: dict) -> str:
         """common-patterns.md を生成する。
@@ -1202,26 +683,7 @@ class BenchmarkReportGenerator:
                 "",
             ]
         )
-        for ch in channels:
-            videos = ch.get("videos", [])
-            jst_times = []
-            for v in videos:
-                utc_str = v.get("published_at_utc", "")
-                if utc_str and len(utc_str) >= 16:
-                    t = self._utc_to_jst_time(utc_str)
-                    if t != "—":
-                        jst_times.append(t)
-            if jst_times:
-                lines.append(f"### {ch['name']}")
-                lines.append("")
-                lines.append("| 動画 | 投稿時刻(JST) | 再生数 |")
-                lines.append("|------|---------------|--------|")
-                for v in videos:
-                    t = self._utc_to_jst_time(v.get("published_at_utc", ""))
-                    if t != "—":
-                        title_short = self._escape_md_table(v["title"][:40])
-                        lines.append(f"| {title_short} | {t} | {v['views']:,} |")
-                lines.append("")
+        lines.extend(self._posting_time_sections(channels))
 
         lines.append("")
 
@@ -1306,6 +768,599 @@ class BenchmarkReportGenerator:
         return "\n".join(lines)
 
 
+def _iter_paginated_items(fetch_page: Callable[[str | None], dict]) -> Iterator[dict]:
+    """Yield API items in page order until the service stops returning a next token."""
+    page_token = None
+    while True:
+        response = fetch_page(page_token)
+        yield from response.get("items", [])
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            return
+
+
+class BenchmarkCollector:
+    """競合チャンネルのベンチマークデータ収集（YouTube Data API）"""
+
+    def __init__(self, *, youtube_clients: YouTubeClients | None = None):
+        self.config = load_config()
+        self.youtube = None
+        self.youtube_clients = youtube_clients if youtube_clients is not None else _create_benchmark_clients()
+        self.benchmark_config = load_skill_config("benchmark")
+        self.channel_dir = _channel_dir()
+        self.benchmarks_dir = self.channel_dir / "docs" / "benchmarks"
+        self.data_dir = self.channel_dir / "data"
+        self.today = date.today()
+
+    def initialize(self):
+        """YouTube API 認証を実行する。"""
+        logger.info("YouTube API 認証中...")
+        self.youtube = self.youtube_clients.youtube_readonly
+        logger.info("認証完了")
+
+    def check_freshness(self) -> list[dict]:
+        """更新が必要なチャンネルを返す。
+
+        Returns:
+            freshness_days 以上未更新のチャンネル情報リスト
+        """
+        return _stale_benchmark_channels(
+            self.benchmarks_dir / "benchmark-report.json",
+            self.config.analytics.benchmark.channels,
+            self.today,
+            self.benchmark_config.get("freshness_days", 3),
+        )
+
+    def _fetch_channels_metadata(self, channel_infos: list[dict]) -> dict[str, dict]:
+        """`channels.list` を `_CHANNELS_BATCH_SIZE` 件単位でバッチ呼び出しし、`{channel_id: item}` を返す。
+
+        Args:
+            channel_infos: `benchmark.channels` 相当のリスト（各要素に `id` を含む）
+
+        Returns:
+            channel_id をキーとした API レスポンス item の辞書。
+            削除済み等で API レスポンスに含まれない channel_id はキーに現れない。
+        """
+        channel_ids = [ch["id"] for ch in channel_infos]
+        items_by_id: dict[str, dict] = {}
+        for i in range(0, len(channel_ids), _CHANNELS_BATCH_SIZE):
+            batch = channel_ids[i : i + _CHANNELS_BATCH_SIZE]
+            with section("benchmark.channels_list", batch_size=len(batch)):
+                request = self.youtube.channels().list(
+                    part="snippet,statistics,contentDetails",
+                    id=",".join(batch),
+                )
+                resp = _execute_read_with_quota(
+                    request,
+                    f"benchmark.channels_list (id={','.join(batch)})",
+                    "channels.list",
+                    metadata={"context": "benchmark.channels_list", "batch_size": len(batch)},
+                )
+            for item in resp.get("items", []):
+                items_by_id[item["id"]] = item
+        return items_by_id
+
+    def _scan_upload_ids(self, uploads_playlist_id: str, limit: int) -> tuple[list[str], bool]:
+        # 最新動画ID取得（scan_recent 件を走査プールとする。50 件超は nextPageToken でページング）
+        video_ids: list[str] = []
+        page_token: str | None = None
+        remaining = limit
+        upload_scan_complete = False
+        while remaining > 0:
+            with section("benchmark.playlist_items", page_size=min(50, remaining)):
+                request = self.youtube.playlistItems().list(
+                    part="contentDetails",
+                    playlistId=uploads_playlist_id,
+                    maxResults=min(50, remaining),
+                    pageToken=page_token,
+                )
+                playlist_resp = _execute_read_with_quota(
+                    request,
+                    "benchmark.playlist_items",
+                    "playlistItems.list",
+                    metadata={"context": "benchmark.playlist_items"},
+                )
+            batch_ids = [item["contentDetails"]["videoId"] for item in playlist_resp.get("items", [])]
+            video_ids.extend(batch_ids)
+            page_token = playlist_resp.get("nextPageToken")
+            remaining -= len(batch_ids)
+            if not page_token or not batch_ids:
+                upload_scan_complete = True
+                break
+
+        return video_ids, upload_scan_complete
+
+    def _collect_video_details(self, video_ids: list[str]) -> list[dict]:
+        # 動画詳細取得（50件単位でバッチ）
+        raw_videos: list[dict] = []
+        for i in range(0, len(video_ids), 50):
+            batch = video_ids[i : i + 50]
+            with section("benchmark.videos_list", batch_size=len(batch)):
+                request = self.youtube.videos().list(
+                    part="snippet,statistics,contentDetails",
+                    id=",".join(batch),
+                )
+                videos_resp = _execute_read_with_quota(
+                    request,
+                    "benchmark.videos_list",
+                    "videos.list",
+                    metadata={"context": "benchmark.videos_list", "batch_size": len(batch)},
+                )
+
+            for video in videos_resp.get("items", []):
+                snippet = video["snippet"]
+                stats = video["statistics"]
+                content = video["contentDetails"]
+
+                # ライブ配信・非公開動画等で duration が欠落することがあるためスキップ
+                duration_iso = content.get("duration")
+                if not duration_iso:
+                    logger.warning("duration 欠落のためスキップ: %s", video.get("id"))
+                    continue
+
+                is_short = is_short_benchmark_duration(duration_iso)
+                thumbnail_keys = _SHORT_THUMBNAIL_KEYS if is_short else _DEFAULT_THUMBNAIL_KEYS
+                v = {
+                    "video_id": video["id"],
+                    "title": snippet["title"],
+                    "published_at": snippet["publishedAt"][:10],
+                    "published_at_utc": snippet["publishedAt"],
+                    "views": int(stats.get("viewCount", 0)),
+                    "likes": int(stats.get("likeCount", 0)),
+                    "comments": int(stats.get("commentCount", 0)),
+                    "duration_iso": duration_iso,
+                    "duration_display": parse_iso_duration(duration_iso),
+                    "tags": snippet.get("tags", []),
+                    _VIDEO_DESCRIPTION_FIELD: snippet.get(_VIDEO_DESCRIPTION_FIELD, ""),
+                    "description_keywords": extract_description_keywords(snippet.get(_VIDEO_DESCRIPTION_FIELD, "")),
+                    "thumbnail_url": self._best_thumbnail_url(
+                        snippet.get("thumbnails", {}),
+                        keys=thumbnail_keys,
+                    ),
+                    "thumbnail_analysis": None,
+                }
+                v["daily_views"] = compute_daily_views(v, self.today)
+                v["engagement_rate"] = compute_engagement_rate(v)
+                raw_videos.append(v)
+
+        return raw_videos
+
+    def collect_channel(self, channel_info: dict, ch_item: dict) -> dict:
+        """1チャンネル分のデータを YouTube Data API で収集する。
+
+        Args:
+            channel_info: benchmark.channels の1要素
+            ch_item: `_fetch_channels_metadata` から渡される該当チャンネルの
+                `channels.list` レスポンス item。チャンネルが見つからなければ空辞書
+
+        Returns:
+            チャンネルデータ辞書（概要 + 動画リスト + 派生指標）。
+
+        Raises:
+            YouTubeAPIError: `ch_item` が空（チャンネルが API レスポンスに存在しない）のとき。
+                空辞書で握りつぶさず、欠落を呼び出し側へ伝播させる
+        """
+        channel_id = channel_info["id"]
+        scan_recent = self.benchmark_config.get("scan_recent", _DEFAULT_SCAN_RECENT)
+        min_views = self.benchmark_config.get("min_views", 10000)
+
+        _require_channel_metadata(channel_info, ch_item)
+
+        uploads_playlist_id = ch_item["contentDetails"]["relatedPlaylists"]["uploads"]
+
+        channel_data = {
+            "channel_id": channel_id,
+            "name": channel_info["name"],
+            "slug": channel_info["slug"],
+            "relationship": channel_info.get("relationship", ""),
+            "subscribers": int(ch_item["statistics"].get("subscriberCount", 0)),
+            "total_videos": int(ch_item["statistics"].get("videoCount", 0)),
+            "collected_at": self.today.isoformat(),
+            "min_views_threshold": min_views,
+        }
+
+        video_ids, upload_scan_complete = self._scan_upload_ids(uploads_playlist_id, scan_recent)
+
+        channel_data["scanned_count"] = len(video_ids)
+
+        if not video_ids:
+            logger.warning("動画が見つかりません: %s", channel_info["name"])
+            channel_data["upload_scan"] = {
+                "scanned_count": 0,
+                "complete": upload_scan_complete,
+                "latest_upload_at": None,
+                "oldest_upload_at": None,
+                "videos": [],
+            }
+            channel_data["videos"] = []
+            channel_data["avg_views"] = 0
+            channel_data["avg_daily_views"] = 0
+            channel_data["avg_engagement_rate"] = 0
+            channel_data["top_tags"] = []
+            channel_data["posting_trend"] = {}
+            return channel_data
+
+        raw_videos = self._collect_video_details(video_ids)
+
+        upload_dates = [video["published_at"] for video in raw_videos]
+        channel_data["upload_scan"] = {
+            "scanned_count": len(raw_videos),
+            "complete": upload_scan_complete,
+            "latest_upload_at": max(upload_dates) if upload_dates else None,
+            "oldest_upload_at": min(upload_dates) if upload_dates else None,
+            "videos": [
+                {
+                    key: video[key]
+                    for key in ("video_id", "title", "published_at", "views", "duration_iso", "thumbnail_url")
+                }
+                for video in raw_videos
+            ],
+        }
+
+        # 視聴数フィルタ（min_views 以上のみベンチマーク対象）
+        videos = [v for v in raw_videos if v["views"] >= min_views]
+        # 視聴数降順で並べ替え（レポートの可読性向上）
+        videos.sort(key=lambda v: v["views"], reverse=True)
+
+        logger.info(
+            "%s: 走査 %d 本 → %d 本が %d 再生以上",
+            channel_info["name"],
+            len(raw_videos),
+            len(videos),
+            min_views,
+        )
+
+        channel_data["videos"] = videos
+        channel_data["posting_trend"] = compute_posting_intervals(videos) if videos else {}
+
+        channel_data.update(summarize_benchmark_videos(videos))
+
+        return channel_data
+
+    def collect_all(self, force: bool = False, competitor_slug: str | None = None) -> dict:
+        """全チャンネル（または指定チャンネル）のデータを収集する。
+
+        Args:
+            force: True なら鮮度に関わらず全更新
+            competitor_slug: 指定時はその競合のみ
+
+        Returns:
+            全チャンネルの収集結果
+
+        Raises:
+            ConfigError: 指定 `competitor_slug` が benchmark.channels に存在しないとき
+            YouTubeAPIError: 収集対象の一部が API レスポンスに存在しない（欠落）とき
+        """
+        if competitor_slug:
+            targets = _find_competitor_channels(self.config.analytics.benchmark.channels, competitor_slug)
+        elif force:
+            targets = list(self.config.analytics.benchmark.channels)
+        else:
+            targets = self.check_freshness()
+
+        if not targets:
+            logger.info("更新が必要なチャンネルはありません")
+            return {"channels": [], "collected_at": self.today.isoformat(), "skipped": True}
+
+        ch_items = self._fetch_channels_metadata(targets)
+
+        _require_all_channel_metadata(targets, ch_items)
+
+        results = []
+        for ch in targets:
+            logger.info("収集中: %s (%s)", ch["name"], ch["id"])
+            results.append(self.collect_channel(ch, ch_items[ch["id"]]))
+
+        return {
+            "channels": results,
+            "collected_at": self.today.isoformat(),
+        }
+
+    def collect_playlists(self, channel_info: dict) -> dict:
+        """1チャンネルの公開再生リスト構成を収集する。
+
+        playlists.list → 各 playlistItems.list → videos.list の 3 段で
+        再生リストごとの動画一覧と統計を取得する。
+
+        Args:
+            channel_info: benchmark.channels の1要素
+
+        Returns:
+            {channel_id, name, slug, playlists_collected_at, playlists: [...]}
+        """
+        channel_id = channel_info["id"]
+
+        # 1. 全再生リストを取得（ページング）
+        playlists_raw = list(
+            _iter_paginated_items(
+                lambda page_token: _execute_read_with_quota(
+                    self.youtube.playlists().list(
+                        part="snippet,contentDetails",
+                        channelId=channel_id,
+                        maxResults=50,
+                        pageToken=page_token,
+                    ),
+                    "benchmark.playlists_list",
+                    "playlists.list",
+                    metadata={"context": "benchmark.playlists_list"},
+                )
+            )
+        )
+
+        logger.info("再生リスト取得: %d 件 (%s)", len(playlists_raw), channel_info["name"])
+
+        # 2. 各再生リストの動画 ID を取得し、video_id → 所属情報をマップ化
+        playlists_data = []
+        all_video_ids: set[str] = set()
+        for pl in playlists_raw:
+            playlist_id = pl["id"]
+            snippet = pl["snippet"]
+            content = pl["contentDetails"]
+
+            items = []
+            for item in _iter_paginated_items(
+                lambda page_token, playlist_id=playlist_id: _execute_read_with_quota(
+                    self.youtube.playlistItems().list(
+                        part="snippet,contentDetails",
+                        playlistId=playlist_id,
+                        maxResults=50,
+                        pageToken=page_token,
+                    ),
+                    "benchmark.playlist_items",
+                    "playlistItems.list",
+                    metadata={"context": "benchmark.playlists_playlist_items"},
+                )
+            ):
+                item_snip = item["snippet"]
+                video_id = item["contentDetails"]["videoId"]
+                items.append(
+                    {
+                        "position": item_snip.get("position", 0),
+                        "video_id": video_id,
+                        "title": item_snip.get("title", ""),
+                        "published_at": item["contentDetails"].get("videoPublishedAt", ""),
+                    }
+                )
+                all_video_ids.add(video_id)
+
+            playlists_data.append(
+                {
+                    "playlist_id": playlist_id,
+                    "title": snippet.get("title", ""),
+                    "description": snippet.get("description", ""),
+                    "item_count": int(content.get("itemCount", len(items))),
+                    "items": items,
+                }
+            )
+
+        # 3. 動画 ID をバッチ（50件ずつ）で statistics + duration を取得
+        video_stats: dict[str, dict] = {}
+        video_id_list = list(all_video_ids)
+        for i in range(0, len(video_id_list), 50):
+            batch = video_id_list[i : i + 50]
+            request = self.youtube.videos().list(
+                part="statistics,contentDetails",
+                id=",".join(batch),
+            )
+            videos_resp = _execute_read_with_quota(
+                request,
+                "benchmark.videos_list",
+                "videos.list",
+                metadata={"context": "benchmark.playlists_videos_list", "batch_size": len(batch)},
+            )
+            for v in videos_resp.get("items", []):
+                stats = v.get("statistics", {})
+                content = v.get("contentDetails", {})
+                duration_iso = content.get("duration", "")
+                video_stats[v["id"]] = {
+                    "views": int(stats.get("viewCount", 0)),
+                    "likes": int(stats.get("likeCount", 0)),
+                    "comments": int(stats.get("commentCount", 0)),
+                    "duration_iso": duration_iso,
+                    "duration_display": parse_iso_duration(duration_iso) if duration_iso else "",
+                }
+
+        # 4. 各 playlist の items に統計をマージ
+        for pl in playlists_data:
+            for item in pl["items"]:
+                stats = video_stats.get(item["video_id"], {})
+                item.update(stats)
+
+        return {
+            "channel_id": channel_id,
+            "name": channel_info["name"],
+            "slug": channel_info["slug"],
+            "playlists_collected_at": self.today.isoformat(),
+            "playlists": playlists_data,
+        }
+
+    def save_json(self, data: dict, *, competitor_slug: str | None = None) -> Path:
+        """中間 JSON を data/ に保存する。
+
+        ``competitor_slug`` 指定時は同日ファイルの同一 slug だけを更新し、
+        他チャンネルと playlist 収集済みフィールドを保持する。
+
+        Returns:
+            保存先パス
+        """
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"benchmark_{self.today.strftime('%Y%m%d')}.json"
+        path = self.data_dir / filename
+        if competitor_slug is not None and path.exists():
+            data = _merge_saved_benchmark(path, data)
+        _write_benchmark_json(path, data, label="JSON 保存")
+        return path
+
+    def merge_playlists_into_json(self, playlists_results: list[dict]) -> Path:
+        """既存の同日付 benchmark JSON に playlists フィールドをマージする。
+
+        既存ファイルがなければ playlists のみを含む新規ファイルを作成する。
+
+        Args:
+            playlists_results: collect_playlists() の結果リスト
+
+        Returns:
+            保存先パス
+        """
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"benchmark_{self.today.strftime('%Y%m%d')}.json"
+        path = self.data_dir / filename
+
+        if path.exists():
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        else:
+            data = {"channels": [], "collected_at": self.today.isoformat()}
+
+        _merge_playlist_results(data, playlists_results)
+
+        _write_benchmark_json(path, data, label="JSON マージ保存")
+        return path
+
+    # --- 内部メソッド ---
+
+    @staticmethod
+    def _best_thumbnail_url(thumbnails: dict, *, keys: tuple[str, ...]) -> str:
+        for key in keys:
+            if key in thumbnails:
+                return thumbnails[key]["url"]
+        return ""
+
+    def download_thumbnails(self, data: dict, *, force: bool = False) -> None:
+        """サムネイル画像を docs/benchmarks/thumbnails/ にダウンロードする。
+
+        Args:
+            data: collect_all() の結果
+            force: True なら既存ファイルも再ダウンロード
+        """
+        thumbnails_dir = self.benchmarks_dir / "thumbnails"
+        thumbnails_dir.mkdir(parents=True, exist_ok=True)
+
+        downloaded = 0
+        skipped = 0
+        for channel in data.get("channels", []):
+            slug = channel["slug"]
+            for video in channel.get("upload_scan", {}).get("videos", []):
+                url = video.get("thumbnail_url")
+                if not url:
+                    continue
+
+                dest = thumbnails_dir / f"{slug}_{video['video_id']}.jpg"
+                if dest.exists() and not force:
+                    skipped += 1
+                    continue
+
+                try:
+                    urllib.request.urlretrieve(url, dest)
+                    downloaded += 1
+                except Exception as e:
+                    logger.warning("サムネイルDL失敗 [%s]: %s", video["title"][:30], e)
+
+        logger.info("サムネイルDL: %d 件（スキップ: %d 件）→ %s", downloaded, skipped, thumbnails_dir)
+
+
+_DEFAULT_THUMBNAIL_ANALYSIS_MODEL = "gemini-3.5-flash"
+
+
+class BenchmarkThumbnailAnalyzer:
+    """ベンチマークサムネイルの Gemini 分析"""
+
+    def __init__(self, benchmarks_dir: Path):
+        self.benchmarks_dir = benchmarks_dir
+        cfg = load_skill_config("benchmark").get("thumbnail_analysis", {})
+        self.model = cfg.get("model", _DEFAULT_THUMBNAIL_ANALYSIS_MODEL)
+        self.delay_sec = float(cfg.get("delay_sec", 5))
+        self.prompt = cfg.get("prompt", "").strip()
+
+    def _analyze_downloaded_thumbnail(self, client, types, video: dict, slug: str, tmp_path: Path) -> None:
+        # Gemini 分析
+        try:
+            image_bytes = tmp_path.read_bytes()
+            response = client.models.generate_content(
+                model=self.model,
+                contents=[
+                    types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
+                    self.prompt,
+                ],
+            )
+            # JSON パース
+            text = response.text.strip()
+            # コードフェンスを除去
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
+            video["thumbnail_analysis"] = json.loads(text)
+            logger.info("サムネイル分析完了: %s", video["title"][:40])
+            from youtube_automation.infrastructure.cost_tracker import log_generation
+
+            log_generation(
+                "analysis",
+                self.model,
+                quantity=1,
+                unit="call",
+                metadata={"video_id": video["video_id"], "channel_slug": slug},
+            )
+        except json.JSONDecodeError as e:
+            logger.warning("サムネイル分析JSONパース失敗 [%s]: %s", video["title"][:30], e)
+        except Exception as e:
+            logger.warning("サムネイル分析失敗 [%s]: %s", video["title"][:30], e)
+
+        time.sleep(self.delay_sec)
+
+    def analyze_thumbnails(self, data: dict, keep: bool = False) -> dict:
+        """サムネイル画像をダウンロードして Gemini で分析する。
+
+        Args:
+            data: collect_all() の結果
+            keep: True ならサムネイル画像を docs/benchmarks/thumbnails/ に保存
+
+        Returns:
+            thumbnail_analysis が追加された data
+        """
+        try:
+            from google.genai import types
+
+            from youtube_automation.infrastructure.media.genai_client import create_global_genai_client
+        except ImportError:
+            logger.warning("google-genai 未インストール — サムネイル分析をスキップ")
+            return data
+
+        try:
+            client = create_global_genai_client()
+        except ConfigError as e:
+            logger.warning("AI クライアント初期化失敗 — サムネイル分析をスキップ: %s", e)
+            return data
+        thumbnails_dir = self.benchmarks_dir / "thumbnails" if keep else None
+        if thumbnails_dir:
+            thumbnails_dir.mkdir(parents=True, exist_ok=True)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for channel in data.get("channels", []):
+                slug = channel["slug"]
+                for i, video in enumerate(channel.get("videos", [])):
+                    url = video.get("thumbnail_url")
+                    if not url:
+                        continue
+
+                    # ダウンロード
+                    tmp_path = Path(tmp_dir) / f"{slug}_{i}.jpg"
+                    try:
+                        urllib.request.urlretrieve(url, tmp_path)
+                    except Exception as e:
+                        logger.warning("サムネイルDL失敗 [%s]: %s", video["title"][:30], e)
+                        continue
+
+                    # 保持する場合はコピー
+                    if thumbnails_dir:
+                        import shutil
+
+                        keep_path = thumbnails_dir / f"{slug}_{video['video_id']}.jpg"
+                        shutil.copy2(tmp_path, keep_path)
+
+                    self._analyze_downloaded_thumbnail(client, types, video, slug, tmp_path)
+
+        return data
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = CompetitorArgumentParser(description="競合チャンネルのベンチマークデータ収集・分析")
     parser.add_argument("--force", action="store_true", help="鮮度に関わらず全チャンネル更新")
@@ -1340,47 +1395,7 @@ def main():
 
     # --- 再生リスト収集モード ---
     if args.playlists:
-        if not args.competitor:
-            print("[ERROR] --playlists には --competitor <slug> の指定が必須です")
-            print("        （誤って全チャンネル分の API クォータを消費しないため）")
-            sys.exit(1)
-
-        targets = [ch for ch in collector.config.analytics.benchmark.channels if ch["slug"] == args.competitor]
-        if not targets:
-            print(f"[ERROR] 競合が見つかりません: {args.competitor}")
-            sys.exit(1)
-
-        print("\n=== Benchmark Playlists Collector ===")
-        print(f"対象: {targets[0]['name']} ({args.competitor})")
-        print()
-
-        collector.initialize()
-
-        playlists_results = []
-        for ch in targets:
-            logger.info("再生リスト収集中: %s (%s)", ch["name"], ch["id"])
-            result = collector.collect_playlists(ch)
-            playlists_results.append(result)
-
-        json_path = collector.merge_playlists_into_json(playlists_results)
-        print(f"JSON 保存: {json_path}")
-
-        if not args.json_only:
-            reporter = BenchmarkReportGenerator(collector.config, collector.benchmarks_dir, collector.today)
-            md_map = reporter.generate_playlists_markdown(playlists_results)
-            reporter.write_markdown(md_map)
-            for key in md_map:
-                print(f"Markdown 更新: {key}.md")
-
-        # サマリー
-        print()
-        print("=== 結果サマリー ===")
-        for r in playlists_results:
-            playlists = r.get("playlists", [])
-            total_videos = sum(len(p.get("items", [])) for p in playlists)
-            total_views = sum(it.get("views", 0) for p in playlists for it in p.get("items", []))
-            print(f"  {r['name']}: 再生リスト {len(playlists)}件, 総動画 {total_videos}本, 合計再生 {total_views:,}")
-        print()
+        _collect_playlist_benchmarks(collector, args)
         return
 
     if args.keep_thumbnails:
@@ -1408,15 +1423,7 @@ def main():
         print("  サムネイル分析: ON（エージェント — 追加課金なし）")
     print()
 
-    if not args.yes and not args.force:
-        try:
-            answer = input("続行しますか？ [Y/n] ").strip().lower()
-            if answer and answer != "y":
-                print("キャンセルしました")
-                sys.exit(0)
-        except (EOFError, KeyboardInterrupt):
-            print("\nキャンセルしました")
-            sys.exit(0)
+    _confirm_collection(args)
 
     # 認証
     collector.initialize()
@@ -1446,6 +1453,11 @@ def main():
         analyzer = BenchmarkThumbnailAnalyzer(collector.benchmarks_dir)
         data = analyzer.analyze_thumbnails(data, keep=True)
 
+    _save_benchmark_results(collector, data, args)
+
+
+def _save_benchmark_results(collector: BenchmarkCollector, data: dict, args: argparse.Namespace) -> None:
+    """Persist collected reports and print their resulting channel summary."""
     # JSON 保存
     if args.competitor:
         json_path = collector.save_json(data, competitor_slug=args.competitor)
@@ -1471,6 +1483,63 @@ def main():
             f"ER {ch.get('avg_engagement_rate', 0):.1f}%, サムネイル分析 {analyzed}/{videos_count}"
         )
     print()
+
+
+def _collect_playlist_benchmarks(collector: BenchmarkCollector, args: argparse.Namespace) -> None:
+    if not args.competitor:
+        print("[ERROR] --playlists には --competitor <slug> の指定が必須です")
+        print("        （誤って全チャンネル分の API クォータを消費しないため）")
+        sys.exit(1)
+
+    targets = [ch for ch in collector.config.analytics.benchmark.channels if ch["slug"] == args.competitor]
+    if not targets:
+        print(f"[ERROR] 競合が見つかりません: {args.competitor}")
+        sys.exit(1)
+
+    print("\n=== Benchmark Playlists Collector ===")
+    print(f"対象: {targets[0]['name']} ({args.competitor})")
+    print()
+
+    collector.initialize()
+
+    playlists_results = []
+    for ch in targets:
+        logger.info("再生リスト収集中: %s (%s)", ch["name"], ch["id"])
+        result = collector.collect_playlists(ch)
+        playlists_results.append(result)
+
+    json_path = collector.merge_playlists_into_json(playlists_results)
+    print(f"JSON 保存: {json_path}")
+
+    if not args.json_only:
+        reporter = BenchmarkReportGenerator(collector.config, collector.benchmarks_dir, collector.today)
+        md_map = reporter.generate_playlists_markdown(playlists_results)
+        reporter.write_markdown(md_map)
+        for key in md_map:
+            print(f"Markdown 更新: {key}.md")
+
+    # サマリー
+    print()
+    print("=== 結果サマリー ===")
+    for r in playlists_results:
+        playlists = r.get("playlists", [])
+        total_videos = sum(len(p.get("items", [])) for p in playlists)
+        total_views = sum(it.get("views", 0) for p in playlists for it in p.get("items", []))
+        print(f"  {r['name']}: 再生リスト {len(playlists)}件, 総動画 {total_videos}本, 合計再生 {total_views:,}")
+    print()
+    return
+
+
+def _confirm_collection(args: argparse.Namespace) -> None:
+    if not args.yes and not args.force:
+        try:
+            answer = input("続行しますか？ [Y/n] ").strip().lower()
+            if answer and answer != "y":
+                print("キャンセルしました")
+                sys.exit(0)
+        except (EOFError, KeyboardInterrupt):
+            print("\nキャンセルしました")
+            sys.exit(0)
 
 
 if __name__ == "__main__":

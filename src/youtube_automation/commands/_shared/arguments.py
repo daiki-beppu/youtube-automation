@@ -7,6 +7,21 @@ import sys
 from collections.abc import Sequence
 
 
+def add_optional_collection_argument(parser: argparse.ArgumentParser) -> None:
+    """Accept an optional collection path, defaulting to the caller's current directory."""
+    parser.add_argument(
+        "collection",
+        nargs="?",
+        help="コレクションディレクトリ (省略時は CWD)",
+    )
+
+
+def add_stock_filter_arguments(parser: argparse.ArgumentParser, source_roles: Sequence[str]) -> None:
+    """Register the shared theme and source-role filters for stock browsing."""
+    parser.add_argument("--theme", help="特定テーマ slug でフィルタ")
+    parser.add_argument("--source-role", choices=source_roles, help="source_role でフィルタ")
+
+
 class CompetitorArgumentParser(argparse.ArgumentParser):
     """Reject the removed benchmark ``--channel`` flag with migration guidance."""
 

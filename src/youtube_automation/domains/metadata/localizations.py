@@ -7,7 +7,7 @@ import unicodedata
 from dataclasses import dataclass
 from typing import Dict, List
 
-from youtube_automation.core.adapters.runtime import format_localized_duration_display
+from youtube_automation.core.time_utils import format_localized_duration_display
 from youtube_automation.domains.metadata.descriptions import (
     build_short_description,
     description_metadata_line,
@@ -15,8 +15,8 @@ from youtube_automation.domains.metadata.descriptions import (
 from youtube_automation.domains.metadata.titles import (
     _referenced_placeholders,
     format_title_template,
+    requires_scene_phrases,
 )
-from youtube_automation.domains.uploads.preflight import requires_scene_phrases
 
 LOCALIZED_TITLE_PLACEHOLDERS = frozenset({"scene_phrase", "activities", "scene_emoji", "duration_display"})
 _DURATION_LITERAL_PREFIX = r"(?<!\w)\d+(?:[.,]\d+)?\s*"

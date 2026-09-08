@@ -136,14 +136,7 @@ def normalize_locale_to_api(code: str) -> str:
     if not code:
         return code
     canonical = _canonical_input(code)
-    # 短縮 → 内部形（短縮そのものか、`xx-YY` を `xx` 扱いで lookup）
-    if canonical in _LOCALE_SHORT_TO_API:
-        return _LOCALE_SHORT_TO_API[canonical]
-    # `xx-YY` 形式は `_` 置換した内部形が YouTube の受理する形（issue 発生事例参照）
-    if "-" in canonical:
-        return canonical.replace("-", "_")
-    # 既に `xx_YY` 形式（input が `xx_YY` だった場合は canonical で `xx-YY` 化済み）
-    return code
+    return _LOCALE_SHORT_TO_API.get(canonical, canonical.replace("-", "_"))
 
 
 def normalize_locale_to_short(code: str) -> str:
@@ -160,13 +153,8 @@ def normalize_locale_to_short(code: str) -> str:
     """
     if not code:
         return code
-    canonical = _canonical_input(code).replace("-", "_")
-    if canonical in _LOCALE_API_TO_SHORT:
-        return _LOCALE_API_TO_SHORT[canonical]
-    # マッピング外: 元の表記がアンダースコアならハイフンに揃え、そうでなければそのまま
-    if "_" in code:
-        return code.replace("_", "-")
-    return code
+    canonical = code.replace("-", "_")
+    return _LOCALE_API_TO_SHORT.get(canonical, _canonical_input(code))
 
 
 def build_upload_status_flags(youtube_api: Any) -> dict[str, bool]:
@@ -226,6 +214,29 @@ def _keywords_from_api(raw: str) -> list[str]:
     return shlex.split(raw)
 
 
+def _localization_update_body(localizations: dict) -> dict[str, dict[str, str]]:
+    """Build localized channel fields, normalizing locale keys for the YouTube API."""
+    loc_body: dict[str, dict[str, str]] = {}
+    for lang in localizations.get("supported_languages", []):
+        entry = localizations.get(lang)
+        if not isinstance(entry, dict):
+            continue
+        title = entry.get("title")
+        description = entry.get("description")
+        if title is None and description is None:
+            continue
+        # 入力 `ja` / `ja-JP` / `ja_JP` をすべて `ja_JP` に正規化して送信する (#562)。
+        # 正規化しないと、ローカル `["ja", "en", "de"]` を送ると defaultLanguage と
+        # 一致する `en` だけが受理されて `ja` / `de` が silent skip される。
+        api_lang = normalize_locale_to_api(lang)
+        loc_body[api_lang] = {}
+        if title is not None:
+            loc_body[api_lang]["title"] = title
+        if description is not None:
+            loc_body[api_lang]["description"] = description
+    return loc_body
+
+
 def build_update_body(
     local: dict[str, Any],
     localizations: dict[str, Any] | None,
@@ -264,24 +275,7 @@ def build_update_body(
         body["brandingSettings"] = {"channel": branding}
 
     if localizations:
-        loc_body: dict[str, dict[str, str]] = {}
-        for lang in localizations.get("supported_languages", []):
-            entry = localizations.get(lang)
-            if not isinstance(entry, dict):
-                continue
-            title = entry.get("title")
-            description = entry.get("description")
-            if title is None and description is None:
-                continue
-            # 入力 `ja` / `ja-JP` / `ja_JP` をすべて `ja_JP` に正規化して送信する (#562)。
-            # 正規化しないと、ローカル `["ja", "en", "de"]` を送ると defaultLanguage と
-            # 一致する `en` だけが受理されて `ja` / `de` が silent skip される。
-            api_lang = normalize_locale_to_api(lang)
-            loc_body[api_lang] = {}
-            if title is not None:
-                loc_body[api_lang]["title"] = title
-            if description is not None:
-                loc_body[api_lang]["description"] = description
+        loc_body = _localization_update_body(localizations)
         if loc_body:
             body["localizations"] = loc_body
 
@@ -337,6 +331,28 @@ def parse_api_response(resp: dict[str, Any]) -> tuple[dict[str, Any], dict[str, 
     return youtube_channel, localizations
 
 
+def _localization_diff(local_localizations: dict, remote_localizations: dict) -> list[str]:
+    lines: list[str] = []
+    # localizations のキー揺れ（`ja` ↔ `ja_JP` ↔ `ja-JP`）も吸収する (#562)。
+    # 両側を短縮形に寄せた dict を作って同じキーで突き合わせる。
+    l_loc_norm = _normalize_localizations_for_diff(local_localizations)
+    r_loc_norm = _normalize_localizations_for_diff(remote_localizations)
+    all_langs = sorted(set(l_loc_norm.keys()) | set(r_loc_norm.keys()))
+    for lang in all_langs:
+        l_entry = l_loc_norm.get(lang) or {}
+        r_entry = r_loc_norm.get(lang) or {}
+        for field in ("title", "description"):
+            l_val = l_entry.get(field)
+            r_val = r_entry.get(field)
+            if l_val == r_val:
+                continue
+            lines.append(f"  localizations.{lang}.{field}:")
+            lines.append(f"    - (remote) {_fmt(r_val)}")
+            lines.append(f"    + (local)  {_fmt(l_val)}")
+
+    return lines
+
+
 def diff_settings(
     local_channel: dict[str, Any],
     local_localizations: dict[str, Any],
@@ -374,22 +390,7 @@ def diff_settings(
             lines.append(f"    - (remote) {_fmt(r_val)}")
             lines.append(f"    + (local)  {_fmt(l_val)}")
 
-    # localizations のキー揺れ（`ja` ↔ `ja_JP` ↔ `ja-JP`）も吸収する (#562)。
-    # 両側を短縮形に寄せた dict を作って同じキーで突き合わせる。
-    l_loc_norm = _normalize_localizations_for_diff(local_localizations)
-    r_loc_norm = _normalize_localizations_for_diff(remote_localizations)
-    all_langs = sorted(set(l_loc_norm.keys()) | set(r_loc_norm.keys()))
-    for lang in all_langs:
-        l_entry = l_loc_norm.get(lang) or {}
-        r_entry = r_loc_norm.get(lang) or {}
-        for field in ("title", "description"):
-            l_val = l_entry.get(field)
-            r_val = r_entry.get(field)
-            if l_val == r_val:
-                continue
-            lines.append(f"  localizations.{lang}.{field}:")
-            lines.append(f"    - (remote) {_fmt(r_val)}")
-            lines.append(f"    + (local)  {_fmt(l_val)}")
+    lines.extend(_localization_diff(local_localizations, remote_localizations))
 
     return lines
 

@@ -8,6 +8,7 @@ from fractions import Fraction
 from typing import Protocol
 
 from youtube_automation.core.errors import ValidationError
+from youtube_automation.core.time_utils import parse_utc_datetime
 from youtube_automation.infrastructure.analytics.retention_timeline import parse_iso8601_duration
 
 
@@ -69,15 +70,7 @@ def collect_all_video_statistics(collector: _VideoCollector) -> list[dict[str, o
 
 
 def _published_utc(value: object, video_id: str) -> datetime:
-    if not isinstance(value, str):
-        raise ValidationError(f"published_at が不正です: {video_id}")
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as error:
-        raise ValidationError(f"published_at が不正です: {video_id}") from error
-    if parsed.tzinfo is None:
-        raise ValidationError(f"published_at に timezone がありません: {video_id}")
-    return parsed.astimezone(timezone.utc)
+    return parse_utc_datetime(value, "published_at", context=video_id)
 
 
 def _group(items: list[dict[str, object]]) -> dict[str, object]:

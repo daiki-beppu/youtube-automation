@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 
 from tests.helpers.video_description import write_video_description_pair
+from youtube_automation.application.metadata.service import BAHMetadataGenerator
+from youtube_automation.application.uploads.youtube import PreflightChecker
 from youtube_automation.commands.media import populate_scene_phrases
 from youtube_automation.configuration import load_config, reset
 from youtube_automation.core.errors import ConfigError, ValidationError
-from youtube_automation.domains.metadata import BAHMetadataGenerator
-from youtube_automation.domains.uploads.youtube import PreflightChecker
 
 
 def _write_json(path: Path, data: dict) -> None:

@@ -196,6 +196,24 @@ def _submit_operation(
     return operation
 
 
+def _clear_poll_progress(tty: bool) -> None:
+    if tty:
+        sys.stdout.write("\r" + " " * 80 + "\r")
+        sys.stdout.flush()
+
+
+def _display_poll_progress(tty: bool, line: str, elapsed: float, last_log_sec: int) -> int:
+    if tty:
+        sys.stdout.write("\r  " + line + "   ")
+        sys.stdout.flush()
+        return last_log_sec
+    # 非 TTY: N 秒ごとに 1 行出力（CI ログを壊さない）
+    bucket = int(elapsed) // _NON_TTY_LOG_INTERVAL_SEC
+    if bucket != last_log_sec:
+        print(f"  {line}")
+    return bucket
+
+
 def _wait_for_operation(client, operation, output_path: Path, *, duration_seconds: int | None = None):
     """operation 完了まで polling し、完了 operation を返す。
 
@@ -218,9 +236,7 @@ def _wait_for_operation(client, operation, output_path: Path, *, duration_second
             while not operation.done:
                 elapsed = time.monotonic() - start
                 if elapsed > MAX_POLL_SEC:
-                    if tty:
-                        sys.stdout.write("\r" + " " * 80 + "\r")
-                        sys.stdout.flush()
+                    _clear_poll_progress(tty)
                     print(f"  [ERROR]  タイムアウト ({MAX_POLL_SEC}秒)")
                     return None
 
@@ -230,15 +246,7 @@ def _wait_for_operation(client, operation, output_path: Path, *, duration_second
                     expected_total=expected_total,
                     tick=tick,
                 )
-                if tty:
-                    sys.stdout.write("\r  " + line + "   ")
-                    sys.stdout.flush()
-                else:
-                    # 非 TTY: N 秒ごとに 1 行出力（CI ログを壊さない）
-                    bucket = int(elapsed) // _NON_TTY_LOG_INTERVAL_SEC
-                    if bucket != last_log_sec:
-                        print(f"  {line}")
-                        last_log_sec = bucket
+                last_log_sec = _display_poll_progress(tty, line, elapsed, last_log_sec)
 
                 time.sleep(POLL_INTERVAL_SEC)
                 tick += 1
@@ -248,21 +256,15 @@ def _wait_for_operation(client, operation, output_path: Path, *, duration_second
                 except KeyboardInterrupt:
                     raise
                 except Exception as exc:
-                    if tty:
-                        sys.stdout.write("\r" + " " * 80 + "\r")
-                        sys.stdout.flush()
+                    _clear_poll_progress(tty)
                     _handle_operations_get_error(exc, output_path)
                     return None
         except KeyboardInterrupt:
-            if tty:
-                sys.stdout.write("\r" + " " * 80 + "\r")
-                sys.stdout.flush()
+            _clear_poll_progress(tty)
             _print_interrupt_messages(output_path)
             return None
     elapsed = time.monotonic() - start
-    if tty:
-        sys.stdout.write("\r" + " " * 80 + "\r")
-        sys.stdout.flush()
+    _clear_poll_progress(tty)
     print(f"  [Wait]   動画生成完了 ({progress_fmt.format_elapsed(elapsed)})")
     return operation
 
@@ -474,6 +476,19 @@ def trim_tail(video_path: Path, trim_sec: float = 1.0) -> bool:
         return False
 
 
+def _run_profiled_loop_ffmpeg(
+    command: list[str], profile_name: str, error_label: str, **profile_fields: object
+) -> bool:
+    """Run loop processing with consistent profiling and bounded FFmpeg diagnostics."""
+    try:
+        with section(profile_name, **profile_fields):
+            subprocess.run(command, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as error:
+        print(f"  [ERROR]  {error_label}: {error.stderr[:200]}")
+        return False
+    return True
+
+
 def compress_loop(video_path: Path, crf: int = 22, preset: str = "slow") -> bool:
     """libx264 で loop.mp4 を再エンコードして容量削減する（Issue #175）。
 
@@ -499,11 +514,7 @@ def compress_loop(video_path: Path, crf: int = 22, preset: str = "slow") -> bool
         "-an",
         str(tmp),
     ]
-    try:
-        with section("veo.compress_loop.ffmpeg", crf=crf, preset=preset):
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
-    except subprocess.CalledProcessError as e:
-        print(f"  [ERROR]  圧縮失敗: {e.stderr[:200]}")
+    if not _run_profiled_loop_ffmpeg(cmd, "veo.compress_loop.ffmpeg", "圧縮失敗", crf=crf, preset=preset):
         if tmp.exists():
             tmp.unlink()
         return False
@@ -617,11 +628,7 @@ def smooth_loop(
 
     print(f"  [FFmpeg] クロスフェード補正 ({crossfade_sec}秒, CRF {crf} / preset {preset})...")
     try:
-        try:
-            with section("veo.smooth_loop.ffmpeg", crossfade_sec=crossfade_sec):
-                subprocess.run(cmd, check=True, capture_output=True, text=True)
-        except subprocess.CalledProcessError as e:
-            print(f"  [ERROR]  FFmpeg 失敗: {e.stderr[:200]}")
+        if not _run_profiled_loop_ffmpeg(cmd, "veo.smooth_loop.ffmpeg", "FFmpeg 失敗", crossfade_sec=crossfade_sec):
             return False
 
         # 元ファイルをバックアップして置き換え。

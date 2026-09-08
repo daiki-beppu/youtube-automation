@@ -2,7 +2,6 @@
 
 公開 API:
 - ``get_provider(cfg)``: ``ImageGenerationConfig`` から ``ImageProvider`` 実装にディスパッチ
-- ``load_image_generation_config()``: thumbnail skill-config から `ImageGenerationConfig` を構築
 - ``ImageGenerationRequest`` / ``ImageGenerationResult`` / ``ImageProvider``
 - ``RETRY_MAX`` / ``RETRY_BACKOFF``: 共通リトライ定数
 - ``PromptSchema`` / ``prompt_schema``: imagegen Shared prompt schema bridge (issue #654)
@@ -36,7 +35,6 @@ __all__ = [
     "ImageProvider",
     "PromptSchema",
     "get_provider",
-    "load_image_generation_config",
     "parse_image_generation_config",
     "prompt_schema",
 ]
@@ -71,10 +69,3 @@ def get_provider(cfg: ImageGenerationConfig) -> ImageProvider:
         )
 
     raise ConfigError(f"未対応の provider={cfg.provider!r}")
-
-
-def load_image_generation_config(skill: str = "thumbnail") -> ImageGenerationConfig:
-    """skill-config をロードして ``ImageGenerationConfig`` を返す薄いラッパ。"""
-    from youtube_automation.configuration.skills import load_skill_config
-
-    return parse_image_generation_config(load_skill_config(skill))

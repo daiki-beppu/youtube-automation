@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
-import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -15,7 +13,7 @@ from youtube_automation.core.errors import StateSyncError, WorkflowStateError
 from youtube_automation.domains.cloud_stage_policy import ReadinessStagePolicy
 from youtube_automation.domains.collections.inventory import CollectionRecord, UnreadableWorkflowState, iter_collections
 from youtube_automation.domains.collections.workflow_state import WorkflowState, read
-from youtube_automation.infrastructure.filesystem import file_lock
+from youtube_automation.infrastructure.filesystem import file_lock, write_file_text_atomically
 
 HISTORY_NAME = "post_publish_history.json"
 SCHEMA_VERSION = 1
@@ -123,17 +121,7 @@ def evaluate(root: Path, collection: Path, step: str) -> PostPublishDecision:
 
 def _write_history(path: Path, history: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    descriptor, name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
-    temporary = Path(name)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            json.dump(history, stream, ensure_ascii=False, indent=2)
-            stream.write("\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
+    write_file_text_atomically(path, json.dumps(history, ensure_ascii=False, indent=2) + "\n", mode=0o600)
 
 
 def mark_complete(root: Path, collection: Path, step: str) -> PostPublishDecision:

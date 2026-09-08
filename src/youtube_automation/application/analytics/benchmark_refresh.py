@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from abc import abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from datetime import date
 from pathlib import Path
@@ -36,24 +37,32 @@ class _BenchmarkCollector(Protocol):
     benchmarks_dir: Path
     today: date
 
+    @abstractmethod
     def check_freshness(self) -> list[Mapping[str, str]]: ...
 
+    @abstractmethod
     def initialize(self) -> None: ...
 
+    @abstractmethod
     def collect_all(self, *, force: bool) -> BenchmarkData: ...
 
+    @abstractmethod
     def download_thumbnails(self, data: BenchmarkData, *, force: bool) -> None: ...
 
+    @abstractmethod
     def save_json(self, data: BenchmarkData) -> Path: ...
 
 
 class _ThumbnailAnalyzer(Protocol):
+    @abstractmethod
     def analyze_thumbnails(self, data: BenchmarkData, *, keep: bool) -> BenchmarkData: ...
 
 
 class _BenchmarkReporter(Protocol):
+    @abstractmethod
     def generate_markdown(self, data: BenchmarkData) -> Mapping[str, str]: ...
 
+    @abstractmethod
     def write_markdown(self, md_map: Mapping[str, str]) -> None: ...
 
 

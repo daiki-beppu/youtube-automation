@@ -154,48 +154,28 @@ def _input_images_from(default: Any) -> tuple[str, ...]:
 
 
 def _join_nonempty(*values: Any) -> str | None:
-    parts: list[str] = []
-    for v in values:
-        if isinstance(v, str):
-            stripped = v.strip()
-            if stripped:
-                parts.append(stripped)
-    if not parts:
-        return None
-    return ". ".join(parts)
+    parts = [text for value in values if (text := _string_or_none(value)) is not None]
+    return ". ".join(parts) or None
 
 
 def _subject_from(
     fixed_character: dict[str, Any],
     composition_rules: dict[str, Any],
 ) -> str | None:
-    parts: list[str] = []
-    for key in ("species", "description", "outfit", "accessories", "expression", "pose"):
-        v = fixed_character.get(key)
-        if isinstance(v, str) and v.strip():
-            parts.append(v.strip())
-    pose = composition_rules.get("character_pose")
-    if isinstance(pose, str) and pose.strip():
-        parts.append(pose.strip())
-    if not parts:
-        return None
-    return ". ".join(parts)
+    return _join_nonempty(
+        *(
+            fixed_character.get(key)
+            for key in ("species", "description", "outfit", "accessories", "expression", "pose")
+        ),
+        composition_rules.get("character_pose"),
+    )
 
 
 def _text_from(thumbnail_text: dict[str, Any], text_lines: Any) -> str | None:
-    parts: list[str] = []
-    for key in ("title_format", "title_prefix", "channel_name", "channel_name_style"):
-        v = thumbnail_text.get(key)
-        if isinstance(v, str) and v.strip():
-            parts.append(v.strip())
-    font = thumbnail_text.get("font")
-    if isinstance(font, dict):
-        for fk in ("copy", "genre_tag"):
-            fv = font.get(fk)
-            if isinstance(fv, str) and fv.strip():
-                parts.append(f"{fk}: {fv.strip()}")
-    if isinstance(text_lines, str) and text_lines.strip():
-        parts.append(text_lines.strip())
-    if not parts:
-        return None
-    return ". ".join(parts)
+    parts = [thumbnail_text.get(key) for key in ("title_format", "title_prefix", "channel_name", "channel_name_style")]
+    font = _as_dict(thumbnail_text.get("font"))
+    for key in ("copy", "genre_tag"):
+        value = _string_or_none(font.get(key))
+        if value is not None:
+            parts.append(f"{key}: {value}")
+    return _join_nonempty(*parts, text_lines)

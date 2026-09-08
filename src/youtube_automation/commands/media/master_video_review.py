@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import argparse
-import json
-import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
 from youtube_automation.application.master_video_review import VideoReviewPresentation, review_master_video
-from youtube_automation.commands._shared.cli_harness import run_cli
+from youtube_automation.commands._shared.cli_harness import print_candidate_review_result, run_cli
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,22 +40,13 @@ def run(args: argparse.Namespace) -> int:
         now=datetime.now(UTC),
         timeout=300,
     )
-    print(
-        json.dumps(
-            {
-                "status": result.status,
-                "artifact_digest": result.artifact_digest,
-                "candidate_id": result.candidate_id,
-                "candidates": list(result.candidates),
-            },
-            ensure_ascii=False,
-            sort_keys=True,
-        )
+    return print_candidate_review_result(
+        result.status,
+        result.artifact_digest,
+        result.candidate_id,
+        result.candidates,
+        candidate_format="kind:filename",
     )
-    if result.status == "terminal_required":
-        print("候補を確認後、--candidate-id <kind:filename>を指定してください", file=sys.stderr)
-        return 2
-    return 0
 
 
 def main(argv: list[str] | None = None) -> int:

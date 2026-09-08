@@ -1,6 +1,6 @@
 """音声拡張子の共通定数。
 
-`domains.metadata.service.BAHMetadataGenerator`（個別楽曲解析）で利用する。
+`application.metadata.service.BAHMetadataGenerator`（個別楽曲解析）で利用する。
 シェルスクリプト `.claude/skills/video/references/generate_videos.sh` 側の
 マスター音源候補リスト（`master-mix.{wav,m4a,aac,mp3,flac}` / `master.{wav,m4a,aac,mp3,flac}`）とは
 独立に管理する（用途と並び順の意味づけが異なるため）。

@@ -204,6 +204,28 @@ def _collector_with_playlist_response(response):
 
 
 class TestInit:
+    def test_injected_factory_runs_only_after_authentication(self, mock_config, tmp_path):
+        from youtube_automation.commands.analytics.analytics_system import AnalyticsSystem
+
+        factory = MagicMock()
+        handler = MagicMock()
+        handler.test_connection.return_value = True
+        clients = object()
+        with (
+            patch("youtube_automation.commands.analytics.analytics_system.load_config", return_value=mock_config),
+            patch("youtube_automation.commands.analytics.analytics_system.channel_dir", return_value=tmp_path),
+        ):
+            system = AnalyticsSystem(collector_factory=factory)
+            factory.assert_not_called()
+            system._readonly_handler = handler
+            system._clients = clients
+
+            assert system.authenticate() is True
+
+        factory.assert_called_once_with(clients, tmp_path)
+        factory.return_value.initialize.assert_called_once_with()
+        assert system.collector is factory.return_value
+
     def test_init_defers_collector_creation_until_authentication(self, mock_config):
         """__init__ は認証前にCollectorを生成しない。"""
         with (

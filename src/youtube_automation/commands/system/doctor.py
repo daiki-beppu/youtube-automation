@@ -500,6 +500,87 @@ def _rollback_client_secret_install(
     return errors
 
 
+def _client_secret_project_issue(data: object, project_id: str) -> str | None:
+    """Validate the OAuth document shape and its intended project."""
+    if not isinstance(data, dict):
+        return "JSON object ではありません"
+    installed = data.get("installed")
+    if not isinstance(installed, dict):
+        return "installed セクションがありません"
+    missing = [key for key in ("client_id", "client_secret", "redirect_uris") if key not in installed]
+    if missing:
+        return f"必須キー不足: {','.join(missing)}"
+    if installed.get("project_id") != project_id:
+        return f"project_id が不一致 ({installed.get('project_id')} != {project_id})"
+    return None
+
+
+def _inspect_client_secret_candidate(candidate: Path, project_id: str) -> _ClientSecretCandidate | str:
+    """Read a regular file safely and validate its OAuth project before selecting it."""
+    if candidate.is_symlink():
+        return f"{candidate}: 通常ファイルではありません"
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(candidate, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError as error:
+        return f"{candidate}: ファイル読み込み失敗: {error}"
+    try:
+        metadata = os.fstat(descriptor)
+    except OSError as error:
+        os.close(descriptor)
+        return f"{candidate}: 更新時刻の取得に失敗: {error}"
+    try:
+        if not stat.S_ISREG(metadata.st_mode):
+            return f"{candidate}: 通常ファイルではありません"
+        with os.fdopen(descriptor, "rb") as source_file:
+            descriptor = None
+            raw_data = source_file.read()
+        data = json.loads(raw_data)
+    except json.JSONDecodeError as error:
+        return f"{candidate}: JSON 読み込み失敗: {error}"
+    except OSError as error:
+        return f"{candidate}: ファイル読み込み失敗: {error}"
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    issue = _client_secret_project_issue(data, project_id)
+    if issue is not None:
+        return f"{candidate}: {issue}"
+    return _ClientSecretCandidate(candidate, _FileIdentity.from_stat(metadata), raw_data)
+
+
+def _stage_client_secret(selected: _ClientSecretCandidate) -> Path | None:
+    """Pin the inspected source and restore it if its identity changed."""
+    try:
+        staging_dir = Path(tempfile.mkdtemp(prefix=".yt-doctor-client-secret-", dir=selected.path.parent))
+    except OSError as error:
+        print(f"{selected.path} の固定準備に失敗: {error}")
+        return None
+    staged_source = staging_dir / "client_secrets.json"
+    try:
+        os.rename(selected.path, staged_source)
+        staged_metadata = staged_source.lstat()
+        if _FileIdentity.from_stat(staged_metadata) != selected.identity:
+            raise OSError("検査後に変更されたため移動できません")
+    except OSError as error:
+        if staged_source.exists() or staged_source.is_symlink():
+            try:
+                _restore_staged_source(staged_source, selected.path)
+            except OSError as rollback_error:
+                print(f"{selected.path} の固定に失敗: {error}; rollback 失敗: {rollback_error}")
+                return None
+        else:
+            try:
+                staging_dir.rmdir()
+            except OSError as cleanup_error:
+                print(f"{selected.path} の固定に失敗: {error}; cleanup 失敗: {cleanup_error}")
+                return None
+        print(f"{selected.path} の固定に失敗: {error}")
+        return None
+
+    return staged_source
+
+
 def fix_client_secrets(channel_dir: Path) -> int:
     """Downloads の対象 OAuth client secret をチャンネルの auth へ移動する。"""
     destination = channel_dir / "auth" / "client_secrets.json"
@@ -526,53 +607,11 @@ def fix_client_secrets(channel_dir: Path) -> int:
         return 1
 
     for candidate in candidates:
-        if candidate.is_symlink():
-            errors.append(f"{candidate}: 通常ファイルではありません")
-            continue
-        descriptor: int | None = None
-        try:
-            descriptor = os.open(candidate, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-        except OSError as error:
-            errors.append(f"{candidate}: ファイル読み込み失敗: {error}")
-            continue
-        try:
-            metadata = os.fstat(descriptor)
-        except OSError as error:
-            errors.append(f"{candidate}: 更新時刻の取得に失敗: {error}")
-            os.close(descriptor)
-            continue
-        try:
-            if not stat.S_ISREG(metadata.st_mode):
-                errors.append(f"{candidate}: 通常ファイルではありません")
-                continue
-            with os.fdopen(descriptor, "rb") as source_file:
-                descriptor = None
-                raw_data = source_file.read()
-            data = json.loads(raw_data)
-        except json.JSONDecodeError as error:
-            errors.append(f"{candidate}: JSON 読み込み失敗: {error}")
-            continue
-        except OSError as error:
-            errors.append(f"{candidate}: ファイル読み込み失敗: {error}")
-            continue
-        finally:
-            if descriptor is not None:
-                os.close(descriptor)
-        if not isinstance(data, dict):
-            errors.append(f"{candidate}: JSON object ではありません")
-            continue
-        installed = data.get("installed")
-        if not isinstance(installed, dict):
-            errors.append(f"{candidate}: installed セクションがありません")
-            continue
-        missing = [key for key in ("client_id", "client_secret", "redirect_uris") if key not in installed]
-        if missing:
-            errors.append(f"{candidate}: 必須キー不足: {','.join(missing)}")
-            continue
-        if installed.get("project_id") == project_id:
-            matching.append(_ClientSecretCandidate(candidate, _FileIdentity.from_stat(metadata), raw_data))
+        inspected = _inspect_client_secret_candidate(candidate, project_id)
+        if isinstance(inspected, _ClientSecretCandidate):
+            matching.append(inspected)
         else:
-            errors.append(f"{candidate}: project_id が不一致 ({installed.get('project_id')} != {project_id})")
+            errors.append(inspected)
 
     if not matching:
         print("移動できる client secret が見つかりません:")
@@ -581,32 +620,19 @@ def fix_client_secrets(channel_dir: Path) -> int:
         return 1
 
     selected = max(matching, key=lambda match: match.identity.modified_ns)
-    try:
-        staging_dir = Path(tempfile.mkdtemp(prefix=".yt-doctor-client-secret-", dir=selected.path.parent))
-    except OSError as error:
-        print(f"{selected.path} の固定準備に失敗: {error}")
+    staged_source = _stage_client_secret(selected)
+    if staged_source is None:
         return 1
-    staged_source = staging_dir / "client_secrets.json"
-    try:
-        os.rename(selected.path, staged_source)
-        staged_metadata = staged_source.lstat()
-        if _FileIdentity.from_stat(staged_metadata) != selected.identity:
-            raise OSError("検査後に変更されたため移動できません")
-    except OSError as error:
-        if staged_source.exists() or staged_source.is_symlink():
-            try:
-                _restore_staged_source(staged_source, selected.path)
-            except OSError as rollback_error:
-                print(f"{selected.path} の固定に失敗: {error}; rollback 失敗: {rollback_error}")
-                return 1
-        else:
-            try:
-                staging_dir.rmdir()
-            except OSError as cleanup_error:
-                print(f"{selected.path} の固定に失敗: {error}; cleanup 失敗: {cleanup_error}")
-                return 1
-        print(f"{selected.path} の固定に失敗: {error}")
-        return 1
+    return _install_staged_client_secret(selected, staged_source, destination)
+
+
+def _install_staged_client_secret(
+    selected: _ClientSecretCandidate,
+    staged_source: Path,
+    destination: Path,
+) -> int:
+    """Install the pinned bytes exclusively and roll back either file on failure."""
+    staging_dir = staged_source.parent
 
     destination_descriptor: int | None = None
     destination_created = False

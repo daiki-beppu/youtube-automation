@@ -233,12 +233,27 @@ def lint_operational_artifacts(
     writes, reads = _skill_declarations(skills)
     source_writes, source_violations = _scan_python_contracts(repository_root, contract)
     writes.update(source_writes)
+    return [
+        *source_violations,
+        *_lint_artifact_writes(writes, contract),
+        *_lint_artifact_consumers(writes, reads, contract),
+        *_lint_artifact_schemas(schemas, contract),
+        *_lint_artifact_allowlists(repository_root, writes, contract),
+    ]
+
+
+def _declared_writer_keys(entries: Iterable[AllowlistEntry]) -> set[tuple[str, str]]:
+    """Index explicit write exceptions by both owner and path."""
+    return {(entry.owner, entry.path) for entry in entries}
+
+
+def _lint_artifact_writes(writes: set[tuple[str, str]], contract: OperationalArtifactInventory) -> list[str]:
+    """書き込み先の形式、owner、JSON/HTML pair を検証する。"""
     violations: list[str] = []
-    violations.extend(source_violations)
     artifacts = {item.path: item for item in contract.artifacts}
-    markdown = {(item.owner, item.path): item for item in contract.hand_written_inputs}
-    machine = {(item.owner, item.path): item for item in contract.machine_only}
-    other = {(item.owner, item.path): item for item in contract.other_writes}
+    markdown = _declared_writer_keys(contract.hand_written_inputs)
+    machine = _declared_writer_keys(contract.machine_only)
+    other = _declared_writer_keys(contract.other_writes)
 
     for owner, path in sorted(writes):
         if not _is_target(path):
@@ -248,32 +263,53 @@ def lint_operational_artifacts(
                 violations.append(f"Markdown writer は禁止です: owner={owner} path={path}")
             continue
         if path.endswith(".json"):
-            artifact = artifacts.get(path)
-            if artifact is None:
-                if (owner, path) not in machine:
-                    violations.append(
-                        f"JSON に HTML pair または machine-only 指定がありません: owner={owner} path={path}"
-                    )
-                continue
-            if artifact.owner != owner:
-                violations.append(
-                    f"artifact owner が一致しません: path={path} inventory={artifact.owner} declaration={owner}"
-                )
-            html = str(Path(path).with_suffix(".html"))
-            if (owner, html) not in writes:
-                violations.append(f"JSON/HTML pair が欠落しています: owner={owner} path={html}")
+            violations.extend(_lint_json_writer(owner, path, artifacts.get(path), writes, (owner, path) in machine))
             continue
         if path.endswith(".html"):
             json_path = str(Path(path).with_suffix(".json"))
-            artifact = artifacts.get(json_path)
-            has_owned_json_pair = artifact is not None and artifact.owner == owner
-            is_declared_other = (owner, path) in other
-            if not has_owned_json_pair and not is_declared_other:
-                violations.append(f"orphan HTML です: owner={owner} path={path}")
+            violations.extend(_lint_html_writer(owner, path, artifacts.get(json_path), (owner, path) in other))
             continue
         if (owner, path) not in other:
             violations.append(f"未登録の運用成果物です: owner={owner} path={path}")
 
+    return violations
+
+
+def _lint_html_writer(owner: str, path: str, artifact: OperationalArtifact | None, declared_other: bool) -> list[str]:
+    """HTML は同一 owner の JSON pair、または明示した例外とする。"""
+    has_owned_json_pair = artifact is not None and artifact.owner == owner
+    if not has_owned_json_pair and not declared_other:
+        return [f"orphan HTML です: owner={owner} path={path}"]
+    return []
+
+
+def _lint_json_writer(
+    owner: str,
+    path: str,
+    artifact: OperationalArtifact | None,
+    writes: set[tuple[str, str]],
+    machine_only: bool,
+) -> list[str]:
+    """JSON は登録済み owner の HTML pair、または明示した機械専用成果物とする。"""
+    if artifact is None:
+        if machine_only:
+            return []
+        return [f"JSON に HTML pair または machine-only 指定がありません: owner={owner} path={path}"]
+    violations: list[str] = []
+    if artifact.owner != owner:
+        violations.append(f"artifact owner が一致しません: path={path} inventory={artifact.owner} declaration={owner}")
+    html = str(Path(path).with_suffix(".html"))
+    if (owner, html) not in writes:
+        violations.append(f"JSON/HTML pair が欠落しています: owner={owner} path={html}")
+    return violations
+
+
+def _lint_artifact_consumers(
+    writes: set[tuple[str, str]], reads: set[tuple[str, str]], contract: OperationalArtifactInventory
+) -> list[str]:
+    """登録された成果物と producer/consumer 宣言を双方向に照合する。"""
+    violations: list[str] = []
+    artifacts = {item.path: item for item in contract.artifacts}
     for artifact in contract.artifacts:
         if (artifact.owner, artifact.path) not in writes:
             violations.append(f"orphan inventory artifact です: owner={artifact.owner} path={artifact.path}")
@@ -286,6 +322,12 @@ def lint_operational_artifacts(
         if artifact is not None and owner not in artifact.consumers and owner != artifact.owner:
             violations.append(f"schema未検証consumerです: consumer={owner} path={path}")
 
+    return violations
+
+
+def _lint_artifact_schemas(schemas: tuple[str, ...], contract: OperationalArtifactInventory) -> list[str]:
+    """利用する schema と、例外を含む登録集合の整合性を検証する。"""
+    violations: list[str] = []
     used_schemas = {artifact.schema for artifact in contract.artifacts}
     known_schemas = set(schemas)
     for artifact in contract.artifacts:
@@ -296,6 +338,14 @@ def lint_operational_artifacts(
     for schema in sorted(set(contract.schema_allowlist) - known_schemas):
         violations.append(f"stale allowlist です: schema={schema}")
 
+    return violations
+
+
+def _lint_artifact_allowlists(
+    repository_root: Path, writes: set[tuple[str, str]], contract: OperationalArtifactInventory
+) -> list[str]:
+    """許可された例外が現在も実在することを確認する。"""
+    violations: list[str] = []
     declared_writes = set(writes)
     for label, entries in (
         ("hand_written_inputs", contract.hand_written_inputs),
@@ -343,8 +393,8 @@ def _scan_python_contracts(
     """Find literal writer/consumer evidence in shipped Python and skill scripts."""
     writes: set[tuple[str, str]] = set()
     violations: list[str] = []
-    artifacts_by_name = {
-        Path(artifact.path).name: artifact
+    artifact_names = {
+        Path(artifact.path).name
         for artifact in contract.artifacts
         if "<" not in Path(artifact.path).name and "*" not in Path(artifact.path).name
     }
@@ -359,25 +409,42 @@ def _scan_python_contracts(
             except (OSError, UnicodeError, SyntaxError):
                 continue
             relative = source.relative_to(repository_root).as_posix()
-            owner_hint = _source_owner(relative)
             for node in _scopes(tree):
-                constants = {
-                    child.value
-                    for child in ast.walk(node)
-                    if isinstance(child, ast.Constant) and isinstance(child.value, str) and _is_target(child.value)
-                }
-                if _has_writer_call(node):
-                    for path in constants:
-                        if not path.endswith((".md", ".json", ".html")):
-                            continue
-                        owner = owner_hint or _declared_owner(path, contract) or relative
-                        writes.add((owner, path))
-                if not _has_unvalidated_reader(node):
-                    continue
-                for path in constants:
-                    artifact = artifacts_by_name.get(Path(path).name)
-                    if artifact is not None:
-                        violations.append(f"schema未検証consumerです: consumer={relative} path={path}")
+                scope_writes, scope_violations = _inspect_python_scope(
+                    node, relative=relative, contract=contract, artifact_names=artifact_names
+                )
+                writes.update(scope_writes)
+                violations.extend(scope_violations)
+    return writes, violations
+
+
+def _inspect_python_scope(
+    node: ast.AST,
+    *,
+    relative: str,
+    contract: OperationalArtifactInventory,
+    artifact_names: set[str],
+) -> tuple[set[tuple[str, str]], list[str]]:
+    """Check one scope's literal paths against its writer and reader calls."""
+    writes: set[tuple[str, str]] = set()
+    violations: list[str] = []
+    owner_hint = _source_owner(relative)
+    constants = {
+        child.value
+        for child in ast.walk(node)
+        if isinstance(child, ast.Constant) and isinstance(child.value, str) and _is_target(child.value)
+    }
+    if _has_writer_call(node):
+        for path in constants:
+            if not path.endswith((".md", ".json", ".html")):
+                continue
+            owner = owner_hint or _declared_owner(path, contract) or relative
+            writes.add((owner, path))
+    if not _has_unvalidated_reader(node):
+        return writes, violations
+    for path in constants:
+        if Path(path).name in artifact_names:
+            violations.append(f"schema未検証consumerです: consumer={relative} path={path}")
     return writes, violations
 
 

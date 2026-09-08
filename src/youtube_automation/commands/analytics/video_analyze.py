@@ -32,15 +32,13 @@ from youtube_automation.application.analytics.benchmark_query import load_benchm
 from youtube_automation.application.analytics.video_report import write_video_analysis_report
 from youtube_automation.application.documents.migration import MarkdownMigrationDecision
 from youtube_automation.commands._shared.arguments import CompetitorArgumentParser
-from youtube_automation.configuration import channel_dir as _channel_dir
 from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.channel_context import channel_dir as _channel_dir
 from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.analytics.benchmark import select_top_vod_benchmark_videos
+from youtube_automation.domains.analytics.video_analysis import VideoTarget
 from youtube_automation.infrastructure.media.genai_client import create_global_genai_client
-from youtube_automation.infrastructure.media.video_analyzer import (
-    VideoAnalyzer,
-    VideoTarget,
-)
+from youtube_automation.infrastructure.media.video_analyzer import VideoAnalyzer
 
 logger = logging.getLogger(__name__)
 

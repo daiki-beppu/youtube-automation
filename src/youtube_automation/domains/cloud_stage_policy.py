@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar, Protocol
@@ -13,9 +14,11 @@ class StageReadiness(Protocol):
     """stage policy が readiness 値に求める最小契約。"""
 
     @property
+    @abstractmethod
     def status(self) -> str: ...
 
     @property
+    @abstractmethod
     def collection(self) -> Path | None: ...
 
 

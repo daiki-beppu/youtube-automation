@@ -7,6 +7,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -19,6 +20,7 @@ from youtube_automation.commands.collections.collection_serve_discovery import (
     MAX_REGISTRATION_BODY_BYTES,
     MAX_REGISTRY_ENTRIES,
     DiscoveryLifecycle,
+    RegistrationTransport,
     RegistryState,
     create_registry_server,
 )
@@ -819,3 +821,35 @@ def expiry_for(endpoint: str, base_url: str) -> float:
 
 def assert_expiry_advanced(endpoint: str, base_url: str, previous: float) -> None:
     assert expiry_for(endpoint, base_url) > previous
+
+
+@pytest.mark.parametrize("field", ["ttl_seconds", "expires_at"])
+@pytest.mark.parametrize(
+    ("value", "compatible"),
+    [(float("nan"), False), (float("inf"), False), (float("-inf"), False), (30, True), (10**400, True)],
+    ids=["nan", "positive-infinity", "negative-infinity", "normal", "large-integer"],
+)
+def test_registry_probe_requires_finite_positive_times(monkeypatch, field, value, compatible):
+    entry = {**registration("http://localhost:9001", "instance-a"), "expires_at": 130}
+    payload = {"schema_version": 1, "ttl_seconds": 30, "servers": [entry]}
+    if field == "ttl_seconds":
+        payload[field] = value
+    else:
+        entry[field] = value
+    response = MagicMock()
+    response.status = 200
+    response.read.return_value = json.dumps(payload).encode()
+    response.__enter__.return_value = response
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *args, **kwargs: response)
+    lifecycle = DiscoveryLifecycle.for_loopback_test(server_info("http://localhost:9002", "Test"), discovery_port=9000)
+
+    assert lifecycle._registry_endpoint_is_compatible() is compatible
+
+
+def test_explicit_registration_transport_requires_unregister() -> None:
+    class RegisterOnlyTransport(RegistrationTransport):
+        def register(self, payload: dict[str, object]) -> None:
+            pass
+
+    with pytest.raises(TypeError, match="unregister"):
+        RegisterOnlyTransport()

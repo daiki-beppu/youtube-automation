@@ -351,7 +351,7 @@ class TestTransientErrorRetries:
                 return_value=mock_client,
             ),
             patch(
-                "youtube_automation.infrastructure.media.image_provider.gemini.persist_image",
+                "youtube_automation.infrastructure.media.image_provider.gemini.persist_image_bytes",
                 side_effect=[OSError("disk busy"), req.output_path],
             ) as persist,
         ):
@@ -377,7 +377,7 @@ class TestTransientErrorRetries:
                 return_value=mock_client,
             ),
             patch(
-                "youtube_automation.infrastructure.media.image_provider.gemini.persist_image",
+                "youtube_automation.infrastructure.media.image_provider.gemini.persist_image_bytes",
                 side_effect=OSError("disk full"),
             ) as persist,
         ):

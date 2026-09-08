@@ -14,18 +14,14 @@ import argparse
 import json
 import sys
 
-from youtube_automation.configuration import channel_dir
+from youtube_automation.commands._shared.arguments import add_stock_filter_arguments
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.infrastructure.media.stock import SOURCE_ROLES, list_stock
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="assets/stock/ の画像エントリを列挙する")
-    parser.add_argument("--theme", help="特定テーマ slug でフィルタ")
-    parser.add_argument(
-        "--source-role",
-        choices=SOURCE_ROLES,
-        help="source_role でフィルタ",
-    )
+    add_stock_filter_arguments(parser, SOURCE_ROLES)
     parser.add_argument("--limit", type=int, help="返却件数の上限 (新しい順)")
     parser.add_argument(
         "--format",

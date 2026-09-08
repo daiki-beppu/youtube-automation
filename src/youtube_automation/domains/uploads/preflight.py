@@ -12,9 +12,9 @@ from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 
 from youtube_automation.configuration import load_config
-from youtube_automation.core.adapters.media import CollectionPaths
-from youtube_automation.core.adapters.youtube import parse_youtube_tags, youtube_tag_chars
 from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.core.youtube_tags import parse_youtube_tags, youtube_tag_chars
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.metadata.descriptions import (
     build_descriptions_md_parse_diagnostics,
@@ -22,6 +22,9 @@ from youtube_automation.domains.metadata.descriptions import (
     missing_descriptions_md_headings,
 )
 from youtube_automation.domains.metadata.placeholders import is_placeholder_value
+from youtube_automation.domains.metadata.titles import requires_scene_phrases as requires_scene_phrases
+from youtube_automation.domains.suno.config import SUNO_DEFAULT_STYLE_CHAR_LIMIT as SUNO_DEFAULT_STYLE_CHAR_LIMIT
+from youtube_automation.domains.suno.config import check_suno_genre_line_char_limit as check_suno_genre_line_char_limit
 from youtube_automation.domains.thumbnail.references import (
     plan_ttp_reference_assignments,
     resolve_configured_benchmark_references,
@@ -57,19 +60,7 @@ DEFAULT_TITLE_VOLUME_PATTERNS = (
     r"\bVol\.?\s*[IVXLCDM]+\b",  # Vol. II
     r"\b(?:I{2,3}|IV|VI{0,3}|IX|X)\b\s*$",  # 末尾ローマ数字 (II〜X)
 )
-SUNO_DEFAULT_STYLE_CHAR_LIMIT = 120
 THUMBNAIL_COMPOSITION_REQUIRED_KEYS = ("text_lines",)
-
-
-def requires_scene_phrases(supported_languages: Sequence[str]) -> bool:
-    """チャンネルが workflow-state.json.scene_phrases を必要とするかどうか (#1470).
-
-    scene_phrases は多言語 localizations のタイトル生成にのみ使われるため、
-    `supported_languages` が 1 言語以下のチャンネルでは不要。populate
-    （`yt-populate-scene-phrases` の no-op 判定）と検証側（preflight /
-    metadata audit / localizations 生成）はこの判定を共有する。
-    """
-    return len(set(supported_languages)) > 1
 
 
 def check_chapter_count(ts_count: int, chapter_max: int) -> str | None:
@@ -115,21 +106,65 @@ def check_descriptions_md_parseability(desc_md: Path, *, allowed_root: Path | No
     return f"{desc_md}: descriptions.md parse failed\n{build_descriptions_md_parse_diagnostics(text, missing)}"
 
 
-def check_suno_genre_line_char_limit(suno_cfg: Mapping[str, object]) -> str | None:
-    """``config/skills/music.yaml::prompt.genre_line`` が Suno Style 欄制限内か検証する."""
-    genre_line = str(suno_cfg.get("genre_line") or "").strip()
-    if not genre_line:
-        return None
-    limit = _positive_int(
-        suno_cfg.get("style_char_limit"),
-        default=SUNO_DEFAULT_STYLE_CHAR_LIMIT,
-    )
-    if len(genre_line) <= limit:
-        return None
-    return (
-        "config/skills/music.yaml::prompt.genre_line が Suno Style 欄の文字数上限を超過: "
-        f"{len(genre_line)} / {limit}。5-Element Order に沿って要素を絞ってください"
-    )
+def _reference_issue_sample(issues: list[str]) -> str:
+    sample = ", ".join(issues[:3])
+    suffix = f" ほか {len(issues) - 3} 件" if len(issues) > 3 else ""
+    return sample + suffix
+
+
+def _check_single_step_references(channel_dir: Path, gemini: Mapping[str, object]) -> list[str]:
+    """Validate reference availability before checking the TTP assignment contract."""
+    issues: list[str] = []
+    single_step = _as_mapping(gemini.get("single_step"))
+    max_attempts = _positive_int(single_step.get("max_attempts"), default=1)
+    rotate = _bool(single_step.get("rotate"), default=True)
+    reference_images = _as_mapping(gemini.get("reference_images"))
+    resolved_refs = resolve_configured_benchmark_references(channel_dir, reference_images.get("default"))
+    has_reference_count_issue = False
+    missing_refs: list[str] = []
+    if resolved_refs.placeholders or (not resolved_refs.references and not resolved_refs.invalid_reasons):
+        issues.append(
+            "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+            "が未設定/空/TBD です。/setup --regenerate で benchmark サムネ参照を設定してください"
+        )
+    elif resolved_refs.references:
+        unique_refs = list(dict.fromkeys(resolved_refs.references))
+        if len(unique_refs) < max_attempts:
+            has_reference_count_issue = True
+            issues.append(
+                "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+                f"が必要枚数未満です (max_attempts={max_attempts}, unique_references={len(unique_refs)})"
+            )
+        missing_refs = [str(ref) for ref in unique_refs if not path_exists(ref)]
+        if missing_refs:
+            issues.append(
+                "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+                f"に存在しない参照画像があります: {_reference_issue_sample(missing_refs)}"
+            )
+    if resolved_refs.invalid_reasons:
+        issues.append(
+            "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+            f"の参照パスが不正です: {_reference_issue_sample(resolved_refs.invalid_reasons)}"
+        )
+    if resolved_refs.references and not (missing_refs or resolved_refs.invalid_reasons or has_reference_count_issue):
+        benchmark_root = channel_dir / "data" / "thumbnail_compare" / "benchmark"
+        try:
+            plan_ttp_reference_assignments(
+                resolved_refs.references,
+                max_attempts,
+                rotate,
+                benchmark_root=benchmark_root,
+                channel_dir=channel_dir,
+                dedup_recent_collections=resolve_dedup_recent_collections(
+                    reference_images.get("dedup_recent_collections")
+                ),
+            )
+        except ConfigError as exc:
+            issues.append(
+                "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
+                f"が single_step TTP 生成契約を満たしていません: {exc}"
+            )
+    return issues
 
 
 def check_thumbnail_skill_config(
@@ -145,63 +180,7 @@ def check_thumbnail_skill_config(
 
     issues: list[str] = []
     if generation_mode == "single_step" and not skip_reference_images:
-        single_step = _as_mapping(gemini.get("single_step"))
-        max_attempts = _positive_int(single_step.get("max_attempts"), default=1)
-        rotate = _bool(single_step.get("rotate"), default=True)
-        reference_images = _as_mapping(gemini.get("reference_images"))
-        resolved_refs = resolve_configured_benchmark_references(channel_dir, reference_images.get("default"))
-        has_reference_count_issue = False
-        missing_refs: list[str] = []
-        if resolved_refs.placeholders or (not resolved_refs.references and not resolved_refs.invalid_reasons):
-            issues.append(
-                "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
-                "が未設定/空/TBD です。/setup --regenerate で benchmark サムネ参照を設定してください"
-            )
-        elif resolved_refs.references:
-            unique_refs = list(dict.fromkeys(resolved_refs.references))
-            if len(unique_refs) < max_attempts:
-                has_reference_count_issue = True
-                issues.append(
-                    "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
-                    f"が必要枚数未満です (max_attempts={max_attempts}, unique_references={len(unique_refs)})"
-                )
-            missing_refs = [str(ref) for ref in unique_refs if not path_exists(ref)]
-            if missing_refs:
-                sample = ", ".join(missing_refs[:3])
-                suffix = f" ほか {len(missing_refs) - 3} 件" if len(missing_refs) > 3 else ""
-                issues.append(
-                    "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
-                    f"に存在しない参照画像があります: {sample}{suffix}"
-                )
-        if resolved_refs.invalid_reasons:
-            sample = ", ".join(resolved_refs.invalid_reasons[:3])
-            suffix = (
-                f" ほか {len(resolved_refs.invalid_reasons) - 3} 件" if len(resolved_refs.invalid_reasons) > 3 else ""
-            )
-            issues.append(
-                "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
-                f"の参照パスが不正です: {sample}{suffix}"
-            )
-        if resolved_refs.references and not (
-            missing_refs or resolved_refs.invalid_reasons or has_reference_count_issue
-        ):
-            benchmark_root = channel_dir / "data" / "thumbnail_compare" / "benchmark"
-            try:
-                plan_ttp_reference_assignments(
-                    resolved_refs.references,
-                    max_attempts,
-                    rotate,
-                    benchmark_root=benchmark_root,
-                    channel_dir=channel_dir,
-                    dedup_recent_collections=resolve_dedup_recent_collections(
-                        reference_images.get("dedup_recent_collections")
-                    ),
-                )
-            except ConfigError as exc:
-                issues.append(
-                    "config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default "
-                    f"が single_step TTP 生成契約を満たしていません: {exc}"
-                )
+        issues.extend(_check_single_step_references(channel_dir, gemini))
 
     composition_rules = _as_mapping(gemini.get("composition_rules"))
     missing_composition = [

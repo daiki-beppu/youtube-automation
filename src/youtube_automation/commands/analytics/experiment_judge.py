@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import math
-import stat
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -14,6 +13,8 @@ from pathlib import Path
 from youtube_automation.commands.analytics import experiment_transaction as transaction
 from youtube_automation.commands.analytics.analytics_system import AnalyticsSystem
 from youtube_automation.core.errors import AuthError, ValidationError, WorkflowStateError
+from youtube_automation.core.time_utils import parse_utc_datetime
+from youtube_automation.domains.analytics.experiment_records import load_schema, parse_json_lines, read_entries
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.infrastructure.analytics.vpd_metrics import _parse_view_count, _published_utc
 
@@ -35,70 +36,22 @@ class JudgePlan:
     snapshot_candidates: list[tuple[dict[str, object], str]] = field(default_factory=list)
 
 
-def _experiment_module():
-    from youtube_automation.commands.analytics import experiment
-
-    return experiment
-
-
-def _bytes(path: Path) -> bytes:
-    if not path.exists():
-        return b""
-    try:
-        mode = path.lstat().st_mode
-    except OSError as error:
-        raise ValidationError(f"JSONL を確認できません: {path}") from error
-    if not stat.S_ISREG(mode):
-        raise ValidationError(f"JSONL は regular file である必要があります: {path}")
-    try:
-        return path.read_bytes()
-    except OSError as error:
-        raise ValidationError(f"JSONL を読めません: {path}") from error
-
-
 def _decode_json_lines(
     path: Path,
     content: bytes,
     schema: dict[str, object],
     insights_schema: dict[str, object],
 ) -> list[dict[str, object]]:
-    experiment = _experiment_module()
     try:
         text = content.decode("utf-8")
     except UnicodeError as error:
         raise ValidationError(f"JSONL が UTF-8 ではありません: {path}") from error
-    entries: list[dict[str, object]] = []
-    failures: list[str] = []
-    seen: dict[str, int] = {}
-    for line_number, raw_line in enumerate(text.splitlines(), start=1):
-        if not raw_line.strip():
-            continue
-        try:
-            entry = json.loads(raw_line)
-        except json.JSONDecodeError as error:
-            failures.append(f"line {line_number}: JSON として不正です: {error.msg}")
-            continue
-        failures.extend(
-            f"line {line_number}: schema 違反: {message}"
-            for message in experiment.validate_entry(entry, schema, insights_schema)
-        )
-        if not isinstance(entry, dict):
-            continue
-        entry_id = entry.get("id")
-        if isinstance(entry_id, str) and entry_id:
-            if entry_id in seen:
-                failures.append(f"line {line_number}: id {entry_id!r} が line {seen[entry_id]} と重複しています")
-            else:
-                seen[entry_id] = line_number
-        entries.append(entry)
-    if failures:
-        raise ValidationError(f"{path} の検証に失敗しました: " + "; ".join(failures))
-    return entries
+    return parse_json_lines(text, schema, insights_schema, error_context=str(path))
 
 
 def _read_insights(path: Path) -> tuple[bytes, list[dict[str, object]]]:
-    content = _bytes(path)
-    _, insights_schema = _experiment_module().load_schema()
+    content = transaction.read_jsonl_bytes(path)
+    _, insights_schema = load_schema()
     return content, _decode_json_lines(path, content, insights_schema, insights_schema)
 
 
@@ -192,15 +145,7 @@ def _nonnegative_integer(name: str, value: object) -> int:
 
 
 def _iso_datetime(value: object, name: str) -> datetime:
-    if not isinstance(value, str):
-        raise ValidationError(f"{name} が不正です")
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError as error:
-        raise ValidationError(f"{name} が不正です") from error
-    if parsed.tzinfo is None:
-        raise ValidationError(f"{name} に timezone がありません")
-    return parsed.astimezone(timezone.utc)
+    return parse_utc_datetime(value, name)
 
 
 def _published_state(detail: object, video_id: str, now: datetime) -> tuple[str | None, int | None]:
@@ -477,8 +422,7 @@ def _commit_plan(
         return
     experiments_after = transaction.rewrite_jsonl(experiments_before, plan.replacements)
     insights_after = transaction.append_jsonl(insights_before, plan.insights)
-    experiment = _experiment_module()
-    experiment_schema, insights_schema = experiment.load_schema()
+    experiment_schema, insights_schema = load_schema()
     _decode_json_lines(experiments_path, experiments_after, experiment_schema, insights_schema)
     _decode_json_lines(insights_path, insights_after, insights_schema, insights_schema)
     transaction.commit_pair(
@@ -504,8 +448,7 @@ def judge_experiments(
     threshold = _threshold(threshold_percent)
     journal = experiments_path.parent / transaction.JOURNAL_NAME
     transaction.recover(journal, (experiments_path, insights_path))
-    experiment = _experiment_module()
-    experiments_before, experiments = experiment._read_entries(experiments_path)
+    experiments_before, experiments = read_entries(experiments_path)
     insights_before, insights = _read_insights(insights_path)
     plan = _plan_existing(experiments, insights, channel_root, threshold)
     snapshot = _load_snapshot(plan.snapshot_candidates, snapshot_loader)

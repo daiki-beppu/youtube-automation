@@ -24,8 +24,8 @@ from youtube_automation.commands.media import finalize_master
 from youtube_automation.commands.media.finalize_master import (
     finalize_master as run_finalize_master,
 )
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.media.audio_adjustments import replace_finalize_adjustments
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 # pass2 失敗時の master 保護検証用 (元 master のバイト列が変更されないことを assert)。
 _ORIGINAL_MASTER_BYTES = b"ORIGINAL_MASTER_BYTES_FOR_TEST"

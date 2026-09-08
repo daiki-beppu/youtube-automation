@@ -201,6 +201,24 @@ def load_stock_meta(image_path: Path) -> dict[str, Any] | None:
     return payload if isinstance(payload, dict) else None
 
 
+def _theme_stock_entries(tdir: Path, source_role: str | None) -> list[StockEntry]:
+    entries: list[StockEntry] = []
+    for image in tdir.iterdir():
+        if image.is_dir():
+            continue
+        if image.suffix.lower() not in {".png", ".jpg", ".jpeg"}:
+            continue
+        if image.name.endswith(META_SUFFIX):
+            continue
+        meta = load_stock_meta(image) or {}
+        entry = StockEntry(image_path=image, theme=tdir.name, meta=meta)
+        if source_role is not None and entry.source_role != source_role:
+            continue
+        entries.append(entry)
+
+    return entries
+
+
 def list_stock(
     channel_dir: Path,
     *,
@@ -230,23 +248,29 @@ def list_stock(
         theme_dirs = sorted([p for p in root.iterdir() if p.is_dir()])
 
     for tdir in theme_dirs:
-        for image in tdir.iterdir():
-            if image.is_dir():
-                continue
-            if image.suffix.lower() not in {".png", ".jpg", ".jpeg"}:
-                continue
-            if image.name.endswith(META_SUFFIX):
-                continue
-            meta = load_stock_meta(image) or {}
-            entry = StockEntry(image_path=image, theme=tdir.name, meta=meta)
-            if source_role is not None and entry.source_role != source_role:
-                continue
-            entries.append(entry)
+        entries.extend(_theme_stock_entries(tdir, source_role))
 
     entries.sort(key=lambda e: e.image_path.stat().st_mtime, reverse=True)
     if limit is not None and limit >= 0:
         return entries[:limit]
     return entries
+
+
+def _usable_stock_paths(entries: list[StockEntry]) -> list[Path]:
+    """Keep references that still exist and meet the image input size limits."""
+    surviving: list[Path] = []
+    for entry in entries:
+        path = entry.image_path
+        if not path.exists():
+            print(f"[WARN] skip missing stock: {path}", file=sys.stderr)
+            continue
+        size = path.stat().st_size
+        if size < _STOCK_REF_MIN_BYTES or size > _STOCK_REF_MAX_BYTES:
+            print(f"[WARN] skip oversized/undersized stock: {path} ({size} bytes)", file=sys.stderr)
+            continue
+        surviving.append(path)
+
+    return surviving
 
 
 def resolve_stock_refs(
@@ -299,17 +323,7 @@ def resolve_stock_refs(
         source_role=source_role,
     )
 
-    surviving: list[Path] = []
-    for entry in entries:
-        path = entry.image_path
-        if not path.exists():
-            print(f"[WARN] skip missing stock: {path}", file=sys.stderr)
-            continue
-        size = path.stat().st_size
-        if size < _STOCK_REF_MIN_BYTES or size > _STOCK_REF_MAX_BYTES:
-            print(f"[WARN] skip oversized/undersized stock: {path} ({size} bytes)", file=sys.stderr)
-            continue
-        surviving.append(path)
+    surviving = _usable_stock_paths(entries)
 
     if not surviving:
         if stock_refs_config.get("fallback_when_empty", True):

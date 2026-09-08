@@ -15,16 +15,12 @@
 
 from youtube_automation.configuration.community_draft import CommunityDraft
 from youtube_automation.configuration.distrokid import Distrokid
-from youtube_automation.configuration.loader import (
-    channel_dir,
-    load_config,
-    load_schedule_config,
-    reset,
-)
+from youtube_automation.configuration.loader import load_config, load_schedule_config, reset
 from youtube_automation.configuration.model import ChannelConfig
 from youtube_automation.configuration.pinned_comment import PinnedComment
 from youtube_automation.configuration.schedule import ScheduleConfig
 from youtube_automation.configuration.shorts import Shorts
+from youtube_automation.core.channel_context import channel_dir
 
 __all__ = [
     "ChannelConfig",

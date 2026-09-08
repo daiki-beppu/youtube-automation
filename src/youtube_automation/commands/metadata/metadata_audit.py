@@ -25,15 +25,18 @@ import sys
 from pathlib import Path
 
 from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.configuration import channel_dir, load_config
+from youtube_automation.configuration import load_config
 from youtube_automation.configuration.model import ChannelConfig
 from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.documents.video_description import read_video_description_metadata
 from youtube_automation.domains.metadata.descriptions import (
     extract_descriptions_md_section,
 )
+from youtube_automation.domains.metadata.titles import missing_scene_phrase_languages
 from youtube_automation.domains.uploads.preflight import (
     check_chapter_count,
     check_chapter_variation_suffix,
@@ -41,10 +44,8 @@ from youtube_automation.domains.uploads.preflight import (
     check_tags_count,
     check_tags_yt_chars,
     check_title_codepoint_limit,
-    requires_scene_phrases,
 )
 from youtube_automation.infrastructure import cost_tracker
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 from youtube_automation.infrastructure.media.probe import probe_duration
 
 
@@ -115,35 +116,9 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
     title = str(metadata["title"])
     description = str(metadata["description"])
 
-    if msg := check_title_codepoint_limit(title):
-        issues.append(msg)
-    ts_lines = [line for line in description.split("\n") if TS_RE.match(line.strip())]
-    for msg in (
-        check_chapter_count(len(ts_lines), config.audio.chapter_max),
-        check_chapter_variation_suffix(ts_lines),
-    ):
-        if msg:
-            issues.append(msg)
+    issues.extend(_audit_local_description(title, description, config.audio.chapter_max))
 
-    # workflow-state.json は upload preflight と同じく常に parse する。
-    # 単一言語チャンネルでは scene_phrases の完全性チェックだけを不要扱いにする (#1470)。
-    ws = paths.workflow_state_path
-    if ws.exists():
-        try:
-            state = read_workflow_state(ws)
-            scene_phrases = state.scene_phrases or {}
-        except WorkflowStateError as error:
-            issues.append(f"workflow-state.json invalid: {error}")
-        else:
-            if requires_scene_phrases(supported_langs):
-                required = list(dict.fromkeys(supported_langs))
-                missing = [lang for lang in required if not scene_phrases.get(lang)]
-                if missing:
-                    issues.append(
-                        f"workflow-state.scene_phrases missing langs: {missing[:6]}{'…' if len(missing) > 6 else ''}"
-                    )
-    else:
-        issues.append("workflow-state.json missing")
+    issues.extend(_audit_workflow_state(paths.workflow_state_path, supported_langs))
 
     # タグ件数 / quotation 文字数（preflight と同じ JSON 正本）
     tags_value = metadata["tags"]
@@ -155,9 +130,57 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
         if msg:
             issues.append(msg)
 
+    issues.extend(
+        _audit_local_duration(
+            paths, min_minutes=config.audio.target_duration_min, max_minutes=config.audio.target_duration_max
+        )
+    )
+
+    return issues
+
+
+def _audit_local_description(title: str, description: str, chapter_max: int) -> list[str]:
+    """Check the local title and chapter text before workflow and tag diagnostics."""
+    issues: list[str] = []
+    if msg := check_title_codepoint_limit(title):
+        issues.append(msg)
+    ts_lines = [line for line in description.split("\n") if TS_RE.match(line.strip())]
+    for msg in (
+        check_chapter_count(len(ts_lines), chapter_max),
+        check_chapter_variation_suffix(ts_lines),
+    ):
+        if msg:
+            issues.append(msg)
+
+    return issues
+
+
+def _audit_workflow_state(ws: Path, supported_langs: list[str]) -> list[str]:
+    issues: list[str] = []
+    # workflow-state.json は upload preflight と同じく常に parse する。
+    # 単一言語チャンネルでは scene_phrases の完全性チェックだけを不要扱いにする (#1470)。
+    if ws.exists():
+        try:
+            state = read_workflow_state(ws)
+            scene_phrases = state.scene_phrases or {}
+        except WorkflowStateError as error:
+            issues.append(f"workflow-state.json invalid: {error}")
+        else:
+            missing = missing_scene_phrase_languages(scene_phrases, supported_langs)
+            if missing:
+                issues.append(
+                    f"workflow-state.scene_phrases missing langs: {missing[:6]}{'…' if len(missing) > 6 else ''}"
+                )
+    else:
+        issues.append("workflow-state.json missing")
+    return issues
+
+
+def _audit_local_duration(paths: CollectionPaths, *, min_minutes: float | None, max_minutes: float | None) -> list[str]:
+    issues: list[str] = []
     # 動画尺チェック（master mp4 がローカルに残っている場合のみ。
     # /publish --clean 後のコレクションでは skip して偽陽性を防ぐ）
-    if config.audio.target_duration_min is not None or config.audio.target_duration_max is not None:
+    if min_minutes is not None or max_minutes is not None:
         master_video = paths.find_master_video()
         if master_video:
             dur = probe_duration(master_video)
@@ -166,18 +189,17 @@ def audit_local(col: Path, config: ChannelConfig) -> list[str]:
             else:
                 msg = check_duration(
                     dur,
-                    (config.audio.target_duration_min * 60 if config.audio.target_duration_min is not None else None),
-                    (config.audio.target_duration_max * 60 if config.audio.target_duration_max is not None else None),
+                    (min_minutes * 60 if min_minutes is not None else None),
+                    (max_minutes * 60 if max_minutes is not None else None),
                 )
                 if msg:
                     issues.append(msg)
-
     return issues
 
 
 def audit_remote(video_ids: dict[str, str]) -> dict[str, list[str]]:
     """Fetch all videos from YouTube and check live state."""
-    from youtube_automation.infrastructure.google.youtube import create_readonly_youtube_clients
+    from youtube_automation.application.youtube_auth import create_readonly_youtube_clients
 
     yt = create_readonly_youtube_clients().youtube_readonly
     issues: dict[str, list[str]] = {vid: [] for vid in video_ids}
@@ -196,31 +218,39 @@ def audit_remote(video_ids: dict[str, str]) -> dict[str, list[str]]:
         if not item:
             issues[vid].append("not found on YouTube")
             continue
-        snippet = item.get("snippet")
-        if not isinstance(snippet, dict):
-            issues[vid].append("YT snippet missing or not an object")
-            continue
-        title = snippet.get("title", "")
-        desc = snippet.get("description", "")
-        locs = item.get("localizations", {}) or {}
+        issues[vid].extend(_audit_remote_metadata(item, remote_chapter_max))
 
-        if msg := check_title_codepoint_limit(title):
-            issues[vid].append(f"YT {msg}")
-        if "🎧  🌧" in title or "🎧   🌧" in title:
-            issues[vid].append("YT title scene_phrase missing (auto-truncated)")
+    return issues
 
-        ts_lines = [line for line in desc.split("\n") if TS_RE.match(line.strip())]
-        if len(ts_lines) > remote_chapter_max:
-            issues[vid].append(f"YT description has {len(ts_lines)} chapters (>{remote_chapter_max})")
 
-        # ja localized title should contain Japanese characters
-        ja_title = locs.get("ja", {}).get("title", "")
-        if ja_title and not re.search(r"[\u3040-\u30FF\u4E00-\u9FFF]", ja_title):
-            issues[vid].append("ja localized title has no Japanese chars")
+def _audit_remote_metadata(item: dict, remote_chapter_max: int) -> list[str]:
+    """Validate one fetched video's metadata without performing API requests."""
+    issues: list[str] = []
+    snippet = item.get("snippet")
+    if not isinstance(snippet, dict):
+        issues.append("YT snippet missing or not an object")
+        return issues
+    title = snippet.get("title", "")
+    desc = snippet.get("description", "")
+    locs = item.get("localizations", {}) or {}
 
-        zh_codes = sorted(c for c in locs if c.startswith("zh"))
-        if zh_codes and zh_codes != ["zh-CN", "zh-TW"]:
-            issues[vid].append(f"YT zh codes are {zh_codes}, expected ['zh-CN','zh-TW']")
+    if msg := check_title_codepoint_limit(title):
+        issues.append(f"YT {msg}")
+    if "🎧  🌧" in title or "🎧   🌧" in title:
+        issues.append("YT title scene_phrase missing (auto-truncated)")
+
+    ts_lines = [line for line in desc.split("\n") if TS_RE.match(line.strip())]
+    if len(ts_lines) > remote_chapter_max:
+        issues.append(f"YT description has {len(ts_lines)} chapters (>{remote_chapter_max})")
+
+    # ja localized title should contain Japanese characters
+    ja_title = locs.get("ja", {}).get("title", "")
+    if ja_title and not re.search(r"[\u3040-\u30FF\u4E00-\u9FFF]", ja_title):
+        issues.append("ja localized title has no Japanese chars")
+
+    zh_codes = sorted(c for c in locs if c.startswith("zh"))
+    if zh_codes and zh_codes != ["zh-CN", "zh-TW"]:
+        issues.append(f"YT zh codes are {zh_codes}, expected ['zh-CN','zh-TW']")
 
     return issues
 
@@ -271,6 +301,17 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _print_audit_result(label: str, issues: list[str]) -> int:
+    """Print one audit result and return its issue count for the summary."""
+    if issues:
+        print(f"❌ {label}")
+        for issue in issues:
+            print(f"   - {issue}")
+    else:
+        print(f"✅ {label}")
+    return len(issues)
+
+
 def run(args: argparse.Namespace) -> int:
 
     do_local = args.local or not args.remote
@@ -291,13 +332,7 @@ def run(args: argparse.Namespace) -> int:
             if not col.is_dir():
                 continue
             issues = audit_local(col, config)
-            if issues:
-                total_issues += len(issues)
-                print(f"❌ {col.name}")
-                for i in issues:
-                    print(f"   - {i}")
-            else:
-                print(f"✅ {col.name}")
+            total_issues += _print_audit_result(col.name, issues)
         print()
 
     if do_remote:
@@ -309,13 +344,7 @@ def run(args: argparse.Namespace) -> int:
             remote_issues = audit_remote(video_ids)
             for vid, name in video_ids.items():
                 issues = remote_issues.get(vid, [])
-                if issues:
-                    total_issues += len(issues)
-                    print(f"❌ {vid}  {name}")
-                    for i in issues:
-                        print(f"   - {i}")
-                else:
-                    print(f"✅ {vid}  {name}")
+                total_issues += _print_audit_result(f"{vid}  {name}", issues)
         print()
 
     print(f"━━━ {total_issues} issue(s) found ━━━")

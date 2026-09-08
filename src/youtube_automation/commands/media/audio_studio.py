@@ -17,9 +17,9 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from importlib.resources import files
 from importlib.resources.abc import Traversable
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import cast
-from urllib.parse import unquote, urlsplit
+from urllib.parse import urlsplit
 
 from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.commands.media.finalize_master import (
@@ -34,6 +34,7 @@ from youtube_automation.commands.suno.suno_audio_cleanup import (
 )
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.domains.collections.paths import CollectionPaths, resolve_collection_dir
 from youtube_automation.domains.media.audio_adjustments import (
     AudioAdjustments,
     apply_track_order,
@@ -48,6 +49,7 @@ from youtube_automation.domains.media.audio_adjustments import (
 from youtube_automation.domains.media.audio_formats import AUDIO_EXTS
 from youtube_automation.infrastructure.file_lock import file_lock
 from youtube_automation.infrastructure.localserver.app import Request
+from youtube_automation.infrastructure.localserver.assets import serve_spa_asset
 from youtube_automation.infrastructure.localserver.cors import is_origin_allowed
 from youtube_automation.infrastructure.localserver.lifecycle import (
     LifecycleRecord,
@@ -62,7 +64,6 @@ from youtube_automation.infrastructure.localserver.lifecycle import (
     stop_request_path,
     write_pid_file,
 )
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths, resolve_collection_dir
 from youtube_automation.infrastructure.media.probe import probe_duration
 
 DEFAULT_HOST = "127.0.0.1"
@@ -144,6 +145,12 @@ def read_adjustment_route(*, section: AdjustmentSection, document_path: Path) ->
     return section.read(read_audio_adjustments(document_path))
 
 
+def _validate_adjustments_destination(document_path: Path, collection_dir: Path) -> None:
+    """Use one collection-boundary check for settings and track-order writes."""
+    if not document_path.parent.resolve().is_relative_to(collection_dir.resolve()):
+        raise ValidationError("audio-adjustments.json の保存先が collection 外を指しています")
+
+
 def write_adjustment_route(
     request: Request,
     *,
@@ -152,11 +159,22 @@ def write_adjustment_route(
     collection_dir: Path,
 ) -> AudioAdjustments:
     """Socket-free chassis handler shared by settings-based PUT routes."""
-    payload = request.json
+    return _write_adjustment_settings(
+        request.json, section=section, document_path=document_path, collection_dir=collection_dir
+    )
+
+
+def _write_adjustment_settings(
+    payload: object,
+    *,
+    section: AdjustmentSection,
+    document_path: Path,
+    collection_dir: Path,
+) -> AudioAdjustments:
+    """Validate and persist settings independently of the HTTP request envelope."""
     if not isinstance(payload, Mapping) or set(payload) != {"settings"}:
         raise ValidationError("JSON body は settings だけを含む必要があります")
-    if not document_path.parent.resolve().is_relative_to(collection_dir.resolve()):
-        raise ValidationError("audio-adjustments.json の保存先が collection 外を指しています")
+    _validate_adjustments_destination(document_path, collection_dir)
     with file_lock(document_path):
         return section.write(document_path, payload["settings"])
 
@@ -266,34 +284,15 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _resource(self, relative_path: str) -> Traversable | None:
-        pure_path = PurePosixPath(relative_path)
-        if pure_path.is_absolute() or ".." in pure_path.parts:
-            return None
-        resource = self.server.asset_root
-        for part in pure_path.parts:
-            resource = resource.joinpath(part)
-        return resource
-
     def _static(self, path: str) -> None:
-        relative_path = unquote(path).lstrip("/") or "index.html"
-        resource = self._resource(relative_path)
-        if resource is None:
-            self._json(HTTPStatus.NOT_FOUND, {"error": "asset not found"})
-            return
-        if not resource.is_file():
-            resource = self._resource("index.html")
-        if resource is None or not resource.is_file():
-            self._json(HTTPStatus.NOT_FOUND, {"error": "audio studio build asset not found"})
-            return
-        body = resource.read_bytes()
-        content_type, _ = mimetypes.guess_type(str(resource))
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", content_type or "application/octet-stream")
-        self.send_header("Content-Length", str(len(body)))
-        self._common_headers()
-        self.end_headers()
-        self.wfile.write(body)
+        serve_spa_asset(
+            self,
+            self.server.asset_root,
+            path,
+            on_invalid_path=lambda: self._json(HTTPStatus.NOT_FOUND, {"error": "asset not found"}),
+            on_missing_build=lambda: self._json(HTTPStatus.NOT_FOUND, {"error": "audio studio build asset not found"}),
+            send_headers=self._common_headers,
+        )
 
     def _audio(self, path: Path) -> None:
         size = path.stat().st_size
@@ -379,24 +378,12 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
 
     def _write_section(self, section: AdjustmentSection) -> AudioAdjustments:
         payload = self._read_json_body()
-        request = Request(
-            method="PUT",
-            path=urlsplit(self.path).path,
-            query={},
-            headers={key: value for key, value in self.headers.items()},
-            json=payload,
-        )
-        return write_adjustment_route(
-            request,
+        return _write_adjustment_settings(
+            payload,
             section=section,
             document_path=self.server.audio_adjustments_path,
             collection_dir=self.server.collection_dir,
         )
-
-    def _validate_adjustments_destination(self) -> None:
-        collection_root = self.server.collection_dir.resolve()
-        if not self.server.audio_adjustments_path.parent.resolve().is_relative_to(collection_root):
-            raise ValidationError("audio-adjustments.json の保存先が collection 外を指しています")
 
     def _order_payload(self) -> dict[str, object]:
         document = read_audio_adjustments(self.server.audio_adjustments_path)
@@ -413,7 +400,7 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
         payload = self._read_json_body()
         if set(payload) != {"order", "shuffle_seed", "pin_first"}:
             raise ValidationError("JSON body は order / shuffle_seed / pin_first だけを含む必要があります")
-        self._validate_adjustments_destination()
+        _validate_adjustments_destination(self.server.audio_adjustments_path, self.server.collection_dir)
         expected = {path.name for path in self.server.track_files.values()}
         raw_order = payload["order"]
         if not isinstance(raw_order, list) or any(not isinstance(item, str) for item in raw_order):
@@ -498,6 +485,18 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
         self._write_section(adjustment_sections()["finalize"])
         self._json(HTTPStatus.OK, self._finalize_payload())
 
+    def _dispatch_track_route(self, path: str, pattern: re.Pattern[str], action: Callable[[Path], None]) -> bool:
+        """Handle a matching track route, including its missing/unsafe-file response."""
+        match = pattern.fullmatch(path)
+        if match is None:
+            return False
+        track = self.server.track_files.get(match.group("track_id"))
+        if track is None or not track.is_file() or track.is_symlink():
+            self._json(HTTPStatus.NOT_FOUND, {"error": "track not found"})
+        else:
+            action(track)
+        return True
+
     def do_GET(self) -> None:
         path = urlsplit(self.path).path
         if path.startswith("/api/") and not self._cors_allowed():
@@ -506,11 +505,13 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
         if path == TRACKS_ROUTE:
             self._json(HTTPStatus.OK, self.server.track_payload)
             return
-        if path == ORDER_ROUTE:
-            self._invoke(lambda: self._send_payload(self._order_payload))
-            return
-        if path == MASTER_ADJUSTMENTS_ROUTE:
-            self._invoke(lambda: self._send_payload(self._master_payload))
+        payloads = {
+            ORDER_ROUTE: self._order_payload,
+            MASTER_ADJUSTMENTS_ROUTE: self._master_payload,
+            FINALIZE_ADJUSTMENTS_ROUTE: self._finalize_payload,
+        }
+        if (payload := payloads.get(path)) is not None:
+            self._invoke(lambda: self._send_payload(payload))
             return
         if path == MASTER_AUDIO_ROUTE:
             master = self.server.master_audio_path
@@ -519,24 +520,13 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
                 return
             self._audio(master)
             return
-        if path == FINALIZE_ADJUSTMENTS_ROUTE:
-            self._invoke(lambda: self._send_payload(self._finalize_payload))
+        if self._dispatch_track_route(path, _TRACK_AUDIO_PATTERN, self._audio):
             return
-        match = _TRACK_AUDIO_PATTERN.fullmatch(path)
-        if match is not None:
-            track = self.server.track_files.get(match.group("track_id"))
-            if track is None or not track.is_file() or track.is_symlink():
-                self._json(HTTPStatus.NOT_FOUND, {"error": "track not found"})
-                return
-            self._audio(track)
-            return
-        adjustment_match = _TRACK_ADJUSTMENTS_PATTERN.fullmatch(path)
-        if adjustment_match is not None:
-            track = self.server.track_files.get(adjustment_match.group("track_id"))
-            if track is None or not track.is_file() or track.is_symlink():
-                self._json(HTTPStatus.NOT_FOUND, {"error": "track not found"})
-                return
-            self._invoke(lambda: self._json(HTTPStatus.OK, self._adjustments_payload(track)))
+        if self._dispatch_track_route(
+            path,
+            _TRACK_ADJUSTMENTS_PATTERN,
+            lambda track: self._invoke(lambda: self._json(HTTPStatus.OK, self._adjustments_payload(track))),
+        ):
             return
         if path.startswith("/api/"):
             self._json(HTTPStatus.NOT_FOUND, {"error": "API path not found"})
@@ -548,37 +538,30 @@ class AudioStudioRequestHandler(BaseHTTPRequestHandler):
         if not self._cors_allowed():
             self._json(HTTPStatus.FORBIDDEN, {"error": "origin not allowed"})
             return
-        if path == ORDER_ROUTE:
-            self._invoke(self._put_order)
+        actions = {
+            ORDER_ROUTE: self._put_order,
+            MASTER_ADJUSTMENTS_ROUTE: self._put_master_adjustments,
+            FINALIZE_ADJUSTMENTS_ROUTE: self._put_finalize_adjustments,
+        }
+        if (action := actions.get(path)) is not None:
+            self._invoke(action)
             return
-        if path == MASTER_ADJUSTMENTS_ROUTE:
-            self._invoke(self._put_master_adjustments)
-            return
-        if path == FINALIZE_ADJUSTMENTS_ROUTE:
-            self._invoke(self._put_finalize_adjustments)
-            return
-        match = _TRACK_ADJUSTMENTS_PATTERN.fullmatch(path)
-        if match is None:
+        if not self._dispatch_track_route(
+            path, _TRACK_ADJUSTMENTS_PATTERN, lambda track: self._invoke(lambda: self._put_adjustments(track))
+        ):
             self._json(HTTPStatus.NOT_FOUND, {"error": "API path not found"})
-            return
-        track = self.server.track_files.get(match.group("track_id"))
-        if track is None or not track.is_file() or track.is_symlink():
-            self._json(HTTPStatus.NOT_FOUND, {"error": "track not found"})
-            return
-        self._invoke(lambda: self._put_adjustments(track))
 
     def do_POST(self) -> None:
         path = urlsplit(self.path).path
         if not self._cors_allowed():
             self._json(HTTPStatus.FORBIDDEN, {"error": "origin not allowed"})
             return
-        if path == MASTER_APPLY_ROUTE:
-            self._invoke(self._apply_master)
-            return
-        if path != FINALIZE_APPLY_ROUTE:
+        actions = {MASTER_APPLY_ROUTE: self._apply_master, FINALIZE_APPLY_ROUTE: self._apply_finalize}
+        action = actions.get(path)
+        if action is None:
             self._json(HTTPStatus.NOT_FOUND, {"error": "API path not found"})
             return
-        self._invoke(self._apply_finalize)
+        self._invoke(action)
 
     def _apply_master(self) -> None:
         adjust_master(self.server.collection_dir, quiet=True)

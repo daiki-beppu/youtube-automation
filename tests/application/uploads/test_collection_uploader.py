@@ -1,0 +1,1695 @@
+"""
+CollectionUploader のユニットテスト
+
+テスト対象: agents/collection_uploader.py
+
+#77 回帰テスト: playlist assignment の import パス誤りで
+プレイリスト自動追加が常時失敗していたバグを検出するためのテスト。
+"""
+
+import json
+import logging
+import shutil
+import sys
+from dataclasses import replace
+from datetime import datetime, timedelta
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
+
+import pytest
+from googleapiclient.errors import HttpError
+from httplib2 import Response
+
+from tests.helpers.paths import FIXTURES_DIR, REPO_ROOT
+from tests.helpers.video_description import write_video_description_pair
+from youtube_automation.application.uploads.collection import PlaylistAssignment, PublishedDatesScheduler, TrackingStore
+from youtube_automation.configuration import ScheduleConfig
+
+sys.path.insert(0, str(REPO_ROOT))
+
+
+def test_corrupt_journal_never_falls_through_to_fresh_upload_or_dedup(tmp_path: Path) -> None:
+    col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+    tracking_path.write_text("{truncated", encoding="utf-8")
+    uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+
+    result = uploader.execute_next_step(col)
+
+    assert result["action"] == "complete_collection_failed"
+    assert result["details"]["error"] == "upload journal is corrupt"
+    mock_inner.upload_collection.assert_not_called()
+    assert tracking_path.with_suffix(".json.corrupt").is_file()
+
+
+# ---------------------------------------------------------------------------
+# import smoke test (#77)
+# ---------------------------------------------------------------------------
+
+
+def test_collection_uploader_imports_playlist_manager():
+    """collection_uploader は PlaylistManager を正しいパスから import できる。
+
+    #77 の回帰防止: 誤った `from playlist_manager import PlaylistManager` が
+    残っているとモジュールロード時点で ImportError になる。
+    """
+    from youtube_automation.domains.uploads.playlists import PlaylistManager
+
+    assert PlaylistManager.__module__ == "youtube_automation.domains.uploads.playlists"
+
+
+@pytest.mark.parametrize(
+    ("argv", "method_name", "preflight_calls"),
+    [
+        # show_plan は表示専用なので CLI が upload 境界の preflight を明示的に依頼する。
+        (["--plan"], "show_plan", 1),
+        # execute 経路は upload_collection 内部で preflight が走るため CLI からは呼ばない。
+        ([], "execute_next_step", 0),
+    ],
+)
+def test_main_delegates_preflight_to_upload_boundary(monkeypatch, tmp_path, argv, method_name, preflight_calls):
+    """CLI は preflight を重複実行せず upload 境界へ委譲する。"""
+    from youtube_automation.commands.uploads import collection_uploader
+
+    target = tmp_path / "collections" / "planning" / "20990101-test-collection"
+    target.mkdir(parents=True)
+    mock_config = MagicMock()
+    mock_config.meta.channel_short = "test"
+    mock_uploader = MagicMock()
+    mock_uploader.find_collection.return_value = target
+
+    monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv])
+    with (
+        patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=mock_uploader),
+    ):
+        collection_uploader.main()
+
+    assert mock_uploader.preflight_check.call_count == preflight_calls
+    getattr(mock_uploader, method_name).assert_called_once_with(target)
+
+
+def test_main_exits_before_state_changes_when_channel_identity_preflight_fails(monkeypatch, tmp_path):
+    """認証チャンネル不一致時は orchestration を開始せず非ゼロ終了する。"""
+    from youtube_automation.commands.uploads import collection_uploader
+    from youtube_automation.core.errors import ConfigError
+
+    target = tmp_path / "collections" / "planning" / "20990101-test-collection"
+    target.mkdir(parents=True)
+    mock_uploader = MagicMock()
+    mock_uploader.find_collection.return_value = target
+    mock_uploader.execute_next_step.side_effect = ConfigError("channel_id mismatch")
+
+    monkeypatch.setattr(sys, "argv", ["yt-upload-collection", "-c", target.name])
+    with patch(
+        "youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=mock_uploader
+    ):
+        assert collection_uploader.main() == 1
+
+    mock_uploader.execute_next_step.assert_called_once_with(target)
+    mock_uploader.show_plan.assert_not_called()
+    mock_uploader.show_status.assert_not_called()
+
+
+def test_collection_cli_returns_nonzero_when_playlist_assignment_fails(monkeypatch, tmp_path):
+    """post-upload playlist 失敗は CLI の非ゼロ終了へ伝播する。"""
+    from youtube_automation.commands.uploads import collection_uploader
+    from youtube_automation.core.errors import YouTubeAPIError
+
+    target = tmp_path / "collections" / "planning" / "20990101-test-collection"
+    target.mkdir(parents=True)
+    uploader = MagicMock()
+    uploader.find_collection.return_value = target
+    uploader.execute_next_step.side_effect = YouTubeAPIError("playlistItems.insert failed", status_code=403)
+
+    monkeypatch.setattr(sys, "argv", ["yt-upload-collection", "-c", target.name])
+    with patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=uploader):
+        assert collection_uploader.main() == 1
+
+
+def test_collection_preflight_uses_public_inner_uploader_operation(tmp_path):
+    """Collection domain は検査を再実装せず upload 境界の preflight へ委譲する。"""
+    from youtube_automation.application.uploads import collection as collection_domain
+
+    uploader = object.__new__(collection_domain.CollectionUploader)
+    uploader.uploader = MagicMock()
+    target = tmp_path / "collection"
+
+    uploader.preflight_check(target)
+
+    uploader.uploader.preflight_check.assert_called_once_with(target)
+
+
+def _write_cli_title_collection(channel_dir: Path, *, title_template_check: dict[str, object] | None) -> Path:
+    """CLI が実際に解決する planning コレクションを作る。"""
+    collection = channel_dir / "collections" / "planning" / "20990101-volume-collection"
+    for subdir in ("01-master", "02-Individual-music", "03-Individual-movie", "10-assets", "20-documentation"):
+        (collection / subdir).mkdir(parents=True, exist_ok=True)
+    (collection / "01-master" / "master.mp4").write_bytes(b"probe is mocked")
+    write_video_description_pair(
+        collection / "20-documentation",
+        title="Funky Soul Spirit Vol.2 | 3 Hours of Feel-Good Retro Grooves",
+        description="00:00 Opening Groove\n10:00 Midnight Funk\n20:00 Last Call Soul",
+        tags=["soul funk", "retro groove", "study music"],
+    )
+    state: dict[str, object] = {"scene_phrases": {lang: {"title": f"title-{lang}"} for lang in ("ja", "en", "de")}}
+    if title_template_check is not None:
+        state["title_template_check"] = title_template_check
+    (collection / "workflow-state.json").write_text(json.dumps(state), encoding="utf-8")
+    return collection
+
+
+def _title_preflight_config() -> SimpleNamespace:
+    return SimpleNamespace(
+        audio=SimpleNamespace(chapter_max=100),
+        content=SimpleNamespace(
+            tags=SimpleNamespace(min_count=None, for_collection=lambda _name: ["fallback"]),
+            title=SimpleNamespace(
+                template="{adjective} Soul/Funk {noun} | {hours} Hours of {mood}",
+                template_check={"core_vocabulary": ["Soul", "Funk"]},
+            ),
+        ),
+        localizations=SimpleNamespace(supported_languages=["ja", "en", "de"]),
+        # 分類プレイリスト（auto_add 以外）を持たないチャンネル → 未割り当て検出は対象外 (#4346)
+        playlists=SimpleNamespace(items={}),
+    )
+
+
+@pytest.mark.parametrize(
+    ("title_template_check", "expected_outcome"),
+    [({"allow_volume_patterns": True}, "pass"), (None, "fail")],
+)
+def test_plan_title_preflight_honors_collection_opt_in(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    title_template_check: dict[str, object] | None,
+    expected_outcome: str,
+) -> None:
+    """`--plan` も state の title opt-in を実際に評価する（素通ししない）。
+
+    execute 経路の同一検査は `upload_collection` 内部で担保されている
+    （`test_youtube_auto_uploader.py::...forwards_resume_kwargs...`）。
+    """
+    from youtube_automation.application.uploads.collection import CollectionUploader
+    from youtube_automation.commands.uploads import collection_uploader
+    from youtube_automation.configuration import reset as reset_config
+
+    fixture_channel = FIXTURES_DIR / "sample_channel"
+    test_channel = tmp_path / "channel"
+    shutil.copytree(fixture_channel, test_channel)
+    collection = _write_cli_title_collection(test_channel, title_template_check=title_template_check)
+
+    monkeypatch.setenv("CHANNEL_DIR", str(test_channel))
+    monkeypatch.setattr(sys, "argv", ["yt-upload-collection", "--plan", "-c", collection.name])
+    reset_config()
+
+    with (
+        patch("youtube_automation.application.uploads.preflight.load_config", return_value=_title_preflight_config()),
+        patch("youtube_automation.application.uploads.preflight.probe_duration", return_value=3600),
+        patch(
+            "youtube_automation.application.uploads.youtube.YouTubeAutoUploader._verify_authenticated_upload_channel"
+        ),
+        patch.object(CollectionUploader, "show_plan") as mock_show_plan,
+    ):
+        if expected_outcome == "pass":
+            assert collection_uploader.main() == 0
+            mock_show_plan.assert_called_once_with(collection)
+        else:
+            assert collection_uploader.main() == 1
+            assert "巻数表記を検出" in capsys.readouterr().err
+            mock_show_plan.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# PlaylistAssignment.assign
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def workflow_state_file(tmp_path):
+    """workflow-state.json を含むコレクションディレクトリを返す"""
+    ws_path = tmp_path / "workflow-state.json"
+    ws_path.write_text(json.dumps({"theme": "Rainy Jazz"}), encoding="utf-8")
+    return tmp_path
+
+
+def test_assign_to_playlists_calls_playlist_manager(workflow_state_file):
+    """`PlaylistAssignment.assign` が PlaylistManager.assign_video を theme 付きで呼ぶ。
+
+    #77 の回帰防止: import パスが正しくなければ以前は ImportError が warning に
+    握り潰されて何も呼ばれなかった。
+    """
+    from youtube_automation.infrastructure.google.youtube import YouTubeClients
+
+    mock_config = MagicMock()
+    mock_config.playlists.items = {"all": {"title": "All", "playlist_id": "PL_ALL"}}
+
+    mock_pm_instance = MagicMock()
+    mock_pm_instance.assign_video.return_value = ["all"]
+
+    clients = YouTubeClients(full_handler=MagicMock())
+    assignment = PlaylistAssignment(clients, config=mock_config, playlist_manager=mock_pm_instance)
+
+    assignment.assign("VIDEO_ID_123", workflow_state_file)
+
+    mock_pm_instance.assign_video.assert_called_once_with(
+        "VIDEO_ID_123", "Rainy Jazz", collection_path=workflow_state_file
+    )
+
+
+def test_assign_to_playlists_propagates_playlist_api_failure(workflow_state_file):
+    """post-upload の playlist API 失敗を workflow 呼び出し元へ伝播する。"""
+    from youtube_automation.core.errors import YouTubeAPIError
+
+    mock_config = MagicMock()
+    mock_config.playlists.items = {"all": {"title": "All", "playlist_id": "PL_ALL"}}
+    failure = YouTubeAPIError("playlistItems.insert failed", status_code=403)
+
+    playlist_manager = MagicMock()
+    playlist_manager.assign_video.side_effect = failure
+    assignment = PlaylistAssignment(MagicMock(), config=mock_config, playlist_manager=playlist_manager)
+
+    with pytest.raises(YouTubeAPIError, match="playlistItems.insert failed"):
+        assignment.assign("VIDEO_ID_123", workflow_state_file)
+
+
+def test_assign_to_playlists_skips_when_no_theme(tmp_path):
+    """theme が空なら PlaylistManager を呼ばずに return する"""
+    ws_path = tmp_path / "workflow-state.json"
+    ws_path.write_text(json.dumps({"theme": ""}), encoding="utf-8")
+
+    mock_config = MagicMock()
+    playlist_manager = MagicMock()
+    assignment = PlaylistAssignment(MagicMock(), config=mock_config, playlist_manager=playlist_manager)
+
+    assignment.assign("VIDEO_ID_123", tmp_path)
+
+    playlist_manager.assign_video.assert_not_called()
+
+
+def test_assign_to_playlists_skips_when_no_workflow_state(tmp_path):
+    """workflow-state.json がなければ何もしない"""
+    mock_config = MagicMock()
+    playlist_manager = MagicMock()
+    assignment = PlaylistAssignment(MagicMock(), config=mock_config, playlist_manager=playlist_manager)
+
+    assignment.assign("VIDEO_ID_123", tmp_path)
+
+    playlist_manager.assign_video.assert_not_called()
+
+
+def test_assign_to_playlists_skips_when_workflow_state_is_malformed(tmp_path, caplog):
+    (tmp_path / "workflow-state.json").write_text("{broken", encoding="utf-8")
+    playlist_manager = MagicMock()
+    assignment = PlaylistAssignment(MagicMock(), config=MagicMock(), playlist_manager=playlist_manager)
+
+    assignment.assign("VIDEO_ID_123", tmp_path)
+
+    assert "workflow-state.json 読み込み失敗" in caplog.text
+    playlist_manager.assign_video.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# CompleteCollectionExecutor.run: resumable upload session URI 連携 (issue #381)
+# ---------------------------------------------------------------------------
+
+
+_SESS_PREV = "https://upload.googleapis.com/SESS_PREV"
+_SESS_NEW = "https://upload.googleapis.com/SESS_NEW"
+
+
+def _move_then_raise_permission_error(source: Path, destination: Path) -> None:
+    source.rename(destination)
+    raise PermissionError(5, "Access is denied", str(source), str(destination))
+
+
+def _make_tracking_collection(
+    tmp_path: Path,
+    *,
+    resume_uri: str | None = None,
+    cc_status: str = "pending",
+    extra_cc: dict | None = None,
+) -> tuple[Path, Path]:
+    """tracking JSON 入りコレクションディレクトリを作って (collection_path, tracking_path) を返す."""
+    col = tmp_path / "collections" / "planning" / "20990101-foo-collection"
+    col.mkdir(parents=True)
+    (col / "01-master").mkdir()
+    doc = col / "20-documentation"
+    doc.mkdir()
+    (col / "workflow-state.json").write_text(
+        json.dumps(
+            {
+                "collection_name": col.name,
+                "theme": "",
+                "stage": "planning",
+                "phase": "publishing",
+                "upload": {"video_id": None, "video_url": None, "publish_at": None},
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    cc: dict = {"status": cc_status}
+    if resume_uri is not None:
+        cc["resume_session_uri"] = resume_uri
+    if extra_cc:
+        cc.update(extra_cc)
+
+    tracking = {
+        "schema_version": 3,
+        "collection_name": col.name,
+        "status": "in_progress",
+        "complete_collection": cc,
+    }
+    tracking_path = doc / "upload_tracking.json"
+    tracking_path.write_text(json.dumps(tracking, ensure_ascii=False, indent=2), encoding="utf-8")
+    return col, tracking_path
+
+
+def _make_uploader_with_collection_mock(tmp_path: Path):
+    """CollectionUploader を構築し、内部の self.uploader を MagicMock に差し替える."""
+    from youtube_automation.application.uploads.collection import CollectionUploader
+
+    with patch("youtube_automation.application.uploads.collection.YouTubeAutoUploader") as mock_cls:
+        mock_inner = MagicMock()
+        mock_cls.return_value = mock_inner
+        uploader = CollectionUploader(collections_root=str(tmp_path / "collections"))
+        # auto_move_to_live を無効化してパス変動を防ぐ
+        uploader._apply_config(replace(uploader.config, auto_move_to_live=False))
+        return uploader, mock_inner
+
+
+def test_collection_uploader_accepts_injected_tracking_store(tmp_path: Path) -> None:
+    from youtube_automation.application.uploads.collection import CollectionUploader
+
+    store = MagicMock(spec=TrackingStore)
+
+    with patch("youtube_automation.application.uploads.collection.YouTubeAutoUploader"):
+        uploader = CollectionUploader(
+            collections_root=str(tmp_path / "collections"),
+            config_path=str(tmp_path / "schedule_config.json"),
+            tracking_store=store,
+        )
+
+    assert uploader.tracking_store is store
+
+
+def test_collection_uploader_forwards_duration_override_to_preflight_checker(tmp_path: Path) -> None:
+    from youtube_automation.application.uploads.collection import CollectionUploader
+
+    # Given/When: operator の目標尺外 opt-in 付きで uploader を構築する
+    uploader = CollectionUploader(
+        collections_root=str(tmp_path / "collections"),
+        config_path=str(tmp_path / "schedule_config.json"),
+        allow_duration_outside_target=True,
+    )
+
+    # Then: 実アップロード前に使う checker が同じ opt-in を保持する
+    assert uploader.uploader.preflight_checker.allow_duration_outside_target is True
+
+
+def test_collection_uploader_accepts_injected_published_dates(tmp_path: Path) -> None:
+    from youtube_automation.application.uploads.collection import CollectionUploader
+
+    published_dates = MagicMock(spec=PublishedDatesScheduler)
+
+    with patch("youtube_automation.application.uploads.collection.YouTubeAutoUploader"):
+        uploader = CollectionUploader(
+            collections_root=str(tmp_path / "collections"),
+            config_path=str(tmp_path / "schedule_config.json"),
+            published_dates=published_dates,
+        )
+
+    assert uploader.published_dates is published_dates
+
+
+def test_collection_uploader_accepts_injected_playlist_assignment(tmp_path: Path) -> None:
+    from youtube_automation.application.uploads.collection import CollectionUploader
+
+    playlist_assignment = MagicMock(spec=PlaylistAssignment)
+
+    with patch("youtube_automation.application.uploads.collection.YouTubeAutoUploader"):
+        uploader = CollectionUploader(
+            collections_root=str(tmp_path / "collections"),
+            config_path=str(tmp_path / "schedule_config.json"),
+            playlist_assignment=playlist_assignment,
+        )
+
+    assert uploader.playlist_assignment is playlist_assignment
+
+
+def test_collection_uploader_exposes_injected_complete_collection_executor(tmp_path: Path) -> None:
+    from youtube_automation.application.uploads.collection import CollectionUploader
+
+    executor = MagicMock()
+    uploader = CollectionUploader(collections_root=str(tmp_path), complete_collection_executor=executor)
+
+    assert uploader.complete_collection_executor is executor
+
+
+def test_execute_next_step_delegates_complete_collection_to_executor(tmp_path: Path) -> None:
+    """未アップロードの collection は executor へ publish_at 付きで委譲される。"""
+    from youtube_automation.application.uploads.collection import CollectionUploader
+
+    executor = MagicMock()
+    executor.run.return_value = {"action": "delegated"}
+    tracking = {"status": "pending", "complete_collection": {"status": "pending"}}
+    tracking_store = MagicMock(spec=TrackingStore)
+    tracking_store.load.return_value = tracking
+    published_dates = MagicMock(spec=PublishedDatesScheduler)
+    published_dates.calculate_publish_at.return_value = "2099-01-01T20:00:00+09:00"
+
+    collection = tmp_path / "collection"
+    collection.mkdir()
+    uploader = CollectionUploader(
+        collections_root=str(tmp_path),
+        complete_collection_executor=executor,
+        tracking_store=tracking_store,
+        published_dates=published_dates,
+    )
+
+    assert uploader.execute_next_step(collection) == {"action": "delegated"}
+    executor.run.assert_called_once_with(collection, tracking, "2099-01-01T20:00:00+09:00")
+
+
+def test_collection_uploader_delegates_publish_date_calculation(tmp_path: Path) -> None:
+    from youtube_automation.application.uploads.collection import CollectionUploader
+
+    published_dates = MagicMock(spec=PublishedDatesScheduler)
+    published_dates.calculate_publish_at.return_value = "2099-01-01T20:00:00+09:00"
+
+    with patch("youtube_automation.application.uploads.collection.YouTubeAutoUploader"):
+        uploader = CollectionUploader(
+            collections_root=str(tmp_path / "collections"),
+            config_path=str(tmp_path / "schedule_config.json"),
+            published_dates=published_dates,
+        )
+
+    uploader.show_plan(tmp_path / "collection")
+
+    published_dates.calculate_publish_at.assert_called_once_with()
+
+
+def test_should_report_live_path_when_rename_raises_after_move_completed(tmp_path: Path, caplog) -> None:
+    from youtube_automation.application.uploads.collection import CollectionUploader
+
+    # Given: Windows が rename 完了後にアクセス拒否を返す状態
+    collections_root = tmp_path / "collections"
+    collection = collections_root / "planning" / "20990101-test-collection"
+    collection.mkdir(parents=True)
+    uploader = CollectionUploader(collections_root=str(collections_root))
+
+    # When: live 移動の rename がエラーを返す
+    with (
+        patch(
+            "youtube_automation.application.uploads.collection.rename_path",
+            side_effect=_move_then_raise_permission_error,
+        ),
+        caplog.at_level(logging.INFO, logger="youtube_automation.domains.uploads.collection"),
+    ):
+        result = uploader._move_collection_to_live(collection)
+
+    # Then: 実ファイル状態を正として移動成功を返し、誤警告を出さない
+    live_collection = collections_root / "live" / collection.name
+    move_warnings = [
+        record
+        for record in caplog.records
+        if record.name == "youtube_automation.domains.uploads.collection"
+        and record.levelno >= logging.WARNING
+        and "コレクション移動エラー" in record.getMessage()
+    ]
+    assert result == live_collection
+    assert live_collection.is_dir()
+    assert not collection.exists()
+    assert move_warnings == []
+
+
+def test_should_report_move_error_when_rename_fails_before_state_changes(tmp_path: Path, caplog) -> None:
+    from youtube_automation.application.uploads.collection import CollectionUploader
+
+    # Given: planning 側に残ったまま rename が失敗する状態
+    collections_root = tmp_path / "collections"
+    collection = collections_root / "planning" / "20990101-test-collection"
+    collection.mkdir(parents=True)
+    uploader = CollectionUploader(collections_root=str(collections_root))
+
+    # When: live 移動がファイル状態を変えずに失敗する
+    with (
+        patch(
+            "youtube_automation.application.uploads.collection.rename_path",
+            side_effect=PermissionError(5, "Access is denied", str(collection)),
+        ),
+        caplog.at_level(logging.WARNING, logger="youtube_automation.domains.uploads.collection"),
+    ):
+        result = uploader._move_collection_to_live(collection)
+
+    # Then: planning パスを維持し、実際の失敗だけを警告する
+    assert result == collection
+    assert collection.is_dir()
+    assert not (collections_root / "live" / collection.name).exists()
+    assert any(
+        record.name == "youtube_automation.domains.uploads.collection"
+        and record.levelno == logging.WARNING
+        and "コレクション移動エラー" in record.getMessage()
+        for record in caplog.records
+    )
+
+
+def _make_uploader_with_schedule_config(tmp_path: Path, schedule_config: dict):
+    """schedule_config.json を指定して CollectionUploader を構築する."""
+    from youtube_automation.application.uploads.collection import CollectionUploader
+
+    config_path = tmp_path / "config" / "schedule_config.json"
+    config_path.parent.mkdir(exist_ok=True)
+    config_path.write_text(json.dumps(schedule_config), encoding="utf-8")
+
+    with patch("youtube_automation.application.uploads.collection.YouTubeAutoUploader") as mock_cls:
+        mock_inner = MagicMock()
+        mock_cls.return_value = mock_inner
+        uploader = CollectionUploader(
+            collections_root=str(tmp_path / "collections"),
+            config_path=str(config_path),
+        )
+        uploader._apply_config(replace(uploader.config, auto_move_to_live=False))
+        return uploader, mock_inner
+
+
+def _read_resume_uri(tracking_path: Path) -> str | None:
+    data = json.loads(tracking_path.read_text(encoding="utf-8"))
+    return data.get("complete_collection", {}).get("resume_session_uri")
+
+
+def _write_workflow_state(collection: Path, *, phase: str, video_id: str | None) -> None:
+    collection.mkdir(parents=True)
+    (collection / "workflow-state.json").write_text(
+        json.dumps({"phase": phase, "upload": {"video_id": video_id}}), encoding="utf-8"
+    )
+
+
+class TestAutoDetectCollection:
+    def test_auto_detect_selects_only_unpublished_mastered_planning_collection(self, tmp_path):
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        live = tmp_path / "collections" / "live" / "20260101-published-collection"
+        target = tmp_path / "collections" / "planning" / "20260201-mastered-collection"
+        _write_workflow_state(live, phase="complete", video_id="published-video")
+        _write_workflow_state(target, phase="mastered", video_id=None)
+
+        assert uploader.find_collection() == target
+
+    def test_auto_detect_fails_when_no_unpublished_mastered_planning_collection(self, tmp_path):
+        from youtube_automation.core.errors import ValidationError
+
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        _write_workflow_state(
+            tmp_path / "collections" / "live" / "20260101-published-collection",
+            phase="complete",
+            video_id="published-video",
+        )
+        _write_workflow_state(
+            tmp_path / "collections" / "planning" / "20260201-uploaded-collection",
+            phase="mastered",
+            video_id="already-uploaded",
+        )
+
+        with pytest.raises(ValidationError, match="自動選択できる対象コレクションがありません"):
+            uploader.find_collection()
+
+    def test_auto_detect_fails_when_video_id_is_missing(self, tmp_path):
+        from youtube_automation.core.errors import ValidationError
+
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        collection = tmp_path / "collections" / "planning" / "20260201-incomplete-collection"
+        collection.mkdir(parents=True)
+        (collection / "workflow-state.json").write_text(
+            json.dumps({"phase": "mastered", "upload": {}}), encoding="utf-8"
+        )
+
+        with pytest.raises(ValidationError, match="自動選択できる対象コレクションがありません"):
+            uploader.find_collection()
+
+    def test_auto_detect_fails_when_multiple_unpublished_mastered_planning_collections(self, tmp_path):
+        from youtube_automation.core.errors import ValidationError
+
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        _write_workflow_state(
+            tmp_path / "collections" / "planning" / "20260201-first-collection", phase="mastered", video_id=None
+        )
+        _write_workflow_state(
+            tmp_path / "collections" / "planning" / "20260202-second-collection", phase="mastered", video_id=None
+        )
+
+        with pytest.raises(ValidationError, match="-c で対象を明示してください"):
+            uploader.find_collection()
+
+    def test_explicit_collection_name_can_still_select_live_collection(self, tmp_path):
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        live = tmp_path / "collections" / "live" / "20260101-published-collection"
+        _write_workflow_state(live, phase="complete", video_id="published-video")
+
+        assert uploader.find_collection("published") == live
+
+    @pytest.mark.parametrize(
+        ("argv", "method_name", "preflight_calls"),
+        [
+            (["--status"], "show_status", 0),
+            (["--plan"], "show_plan", 1),
+            ([], "execute_next_step", 0),
+        ],
+    )
+    def test_main_uses_safe_auto_detect_for_status_plan_and_upload(
+        self, monkeypatch, tmp_path, argv, method_name, preflight_calls
+    ):
+        from youtube_automation.commands.uploads import collection_uploader
+
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        live = tmp_path / "collections" / "live" / "20260101-published-collection"
+        target = tmp_path / "collections" / "planning" / "20260201-mastered-collection"
+        _write_workflow_state(live, phase="complete", video_id="published-video")
+        _write_workflow_state(target, phase="mastered", video_id=None)
+        method = MagicMock()
+        monkeypatch.setattr(uploader, method_name, method)
+        mock_config = MagicMock()
+        mock_config.meta.channel_short = "test"
+
+        monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv])
+        with patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=uploader):
+            collection_uploader.main()
+
+        method.assert_called_once_with(target)
+        assert mock_inner.preflight_check.call_count == preflight_calls
+
+    @pytest.mark.parametrize("argv", [["--status"], ["--plan"], []])
+    def test_main_fails_loudly_when_auto_detect_has_no_candidate(self, monkeypatch, tmp_path, capsys, argv):
+        from youtube_automation.commands.uploads import collection_uploader
+
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        mock_config = MagicMock()
+        mock_config.meta.channel_short = "test"
+        monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv])
+
+        with patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=uploader):
+            exit_code = collection_uploader.main()
+
+        assert exit_code == 1
+        assert "-c で対象を明示してください" in capsys.readouterr().err
+
+    @pytest.mark.parametrize(
+        ("argv", "method_name"),
+        [(["--status"], "show_status"), (["--plan"], "show_plan"), ([], "execute_next_step")],
+    )
+    def test_main_fails_loudly_when_auto_detect_is_ambiguous(self, monkeypatch, tmp_path, capsys, argv, method_name):
+        from youtube_automation.commands.uploads import collection_uploader
+
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        _write_workflow_state(
+            tmp_path / "collections" / "planning" / "20260201-first-collection", phase="mastered", video_id=None
+        )
+        _write_workflow_state(
+            tmp_path / "collections" / "planning" / "20260202-second-collection", phase="mastered", video_id=None
+        )
+        mock_config = MagicMock()
+        mock_config.meta.channel_short = "test"
+        method = MagicMock()
+        monkeypatch.setattr(uploader, method_name, method)
+        monkeypatch.setattr(sys, "argv", ["yt-upload-collection", *argv])
+
+        with (
+            patch("youtube_automation.commands.uploads.collection_uploader.CollectionUploader", return_value=uploader),
+            patch("youtube_automation.domains.uploads.preflight.ensure_collection_preflight") as mock_preflight,
+        ):
+            exit_code = collection_uploader.main()
+
+        assert exit_code == 1
+        assert "-c で対象を明示してください" in capsys.readouterr().err
+        mock_preflight.assert_not_called()
+        method.assert_not_called()
+
+    def test_daily_check_skips_when_auto_detect_is_ambiguous(self, tmp_path, caplog):
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        _write_workflow_state(
+            tmp_path / "collections" / "planning" / "20260201-first-collection", phase="mastered", video_id=None
+        )
+        _write_workflow_state(
+            tmp_path / "collections" / "planning" / "20260202-second-collection", phase="mastered", video_id=None
+        )
+        uploader.execute_next_step = MagicMock()
+
+        uploader._daily_check_and_upload()
+
+        uploader.execute_next_step.assert_not_called()
+        assert "-c で対象を明示してください" in caplog.text
+
+    def test_daily_check_skips_inventory_hazard_without_stopping_daemon(self, tmp_path, caplog):
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        planning = tmp_path / "collections" / "planning"
+        planning.mkdir(parents=True)
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (planning / "hazard").symlink_to(outside, target_is_directory=True)
+        uploader.execute_next_step = MagicMock()
+
+        uploader._daily_check_and_upload()
+
+        uploader.execute_next_step.assert_not_called()
+        assert "symlink" in caplog.text
+
+
+class TestDefaultPublishTimeFallback:
+    """#1054: schedule_config 未指定時に channel youtube.default_publish_time を使う。"""
+
+    def test_calculate_publish_at_uses_channel_default_when_schedule_disabled(self, tmp_path):
+        uploader, _ = _make_uploader_with_schedule_config(
+            tmp_path,
+            {"schedule": {"timezone": "Asia/Tokyo"}},
+        )
+
+        with (
+            patch("youtube_automation.domains.uploads._published_dates.load_config", return_value=MagicMock()),
+            patch(
+                "youtube_automation.domains.uploads._published_dates.resolve_default_publish_at",
+                return_value="2099-01-01T20:00:00+09:00",
+            ) as mock_resolve,
+        ):
+            result = uploader.published_dates.calculate_publish_at()
+
+        assert result == "2099-01-01T20:00:00+09:00"
+        assert mock_resolve.called
+
+    def test_auto_schedule_false_suppresses_channel_default(self, tmp_path, caplog):
+        uploader, _ = _make_uploader_with_schedule_config(
+            tmp_path,
+            {"schedule": {"auto_schedule_enabled": False, "timezone": "Asia/Tokyo"}},
+        )
+
+        with (
+            caplog.at_level(logging.INFO, logger="youtube_automation.domains.uploads._published_dates"),
+            patch("youtube_automation.domains.uploads._published_dates.resolve_default_publish_at") as mock_resolve,
+        ):
+            result = uploader.published_dates.calculate_publish_at()
+
+        assert result is None
+        assert not mock_resolve.called
+        assert "📅 自動予約: 無効（schedule.auto_schedule_enabled=false）" in caplog.text
+        assert "公開設定:" not in caplog.text
+
+    def test_missing_auto_schedule_reports_only_automatic_scheduling_state(self, tmp_path, caplog):
+        uploader, _ = _make_uploader_with_schedule_config(
+            tmp_path,
+            {"schedule": {"timezone": "Asia/Tokyo"}},
+        )
+
+        with (
+            caplog.at_level(logging.INFO, logger="youtube_automation.domains.uploads._published_dates"),
+            patch("youtube_automation.domains.uploads._published_dates.load_config", return_value=MagicMock()),
+            patch(
+                "youtube_automation.domains.uploads._published_dates.resolve_default_publish_at",
+                return_value=None,
+            ),
+        ):
+            result = uploader.published_dates.calculate_publish_at()
+
+        assert result is None
+        assert "📅 自動予約: 無効（schedule_config.json で auto_schedule_enabled 未設定）" in caplog.text
+        assert "公開設定:" not in caplog.text
+
+
+class TestScheduleConfigPathResolution:
+    """#4439: `--config` に渡した任意パスの schedule_config を直接読むこと。"""
+
+    def test_reads_config_path_outside_a_config_directory(self, tmp_path):
+        from youtube_automation.application.uploads.collection import CollectionUploader
+
+        # Given: config/ 配下ではない運用者指定のパスに設定を置く
+        config_path = tmp_path / "backup" / "my_schedule.json"
+        config_path.parent.mkdir(parents=True)
+        config_path.write_text(
+            json.dumps({"schedule": {"auto_schedule_enabled": True, "cadence": ["mon"], "publish_time": "21:00"}}),
+            encoding="utf-8",
+        )
+
+        with patch("youtube_automation.application.uploads.collection.YouTubeAutoUploader"):
+            uploader = CollectionUploader(
+                collections_root=str(tmp_path / "collections"),
+                config_path=str(config_path),
+            )
+
+        # Then: デフォルトへ黙って落ちず、指定ファイルの内容が反映される
+        assert uploader.config.scheduling_enabled is True
+        assert uploader.config.cadence == ("mon",)
+        assert uploader.config.publish_time == "21:00"
+
+    def test_apply_config_propagates_to_collaborators(self, tmp_path):
+        uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+
+        uploader._apply_config(replace(uploader.config, publish_time="23:45"))
+
+        assert uploader.config.publish_time == "23:45"
+        assert uploader.tracking_store.config is uploader.config
+        assert uploader.published_dates.config is uploader.config
+        assert uploader.complete_collection_executor.config is uploader.config
+
+
+class TestShowPlanScheduleWarning:
+    """#4439: auto_schedule_enabled=false の取りこぼしを cadence 未設定でも警告すること。"""
+
+    _WARNING = "schedule.auto_schedule_enabled が false に設定されています"
+
+    def test_warns_when_scheduling_is_explicitly_disabled_without_cadence(self, tmp_path, capsys):
+        uploader, _ = _make_uploader_with_schedule_config(
+            tmp_path,
+            {"schedule": {"auto_schedule_enabled": False, "publish_time": "21:00", "timezone": "Asia/Tokyo"}},
+        )
+
+        with patch.object(uploader.published_dates, "calculate_publish_at", return_value=None):
+            uploader.show_plan(tmp_path / "collection")
+
+        assert self._WARNING in capsys.readouterr().out
+
+    def test_does_not_warn_when_scheduling_is_merely_unset(self, tmp_path, capsys):
+        uploader, _ = _make_uploader_with_schedule_config(tmp_path, {"schedule": {"timezone": "Asia/Tokyo"}})
+
+        with patch.object(uploader.published_dates, "calculate_publish_at", return_value=None):
+            uploader.show_plan(tmp_path / "collection")
+
+        assert self._WARNING not in capsys.readouterr().out
+
+
+class TestPublishedDatesQuotaRecording:
+    """Issue #2057: `_get_published_dates` が batch 回数と一致する quota を記録すること."""
+
+    def _make_scheduler_with_mock_service(self):
+        mock_service = MagicMock()
+        scheduler = PublishedDatesScheduler(
+            ScheduleConfig(),
+            lambda: mock_service,
+        )
+        return scheduler, mock_service
+
+    def _quota_calls(self, mock_log_quota) -> list[tuple[str, str, float]]:
+        return [(c.args[0], c.args[1], c.args[2]) for c in mock_log_quota.call_args_list]
+
+    def test_should_record_one_quota_entry_per_batch_request(self, tmp_path):
+        """要件 2: batch 回数（search 1 + videos 1）と記録件数が一致する."""
+        scheduler, mock_service = self._make_scheduler_with_mock_service()
+        mock_service.search.return_value.list.return_value.execute.return_value = {"items": [{"id": {"videoId": "v1"}}]}
+        mock_service.videos.return_value.list.return_value.execute.return_value = {
+            "items": [{"id": "v1", "snippet": {"publishedAt": "2025-01-01T10:00:00Z"}, "status": {}}]
+        }
+
+        with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota:
+            dates = scheduler.get_published_dates()
+
+        assert len(dates) == 1
+        assert self._quota_calls(mock_log_quota) == [
+            ("youtube-data-api", "search.list", 1),
+            ("youtube-data-api", "videos.list", 1),
+        ]
+
+    def test_should_record_only_search_quota_when_channel_has_no_videos(self, tmp_path):
+        """要件 4 相当: videos.list を実行しない場合はその quota を記録しない."""
+        scheduler, mock_service = self._make_scheduler_with_mock_service()
+        mock_service.search.return_value.list.return_value.execute.return_value = {"items": []}
+
+        with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota:
+            dates = scheduler.get_published_dates()
+
+        assert dates == set()
+        assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 1)]
+        mock_service.videos.return_value.list.assert_not_called()
+
+    @pytest.mark.parametrize("search_response", [None, {"items": None}, {"items": {}}, {"items": [None]}])
+    def test_should_fail_safe_on_invalid_search_response_shapes(self, tmp_path, search_response):
+        scheduler, mock_service = self._make_scheduler_with_mock_service()
+        mock_service.search.return_value.list.return_value.execute.return_value = search_response
+
+        assert scheduler.get_published_dates() == set()
+        mock_service.videos.return_value.list.assert_not_called()
+
+    @pytest.mark.parametrize("videos_response", [None, {"items": None}, {"items": {}}, {"items": [None]}])
+    def test_should_fail_safe_on_invalid_videos_response_shapes(self, tmp_path, videos_response):
+        scheduler, mock_service = self._make_scheduler_with_mock_service()
+        mock_service.search.return_value.list.return_value.execute.return_value = {"items": [{"id": {"videoId": "v1"}}]}
+        mock_service.videos.return_value.list.return_value.execute.return_value = videos_response
+
+        assert scheduler.get_published_dates() == set()
+
+    def test_should_record_quota_and_keep_fail_safe_on_api_error(self, tmp_path, caplog):
+        """要件 3: API failure でも quota 記録後に既存 fail-safe（空 set + warning）を維持する."""
+        scheduler, mock_service = self._make_scheduler_with_mock_service()
+        mock_service.search.return_value.list.return_value.execute.side_effect = RuntimeError("boom")
+
+        with (
+            patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota,
+            caplog.at_level(logging.WARNING),
+        ):
+            dates = scheduler.get_published_dates()
+
+        assert dates == set()
+        assert self._quota_calls(mock_log_quota) == [("youtube-data-api", "search.list", 1)]
+        assert any(rec.levelno == logging.WARNING for rec in caplog.records)
+
+    def test_should_record_quota_for_each_retry_attempt(self, tmp_path, monkeypatch):
+        scheduler, mock_service = self._make_scheduler_with_mock_service()
+        monkeypatch.setattr("youtube_automation.infrastructure.retry.time.sleep", lambda _: None)
+        request = mock_service.search.return_value.list.return_value
+        request.execute.side_effect = [
+            HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}'),
+            {"items": []},
+        ]
+
+        with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota:
+            assert scheduler.get_published_dates() == set()
+
+        assert request.execute.call_count == 2
+        assert self._quota_calls(mock_log_quota) == [
+            ("youtube-data-api", "search.list", 1),
+            ("youtube-data-api", "search.list", 1),
+        ]
+
+    def test_should_retry_videos_request_and_keep_published_date(self, tmp_path, monkeypatch):
+        scheduler, mock_service = self._make_scheduler_with_mock_service()
+        monkeypatch.setattr("youtube_automation.infrastructure.retry.time.sleep", lambda _: None)
+        mock_service.search.return_value.list.return_value.execute.return_value = {"items": [{"id": {"videoId": "v1"}}]}
+        videos_request = mock_service.videos.return_value.list.return_value
+        videos_request.execute.side_effect = [
+            HttpError(Response({"status": "503"}), b'{"error": {"errors": [{"reason": "backendError"}]}}'),
+            {"items": [{"snippet": {"publishedAt": "2025-01-01T10:00:00Z"}, "status": {}}]},
+        ]
+
+        with patch("youtube_automation.infrastructure.quota.log_quota") as mock_log_quota:
+            assert scheduler.get_published_dates() == {datetime(2025, 1, 1).date()}
+
+        assert videos_request.execute.call_count == 2
+        assert self._quota_calls(mock_log_quota) == [
+            ("youtube-data-api", "search.list", 1),
+            ("youtube-data-api", "videos.list", 1),
+            ("youtube-data-api", "videos.list", 1),
+        ]
+
+    @pytest.mark.parametrize("item", [{"status": {}}, {"status": {}, "snippet": {}}])
+    def test_should_fail_safe_on_missing_published_date_fields(self, tmp_path, item):
+        scheduler, mock_service = self._make_scheduler_with_mock_service()
+        mock_service.search.return_value.list.return_value.execute.return_value = {"items": [{"id": {"videoId": "v1"}}]}
+        mock_service.videos.return_value.list.return_value.execute.return_value = {"items": [item]}
+
+        assert scheduler.get_published_dates() == set()
+
+
+class TestExecuteCompleteCollectionResume:
+    """resumable upload session URI の tracking 連携を検証する.
+
+    issue #381 (P0-5) の中核回帰テストを含む:
+    - L4-7: 前回成功で URI クリア済みの tracking で再実行
+    - L4-8: 1 回目失敗 → 2 回目で同一 URI で resume
+    """
+
+    def test_should_pass_persisted_resume_session_uri_to_uploader_when_tracking_has_one(self, tmp_path):
+        """plan 要件 #4: tracking に URI があれば uploader にそのまま渡す."""
+        # Given
+        col, _ = _make_tracking_collection(tmp_path, resume_uri=_SESS_PREV)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_OK",
+                "video_url": "https://www.youtube.com/watch?v=V_OK",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+
+        # When
+        tracking = uploader.tracking_store.load(col)
+        uploader.complete_collection_executor.run(col, tracking, publish_at=None)
+
+        # Then
+        call_kwargs = mock_inner.upload_collection.call_args.kwargs
+        assert call_kwargs.get("resume_session_uri") == _SESS_PREV
+
+    def test_should_pass_none_resume_session_uri_when_tracking_has_no_persisted_uri(self, tmp_path):
+        """tracking に URI 無しなら uploader には None が渡る（フレッシュ実行）."""
+        # Given
+        col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_FRESH",
+                "video_url": "u",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+
+        # When
+        tracking = uploader.tracking_store.load(col)
+        uploader.complete_collection_executor.run(col, tracking, publish_at=None)
+
+        # Then
+        call_kwargs = mock_inner.upload_collection.call_args.kwargs
+        assert call_kwargs.get("resume_session_uri") is None
+
+    def test_should_write_timezone_aware_upload_time(self, tmp_path):
+        """Complete Collection 成功時の upload_time は schedule timezone 付き ISO 8601."""
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_schedule_config(
+            tmp_path,
+            {"schedule": {"timezone": "UTC"}},
+        )
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_TZ",
+                "video_url": "u",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+
+        tracking = uploader.tracking_store.load(col)
+        uploader.complete_collection_executor.run(col, tracking, publish_at=None)
+
+        saved = json.loads(tracking_path.read_text(encoding="utf-8"))
+        upload_time = saved["complete_collection"]["upload_time"]
+        dt = datetime.fromisoformat(upload_time)
+        assert dt.tzinfo is not None
+        assert dt.utcoffset() == timedelta(0)
+
+    def test_should_update_workflow_upload_when_complete_collection_succeeds(self, tmp_path):
+        """成功時は workflow-state.json の upload を tracking と同じ video_id/url/publish_at で更新する."""
+        col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_WORKFLOW",
+                "video_url": "https://www.youtube.com/watch?v=V_WORKFLOW",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+
+        tracking = uploader.tracking_store.load(col)
+        uploader.complete_collection_executor.run(col, tracking, publish_at="2099-01-01T10:00:00+09:00")
+
+        state = json.loads((col / "workflow-state.json").read_text(encoding="utf-8"))
+        assert state["upload"] == {
+            "video_id": "V_WORKFLOW",
+            "video_url": "https://www.youtube.com/watch?v=V_WORKFLOW",
+            "publish_at": "2099-01-01T10:00:00+09:00",
+        }
+
+    def test_should_initialize_missing_workflow_upload_when_complete_collection_succeeds(self, tmp_path):
+        """upload 未作成の workflow-state でも成功した video_id を記録する."""
+        col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
+        state_path = col / "workflow-state.json"
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        state.pop("upload")
+        state_path.write_text(json.dumps(state), encoding="utf-8")
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_MISSING_UPLOAD",
+                "video_url": "https://www.youtube.com/watch?v=V_MISSING_UPLOAD",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+
+        result = uploader.complete_collection_executor.run(
+            col,
+            uploader.tracking_store.load(col),
+            publish_at="2099-01-01T10:00:00+09:00",
+        )
+
+        saved_state = json.loads(state_path.read_text(encoding="utf-8"))
+        assert result["action"] == "complete_collection_uploaded"
+        assert saved_state["upload"] == {
+            "video_id": "V_MISSING_UPLOAD",
+            "video_url": "https://www.youtube.com/watch?v=V_MISSING_UPLOAD",
+            "publish_at": "2099-01-01T10:00:00+09:00",
+        }
+
+    def test_should_preserve_uploaded_video_when_workflow_post_processing_fails(self, tmp_path, caplog):
+        """upload 成功後の workflow 更新失敗は partial とし、再 upload を誘発しない."""
+        from youtube_automation.core.errors import ValidationError
+
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_PRESERVED",
+                "video_url": "https://www.youtube.com/watch?v=V_PRESERVED",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+        diagnostic = "workflow-state.json upload must be object"
+
+        with patch.object(
+            uploader.tracking_store,
+            "update_workflow_upload",
+            side_effect=ValidationError(diagnostic),
+        ):
+            result = uploader.complete_collection_executor.run(col, uploader.tracking_store.load(col), publish_at=None)
+
+        tracking = json.loads(tracking_path.read_text(encoding="utf-8"))
+        assert result["action"] == "complete_collection_uploaded"
+        assert result["details"]["video_id"] == "V_PRESERVED"
+        assert result["details"]["post_processing_status"] == "partial"
+        assert tracking["status"] == "completed"
+        assert tracking["complete_collection"]["status"] == "completed"
+        assert tracking["complete_collection"]["video_id"] == "V_PRESERVED"
+        assert tracking["complete_collection"]["post_processing_status"] == "partial"
+        assert any(diagnostic in record.getMessage() for record in caplog.records)
+
+    def test_playlist_failure_prevents_completed_state_workflow_update_and_live_move(self, tmp_path):
+        """playlistItems.insert 失敗時は planning の未完了 state を維持して例外を返す。"""
+        from youtube_automation.core.errors import YouTubeAPIError
+
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        uploader._apply_config(replace(uploader.config, auto_move_to_live=True))
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_PLAYLIST_FAILED",
+                "video_url": "https://www.youtube.com/watch?v=V_PLAYLIST_FAILED",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+        state_before = (col / "workflow-state.json").read_text(encoding="utf-8")
+        failure = YouTubeAPIError("playlistItems.insert failed", status_code=403)
+
+        with (
+            patch.object(uploader.playlist_assignment, "assign", side_effect=failure),
+            pytest.raises(YouTubeAPIError, match="playlistItems.insert failed"),
+        ):
+            uploader.complete_collection_executor.run(col, uploader.tracking_store.load(col), publish_at=None)
+
+        tracking = json.loads(tracking_path.read_text(encoding="utf-8"))
+        assert tracking["status"] == "in_progress"
+        assert tracking["complete_collection"]["status"] == "pending"
+        assert (col / "workflow-state.json").read_text(encoding="utf-8") == state_before
+        assert col.is_dir()
+        assert not (tmp_path / "collections" / "live" / col.name).exists()
+
+    def test_should_distinguish_dedup_skip_and_keep_tracking_workflow_consistent_after_live_move(self, tmp_path):
+        """dedup skip 時も live 移動後の tracking/workflow-state に既存 video_id を記録する."""
+        col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        uploader._apply_config(replace(uploader.config, auto_move_to_live=True))
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_EXISTING",
+                "video_url": "https://www.youtube.com/watch?v=V_EXISTING",
+                "upload_source": "existing_video",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+
+        tracking = uploader.tracking_store.load(col)
+        result = uploader.complete_collection_executor.run(col, tracking, publish_at="2099-01-01T10:00:00+09:00")
+
+        live_col = tmp_path / "collections" / "live" / col.name
+        saved_tracking = json.loads(
+            (live_col / "20-documentation" / "upload_tracking.json").read_text(encoding="utf-8")
+        )
+        saved_state = json.loads((live_col / "workflow-state.json").read_text(encoding="utf-8"))
+        assert result["action"] == "complete_collection_dedup_skipped"
+        assert saved_tracking["status"] == "completed"
+        assert saved_tracking["complete_collection"]["video_id"] == "V_EXISTING"
+        assert saved_tracking["complete_collection"]["upload_source"] == "existing_video"
+        assert saved_state["stage"] == "live"
+        assert saved_state["phase"] == "complete"
+        assert saved_state["upload"] == {
+            "video_id": "V_EXISTING",
+            "video_url": "https://www.youtube.com/watch?v=V_EXISTING",
+            "publish_at": "2099-01-01T10:00:00+09:00",
+        }
+
+    def test_should_complete_live_workflow_when_rename_raises_after_move_completed(self, tmp_path, caplog):
+        """rename 完了後の Windows access denied でも live 側の後処理を完了する."""
+        col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        uploader._apply_config(replace(uploader.config, auto_move_to_live=True))
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_MOVED",
+                "video_url": "https://www.youtube.com/watch?v=V_MOVED",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+
+        with (
+            patch(
+                "youtube_automation.application.uploads.collection.rename_path",
+                side_effect=_move_then_raise_permission_error,
+            ),
+            caplog.at_level(logging.INFO, logger="youtube_automation.domains.uploads.collection"),
+        ):
+            result = uploader.complete_collection_executor.run(
+                col,
+                uploader.tracking_store.load(col),
+                publish_at=None,
+            )
+
+        live_col = tmp_path / "collections" / "live" / col.name
+        saved_state = json.loads((live_col / "workflow-state.json").read_text(encoding="utf-8"))
+        move_warnings = [
+            record
+            for record in caplog.records
+            if record.name == "youtube_automation.domains.uploads.collection"
+            and record.levelno >= logging.WARNING
+            and "コレクション移動エラー" in record.getMessage()
+        ]
+        assert result["action"] == "complete_collection_uploaded"
+        assert saved_state["stage"] == "live"
+        assert saved_state["phase"] == "complete"
+        assert saved_state["upload"]["video_id"] == "V_MOVED"
+        assert move_warnings == []
+
+    def test_should_persist_uri_to_tracking_when_on_session_uri_changed_is_invoked(self, tmp_path):
+        """plan 要件 #1 + #2: コールバック発火直後に URI が tracking JSON に永続化される.
+
+        upload 完了後のクリーンアップに混ざらないよう、side_effect 内で callback 発火直後の
+        disk 状態をキャプチャして検証する（cleanup 検証は別ケースで分離）。
+        """
+        # Given
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        captured: dict[str, str | None] = {}
+
+        def _side_effect(*args, **kwargs):
+            kwargs["on_session_uri_changed"](_SESS_NEW)
+            captured["uri"] = _read_resume_uri(tracking_path)
+            # 失敗結果で halt（成功時の URI クリアと混ざらないように）
+            return {"complete_video": {"error": "halt for assertion"}}
+
+        mock_inner.upload_collection.side_effect = _side_effect
+
+        # When
+        tracking = uploader.tracking_store.load(col)
+        uploader.complete_collection_executor.run(col, tracking, publish_at=None)
+
+        # Then
+        assert captured["uri"] == _SESS_NEW
+
+    def test_should_clear_uri_from_tracking_when_on_upload_complete_is_invoked(self, tmp_path):
+        """plan 要件 #6: on_upload_complete が発火したら tracking から URI を消す."""
+        # Given: 初期に URI を持つ tracking
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=_SESS_PREV)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+
+        def _side_effect(*args, **kwargs):
+            kwargs["on_upload_complete"]()
+            return {
+                "complete_video": {
+                    "video_id": "V_OK",
+                    "video_url": "u",
+                    "title": "t",
+                    "file_path": "p",
+                }
+            }
+
+        mock_inner.upload_collection.side_effect = _side_effect
+
+        # When
+        tracking = uploader.tracking_store.load(col)
+        uploader.complete_collection_executor.run(col, tracking, publish_at=None)
+
+        # Then: tracking 上の URI が消えている
+        assert _read_resume_uri(tracking_path) is None
+
+    def test_should_remove_uri_from_tracking_when_on_session_uri_changed_receives_none(self, tmp_path):
+        """plan 要件 #7: on_session_uri_changed(None) で URI クリア（session 失効パス）."""
+        # Given: 初期に URI を持つ tracking
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=_SESS_PREV)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+
+        def _side_effect(*args, **kwargs):
+            # session 失効 → クリア通知 → 失敗 result
+            kwargs["on_session_uri_changed"](None)
+            return {"complete_video": {"error": "session expired"}}
+
+        mock_inner.upload_collection.side_effect = _side_effect
+
+        # When
+        tracking = uploader.tracking_store.load(col)
+        uploader.complete_collection_executor.run(col, tracking, publish_at=None)
+
+        # Then
+        assert _read_resume_uri(tracking_path) is None
+
+    def test_should_reload_tracking_before_persisting_uri_to_avoid_clobbering_concurrent_writes(self, tmp_path):
+        """plan §162: コールバック内で store を再ロードすることで並行書き込みを保持.
+
+        side_effect 内で callback 発火直後の disk 状態をキャプチャし、callback が
+        外部からの concurrent 書き込みを保持しているかを直接検証する
+        （upload 後段のクリーンアップに干渉されないよう intermediate state を読む）。
+        """
+        # Given: 初期 tracking 無 URI
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        captured_cc: dict[str, dict] = {}
+
+        def _side_effect(*args, **kwargs):
+            # 1. 外部から並行的に tracking に別キーを書き込む（CollectionUploader の in-memory dict には反映されない）
+            current = json.loads(tracking_path.read_text(encoding="utf-8"))
+            current.setdefault("complete_collection", {})["concurrent_marker"] = "x"
+            tracking_path.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+            # 2. on_session_uri_changed を発火し URI を永続化
+            kwargs["on_session_uri_changed"](_SESS_NEW)
+            # 3. callback 直後の disk 状態をキャプチャ（後段クリーンアップに干渉されない地点）
+            captured_cc["state"] = json.loads(tracking_path.read_text(encoding="utf-8"))
+            # 失敗結果で halt
+            return {"complete_video": {"error": "halt for intermediate-state assertion"}}
+
+        mock_inner.upload_collection.side_effect = _side_effect
+
+        # When
+        tracking = uploader.tracking_store.load(col)
+        uploader.complete_collection_executor.run(col, tracking, publish_at=None)
+
+        # Then: callback 内で reload してから書いていれば、両キーが同時に disk に残る
+        cc = captured_cc["state"].get("complete_collection", {})
+        assert cc.get("resume_session_uri") == _SESS_NEW
+        assert cc.get("concurrent_marker") == "x"
+
+    def test_should_not_reuse_stale_uri_after_successful_previous_upload(self, tmp_path):
+        """REQ-2802-01: 成功時の URI 消去を disk で観測し、次回へ stale URI を渡さない."""
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=_SESS_PREV)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_FIRST",
+                "video_url": "u",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+
+        first_tracking = uploader.tracking_store.load(col)
+        uploader.complete_collection_executor.run(col, first_tracking, publish_at=None)
+
+        assert mock_inner.upload_collection.call_args_list[0].kwargs["resume_session_uri"] == _SESS_PREV
+        assert _read_resume_uri(tracking_path) is None
+
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_SECOND",
+                "video_url": "u2",
+                "title": "t2",
+                "file_path": "p2",
+            }
+        }
+        second_tracking = uploader.tracking_store.load(col)
+        uploader.complete_collection_executor.run(col, second_tracking, publish_at=None)
+
+        assert mock_inner.upload_collection.call_args_list[1].kwargs["resume_session_uri"] is None
+
+    def test_should_resume_same_session_uri_on_retry_after_mid_upload_failure(self, tmp_path):
+        """**issue #381 中核回帰**: 1 回目失敗 → 2 回目で同一 URI で resume."""
+        # Given: 初回は URI 無し、upload 中 on_session_uri_changed で永続化 → 失敗
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+
+        def _first_run(*args, **kwargs):
+            kwargs["on_session_uri_changed"](_SESS_NEW)
+            return {"complete_video": {"error": "network error mid-upload"}}
+
+        mock_inner.upload_collection.side_effect = _first_run
+
+        tracking_first = uploader.tracking_store.load(col)
+        uploader.complete_collection_executor.run(col, tracking_first, publish_at=None)
+
+        # 1 回目失敗で URI は tracking に残っているはず（precondition）
+        assert _read_resume_uri(tracking_path) == _SESS_NEW
+
+        # When: 2 回目を実行
+        mock_inner.upload_collection.side_effect = None
+        mock_inner.upload_collection.return_value = {
+            "complete_video": {
+                "video_id": "V_RESUMED",
+                "video_url": "u",
+                "title": "t",
+                "file_path": "p",
+            }
+        }
+        tracking_second = uploader.tracking_store.load(col)
+        uploader.complete_collection_executor.run(col, tracking_second, publish_at=None)
+
+        # Then: 2 回目は同一 URI で resume している
+        second_call_kwargs = mock_inner.upload_collection.call_args.kwargs
+        assert second_call_kwargs.get("resume_session_uri") == _SESS_NEW
+
+    def test_should_clear_persisted_uri_when_uploader_returns_failure_due_to_session_expired(self, tmp_path):
+        """plan 要件 #7 結合: session 失効 → URI クリア + 失敗結果の同時担保."""
+        # Given: 初期 URI あり、uploader が session 失効でクリア通知 → 失敗
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=_SESS_PREV)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+
+        def _side_effect(*args, **kwargs):
+            kwargs["on_session_uri_changed"](None)
+            return {"complete_video": {"error": "session expired"}}
+
+        mock_inner.upload_collection.side_effect = _side_effect
+
+        # When
+        tracking = uploader.tracking_store.load(col)
+        result = uploader.complete_collection_executor.run(col, tracking, publish_at=None)
+
+        # Then
+        assert _read_resume_uri(tracking_path) is None
+        assert result["action"] == "complete_collection_failed"
+
+    def test_should_not_mark_failed_and_returns_quota_exhausted_action_when_quota_error_raised(self, tmp_path):
+        """plan 020 Step 3: QuotaExhaustedError はリトライ可能として非終端化する.
+
+        tracking の complete_collection.status を "failed" にせず、resume URI
+        （callback が既に永続化済み）を温存したまま次回実行に委ねる。
+        """
+        from youtube_automation.application.uploads.collection import ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED
+        from youtube_automation.core.errors import QuotaExhaustedError
+
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+
+        def _side_effect(*args, **kwargs):
+            kwargs["on_session_uri_changed"](_SESS_NEW)
+            raise QuotaExhaustedError("quota exceeded", retry_after_seconds=42.0)
+
+        mock_inner.upload_collection.side_effect = _side_effect
+
+        tracking = uploader.tracking_store.load(col)
+        result = uploader.complete_collection_executor.run(col, tracking, publish_at=None)
+
+        assert result["action"] == ACTION_COMPLETE_COLLECTION_QUOTA_EXHAUSTED
+        assert result["details"]["retry_after_seconds"] == 42.0
+
+        saved = json.loads(tracking_path.read_text(encoding="utf-8"))
+        assert saved["complete_collection"].get("status") != "failed"
+        # callback が既に永続化した resume URI は温存されている
+        assert saved["complete_collection"]["resume_session_uri"] == _SESS_NEW
+
+    def test_complete_collection_failure_logs_redacted_exception_text(self, tmp_path, caplog):
+        """Complete Collection の失敗原因を log に残し、secret は redaction する."""
+        from youtube_automation.core.errors import AutomationError
+
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+        uploader, mock_inner = _make_uploader_with_collection_mock(tmp_path)
+        secret = "secret-domain-canary"
+        mock_inner.upload_collection.side_effect = AutomationError(f"access_token={secret}")
+
+        result = uploader.complete_collection_executor.run(col, uploader.tracking_store.load(col), publish_at=None)
+
+        assert result["details"]["error"] == "complete collection upload failed"
+        tracking = json.loads(tracking_path.read_text(encoding="utf-8"))
+        assert tracking["complete_collection"]["error"] == "complete collection upload failed"
+        error_messages = [record.getMessage() for record in caplog.records if record.levelno >= logging.ERROR]
+        assert error_messages == ["❌ Complete Collection エラー: access_token=<redacted-token>"]
+        assert all(secret not in message for message in error_messages)
+
+
+class TestShowPlanPrivacyDisplay:
+    """#1472: --plan の公開設定表示は実効 privacy_status（youtube.json）を反映する。
+
+    schedule 無効時に固定 "即時公開 (public)" を出すと、unlisted / private 運用
+    チャンネルで表示と実効値が乖離する（FB 起点バグ）。
+    """
+
+    def _plan_output(self, tmp_path, capsys, privacy_status):
+        uploader, _ = _make_uploader_with_schedule_config(
+            tmp_path,
+            {"schedule": {"auto_schedule_enabled": False, "timezone": "Asia/Tokyo"}},
+        )
+        config_mock = MagicMock()
+        config_mock.youtube.api.privacy_status = privacy_status
+        with patch(
+            "youtube_automation.application.uploads.collection.load_config",
+            return_value=config_mock,
+        ):
+            uploader.show_plan(tmp_path / "collections" / "planning" / "Test Collection")
+        return capsys.readouterr().out
+
+    def test_unlisted_channel_shows_effective_privacy_not_fixed_public(self, tmp_path, capsys):
+        out = self._plan_output(tmp_path, capsys, "unlisted")
+        assert "📅 公開設定: 限定公開 (unlisted)" in out
+        assert "即時公開 (public)" not in out
+        assert "youtube.json::privacy_status" in out
+
+    def test_private_channel_shows_effective_privacy(self, tmp_path, capsys):
+        out = self._plan_output(tmp_path, capsys, "private")
+        assert "📅 公開設定: 非公開 (private)" in out
+        assert "即時公開 (public)" not in out
+
+    def test_public_channel_shows_safe_private_upload_wording(self, tmp_path, capsys):
+        """予約日時なしの public は実挙動どおり非公開アップロードと案内する."""
+        out = self._plan_output(tmp_path, capsys, "public")
+        assert "📅 公開設定: 非公開でアップロード（即時公開は行いません）" in out
+
+    def test_plan_separates_daily_buckets_from_unit_pool(self, tmp_path, capsys):
+        out = self._plan_output(tmp_path, capsys, "private")
+
+        assert "独立日次 bucket: videos.insert 1/100 calls" in out
+        assert "独立日次 bucket: search.list 2/100 calls" in out
+        assert "unit pool: thumbnails.set 1 × 50 units" in out
+        assert "unit pool: playlistItems.insert 1 × 50 units" in out
+        assert "unit pool 合計: 102/10,000 units" in out
+        assert "284/10,000" not in out
+
+
+def test_execute_collection_suppresses_lower_default_publish_fallback_when_schedule_disabled(tmp_path):
+    col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
+    uploader, mock_inner = _make_uploader_with_schedule_config(
+        tmp_path,
+        {"schedule": {"auto_schedule_enabled": False, "timezone": "Asia/Tokyo"}},
+    )
+    mock_inner.upload_collection.return_value = {
+        "complete_video": {
+            "video_id": "V_NO_FALLBACK",
+            "video_url": "https://www.youtube.com/watch?v=V_NO_FALLBACK",
+            "title": "t",
+            "file_path": "p",
+        }
+    }
+
+    tracking = uploader.tracking_store.load(col)
+    uploader.complete_collection_executor.run(col, tracking, publish_at=None)
+
+    call_kwargs = mock_inner.upload_collection.call_args.kwargs
+    assert call_kwargs["publish_at"] is None
+    assert call_kwargs["apply_default_publish_at"] is False
+
+
+class TestScheduleConfigPrivacyStatusDeprecation:
+    """#1472: schedule_config.json::upload_settings.privacy_status は未参照。
+
+    実効値は config/channel/youtube.json::youtube.privacy_status に一本化し、
+    残存設定には警告で案内する。
+    """
+
+    def test_warns_when_legacy_privacy_status_present_in_schedule_config(self, tmp_path, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="youtube_automation.commands.uploads.collection_uploader"):
+            _make_uploader_with_schedule_config(
+                tmp_path,
+                {"upload_settings": {"privacy_status": "unlisted"}},
+            )
+        assert "upload_settings.privacy_status は無視されます" in caplog.text
+        assert "youtube.json::youtube.privacy_status" in caplog.text
+
+    def test_default_config_has_no_privacy_status_and_no_warning(self, tmp_path, caplog):
+        import logging
+
+        with caplog.at_level(logging.WARNING, logger="youtube_automation.commands.uploads.collection_uploader"):
+            uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+        assert not hasattr(uploader.config, "privacy_status")
+        assert "upload_settings.privacy_status" not in caplog.text
+
+
+class TestTrackingStoreAtomicity:
+    """plan 020 Step 1/2: tracking JSON のアトミック書き込み・破損検出を検証する。"""
+
+    def test_save_leaves_no_tmp_file_and_roundtrips(self, tmp_path):
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+        store = TrackingStore(tmp_path / "collections", ScheduleConfig(timezone=ZoneInfo("UTC")))
+
+        tracking = store.load(col)
+        tracking["status"] = "updated"
+        store.save(col, tracking)
+
+        tmp_path_file = tracking_path.with_suffix(tracking_path.suffix + ".tmp")
+        assert not tmp_path_file.exists()
+        saved = json.loads(tracking_path.read_text(encoding="utf-8"))
+        assert saved["status"] == "updated"
+
+    def test_load_returns_none_and_quarantines_corrupt_file(self, tmp_path):
+        col, tracking_path = _make_tracking_collection(tmp_path, resume_uri=None)
+        tracking_path.write_text("{truncated", encoding="utf-8")
+        store = TrackingStore(tmp_path / "collections", ScheduleConfig(timezone=ZoneInfo("UTC")))
+
+        result = store.load(col)
+
+        assert result is None
+        corrupt_path = tracking_path.with_suffix(".json.corrupt")
+        assert corrupt_path.exists()
+        assert corrupt_path.read_text(encoding="utf-8") == "{truncated"
+        assert not tracking_path.exists()
+
+    def test_workflow_upload_preserves_update_committed_before_owner_callback(self, tmp_path, monkeypatch):
+        from youtube_automation.domains.collections.workflow_state import update as owner_update
+        from youtube_automation.domains.uploads import _tracking_io
+
+        col, _ = _make_tracking_collection(tmp_path, resume_uri=None)
+        state_path = col / "workflow-state.json"
+        store = TrackingStore(tmp_path / "collections", ScheduleConfig(timezone=ZoneInfo("UTC")))
+
+        def update_after_concurrent_writer(path, updater):
+            owner_update(path, lambda state: state.__setitem__("concurrent_marker", "preserved"))
+            return owner_update(path, updater)
+
+        monkeypatch.setattr(_tracking_io, "update_workflow_state", update_after_concurrent_writer)
+
+        store.update_workflow_upload(
+            col,
+            {"video_id": "video-1", "video_url": "https://youtu.be/video-1"},
+            "2099-01-01T00:00:00Z",
+        )
+
+        persisted = json.loads(state_path.read_text(encoding="utf-8"))
+        assert persisted["concurrent_marker"] == "preserved"
+        assert persisted["upload"]["video_id"] == "video-1"
+
+
+@pytest.mark.parametrize("failure", [None, RuntimeError("upload failed")])
+def test_daily_check_dispatches_selected_collection_and_preserves_execution_failure(tmp_path, failure):
+    uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+    target = tmp_path / "collections" / "planning" / "selected"
+    uploader.find_collection = MagicMock(return_value=target)
+    uploader.execute_next_step = MagicMock(side_effect=failure)
+    if failure is None:
+        uploader._daily_check_and_upload()
+    else:
+        with pytest.raises(RuntimeError, match="upload failed"):
+            uploader._daily_check_and_upload()
+    uploader.find_collection.assert_called_once_with()
+    uploader.execute_next_step.assert_called_once_with(target)
+
+
+def test_automated_schedule_registers_daily_callback_and_stops_on_interrupt(tmp_path):
+    uploader, _ = _make_uploader_with_collection_mock(tmp_path)
+    uploader._daily_check_and_upload = MagicMock()
+    with (
+        patch("youtube_automation.application.uploads.collection.schedule") as scheduler,
+        patch("youtube_automation.application.uploads.collection.load_config") as config,
+        patch("time.sleep", side_effect=KeyboardInterrupt) as sleep,
+    ):
+        config.return_value.meta.channel_name = "Test channel"
+        uploader.run_automated_schedule()
+    scheduler.every.return_value.day.at.assert_called_once_with(uploader.config.publish_time)
+    scheduler.every.return_value.day.at.return_value.do.assert_called_once_with(uploader._daily_check_and_upload)
+    scheduler.run_pending.assert_called_once_with()
+    sleep.assert_called_once_with(60)

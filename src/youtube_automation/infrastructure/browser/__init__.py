@@ -3,7 +3,7 @@
 import webbrowser
 from collections.abc import Callable
 from pathlib import Path
-from urllib import error, request
+from urllib import request
 from urllib.parse import urlparse as _urlparse
 
 
@@ -32,12 +32,7 @@ def fetch_html(url: str, *, timeout: float, validator: Callable[[str], None] | N
 
     if validator is not None:
         validator(url)
-    try:
-        req = request.Request(url, method="GET")
-        opener = request.build_opener(_NoRedirect())
-        with opener.open(req, timeout=timeout) as response:
-            return response.read()
-    except RedirectRejectedError:
-        raise
-    except (error.URLError, TimeoutError):
-        raise
+    req = request.Request(url, method="GET")
+    opener = request.build_opener(_NoRedirect())
+    with opener.open(req, timeout=timeout) as response:
+        return response.read()

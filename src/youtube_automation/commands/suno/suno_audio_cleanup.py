@@ -16,12 +16,12 @@ from typing import cast
 
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError
+from youtube_automation.domains.collections.paths import CollectionPaths, resolve_collection_dir
 from youtube_automation.domains.media.audio_adjustments import (
     read_audio_adjustments,
     validate_cleanup_settings,
 )
 from youtube_automation.domains.media.audio_formats import AUDIO_EXTS
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths, resolve_collection_dir
 from youtube_automation.infrastructure.media.probe import probe_duration
 
 _SKILL_NAME = "masterup"
@@ -332,9 +332,17 @@ def process_file(path: Path, cfg: CleanupConfig, *, apply: bool, force: bool, qu
             tmp.unlink()
         raise RuntimeError(f"ffmpeg cleanup failed ({path.name}, rc={proc.returncode}):\n{proc.stderr}")
 
+    _install_cleaned_audio(path, tmp, backup, backup_originals=cfg.backup_originals)
+    if not quiet:
+        print(f"cleaned: {path.name}")
+    return True
+
+
+def _install_cleaned_audio(path: Path, tmp: Path, backup: Path, *, backup_originals: bool) -> None:
+    """Replace processed audio and restore its original if installation fails."""
     backup_created = False
     try:
-        if cfg.backup_originals:
+        if backup_originals:
             backup.parent.mkdir(parents=True, exist_ok=True)
             os.replace(path, backup)
             backup_created = True
@@ -345,9 +353,6 @@ def process_file(path: Path, cfg: CleanupConfig, *, apply: bool, force: bool, qu
         if tmp.exists():
             tmp.unlink()
         raise
-    if not quiet:
-        print(f"cleaned: {path.name}")
-    return True
 
 
 def _process_files_parallel(
@@ -444,6 +449,14 @@ def cleanup_collection(
         return 0
 
     results, errors = _process_files_parallel(files, configs, max_workers=cast(int, max_workers), force=force)
+    _report_cleanup_results(files, results, errors, quiet=quiet)
+    return 0
+
+
+def _report_cleanup_results(
+    files: list[Path], results: dict[Path, bool], errors: dict[Path, Exception], *, quiet: bool
+) -> None:
+    """Report completed files in input order, then propagate the collected failures."""
     if not quiet:
         for path in files:
             if path not in results:
@@ -458,7 +471,6 @@ def cleanup_collection(
     if not quiet:
         changed = sum(results.values())
         print(f"processed: {len(files)} file(s), changed={changed}")
-    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:

@@ -40,7 +40,8 @@ class HandoffSource:
             raise MediaStoreError(f"{MANIFEST_NAME!r} は completion marker 用に予約されています")
 
 
-def _key(identity: HandoffIdentity, relative_path: str) -> MediaKey:
+def handoff_media_key(identity: HandoffIdentity, relative_path: str) -> MediaKey:
+    """Resolve the validated storage address shared by handoff transfer and orchestration."""
     return MediaKey(identity.channel, identity.collection, identity.handoff, relative_path)
 
 
@@ -87,7 +88,7 @@ def push_handoff(
     with tempfile.TemporaryDirectory(prefix="yt-handoff-push-") as verification_directory:
         verification_root = Path(verification_directory)
         for entry in manifest.files:
-            key = _key(identity, entry.path)
+            key = handoff_media_key(identity, entry.path)
             remote = store.metadata(key)
             if remote is None or remote.size != entry.size or remote.sha256 != entry.sha256:
                 pushed = store.push(sources_by_path[entry.path], key)
@@ -101,7 +102,7 @@ def push_handoff(
         manifest_path = verification_root / MANIFEST_NAME
         manifest_path.write_bytes(manifest.to_json_bytes())
         expected_manifest = _manifest_file(manifest_path)
-        manifest_key = _key(identity, MANIFEST_NAME)
+        manifest_key = handoff_media_key(identity, MANIFEST_NAME)
         remote_manifest = store.metadata(manifest_key)
         if (
             remote_manifest is None
@@ -131,7 +132,7 @@ def push_handoff(
 
 
 def read_handoff_manifest(store: MediaStore, identity: HandoffIdentity) -> HandoffManifest:
-    manifest_key = _key(identity, MANIFEST_NAME)
+    manifest_key = handoff_media_key(identity, MANIFEST_NAME)
     manifest_metadata = store.metadata(manifest_key)
     if manifest_metadata is None:
         raise MediaHandoffNotFoundError(
@@ -159,7 +160,7 @@ def pull_handoff(store: MediaStore, identity: HandoffIdentity, destination: Path
         staging_root = Path(staging_directory)
         for entry in manifest.files:
             staging_path = staging_root.joinpath(*entry.path.split("/"))
-            pulled = store.pull(_key(identity, entry.path), staging_path)
+            pulled = store.pull(handoff_media_key(identity, entry.path), staging_path)
             _assert_metadata(entry, pulled, object_path=entry.path, operation="pull")
             _assert_file(entry, staging_path, operation="pull")
 

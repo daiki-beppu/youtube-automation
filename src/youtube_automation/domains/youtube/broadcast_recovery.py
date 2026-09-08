@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from dataclasses import asdict, dataclass
 from typing import Literal, Protocol
 
@@ -46,16 +47,22 @@ class RecoveryResult:
 
 
 class BroadcastRecoveryGateway(Protocol):
+    @abstractmethod
     def list_active_broadcasts(self) -> list[Broadcast]: ...
 
+    @abstractmethod
     def get_stream(self, stream_id: str) -> Stream: ...
 
+    @abstractmethod
     def list_upcoming_broadcasts(self) -> list[Broadcast]: ...
 
+    @abstractmethod
     def create_broadcast(self, request: RecoveryRequest) -> Broadcast: ...
 
+    @abstractmethod
     def bind_broadcast(self, broadcast_id: str, stream_id: str) -> Broadcast: ...
 
+    @abstractmethod
     def transition_to_live(self, broadcast_id: str) -> Broadcast: ...
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -26,20 +27,27 @@ class ReviewSource(Protocol):
     """Adapter implemented by each reviewable artifact source."""
 
     @property
+    @abstractmethod
     def artifact(self) -> ReviewArtifact: ...
 
     @property
+    @abstractmethod
     def html_path(self) -> Path: ...
 
+    @abstractmethod
     def candidates(self) -> tuple[ReviewCandidate, ...]: ...
 
+    @abstractmethod
     def media(self) -> tuple[tuple[str, Path], ...]: ...
 
+    @abstractmethod
     def digest(self, candidates: tuple[ReviewCandidate, ...]) -> str: ...
 
+    @abstractmethod
     def commit(self, candidate: ReviewCandidate) -> None: ...
 
     @property
+    @abstractmethod
     def compact_image_ids(self) -> frozenset[str]: ...
 
 

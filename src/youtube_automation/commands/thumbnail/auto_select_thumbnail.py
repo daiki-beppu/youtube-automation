@@ -32,6 +32,7 @@ import os
 import shutil
 import sys
 import tempfile
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,6 +42,7 @@ from PIL import Image, UnidentifiedImageError
 
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
@@ -55,7 +57,6 @@ from youtube_automation.domains.thumbnail.selection import (
     score_candidates,
     select_best,
 )
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 SKILL_NAME = "thumbnail"
 
@@ -231,13 +232,6 @@ def record_workflow_state(
 def validate_audit_record(record: dict[str, object]) -> None:
     """workflow-state に書き込む自動選択監査値を strict に検証する。"""
 
-    def _finite_number(value: object) -> bool:
-        if isinstance(value, bool):
-            return False
-        if isinstance(value, int):
-            return True
-        return isinstance(value, float) and math.isfinite(value)
-
     selected = record.get("selected")
     if not isinstance(selected, str) or not selected.strip():
         raise ValidationError(f"thumbnail_auto_selection.selected は非空文字列である必要があります: {selected!r}")
@@ -246,13 +240,44 @@ def validate_audit_record(record: dict[str, object]) -> None:
     if not _finite_number(distance):
         raise ValidationError(f"thumbnail_auto_selection.distance は有限数値である必要があります: {distance!r}")
 
-    ranking = record.get("ranking")
-    if not isinstance(ranking, list) or not ranking:
-        raise ValidationError(f"thumbnail_auto_selection.ranking は非空 list である必要があります: {ranking!r}")
-    for index, entry in enumerate(ranking):
-        key = f"thumbnail_auto_selection.ranking[{index}]"
+    _validate_audit_ranking(record.get("ranking"))
+
+    _validate_reference_diagnostics(record.get("reference_diagnostics"))
+
+    executed_at = record.get("executed_at")
+    if not isinstance(executed_at, str):
+        raise ValidationError(
+            f"thumbnail_auto_selection.executed_at は有効な ISO 日時文字列である必要があります: {executed_at!r}"
+        )
+    try:
+        datetime.fromisoformat(executed_at)
+    except ValueError as exc:
+        raise ValidationError(
+            f"thumbnail_auto_selection.executed_at は有効な ISO 日時文字列である必要があります: {executed_at!r}"
+        ) from exc
+
+
+def _finite_number(value: object) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return True
+    return isinstance(value, float) and math.isfinite(value)
+
+
+def _audit_object_entries(value: object, key: str) -> Iterator[tuple[str, dict]]:
+    """Validate an audit list lazily so entry diagnostics keep their original order."""
+    if not isinstance(value, list) or not value:
+        raise ValidationError(f"{key} は非空 list である必要があります: {value!r}")
+    for index, entry in enumerate(value):
+        entry_key = f"{key}[{index}]"
         if not isinstance(entry, dict):
-            raise ValidationError(f"{key} は object である必要があります: {entry!r}")
+            raise ValidationError(f"{entry_key} は object である必要があります: {entry!r}")
+        yield entry_key, entry
+
+
+def _validate_audit_ranking(ranking: object) -> None:
+    for key, entry in _audit_object_entries(ranking, "thumbnail_auto_selection.ranking"):
         candidate = entry.get("candidate")
         if not isinstance(candidate, str) or not candidate.strip():
             raise ValidationError(f"{key}.candidate は非空文字列である必要があります: {candidate!r}")
@@ -270,7 +295,8 @@ def validate_audit_record(record: dict[str, object]) -> None:
         if not isinstance(reasons, list) or any(not isinstance(reason, str) for reason in reasons):
             raise ValidationError(f"{key}.reasons は文字列の list である必要があります: {reasons!r}")
 
-    diagnostics = record.get("reference_diagnostics")
+
+def _validate_reference_diagnostics(diagnostics: object) -> None:
     if not isinstance(diagnostics, dict):
         raise ValidationError(
             f"thumbnail_auto_selection.reference_diagnostics は object である必要があります: {diagnostics!r}"
@@ -283,33 +309,13 @@ def validate_audit_record(record: dict[str, object]) -> None:
             f"{threshold!r}"
         )
     references = diagnostics.get("references")
-    if not isinstance(references, list) or not references:
-        raise ValidationError(
-            "thumbnail_auto_selection.reference_diagnostics.references は非空 list である必要があります: "
-            f"{references!r}"
-        )
-    for index, entry in enumerate(references):
-        key = f"thumbnail_auto_selection.reference_diagnostics.references[{index}]"
-        if not isinstance(entry, dict):
-            raise ValidationError(f"{key} は object である必要があります: {entry!r}")
+    for key, entry in _audit_object_entries(references, "thumbnail_auto_selection.reference_diagnostics.references"):
         if not isinstance(entry.get("reference_image"), str) or not entry["reference_image"].strip():
             raise ValidationError(f"{key}.reference_image は非空文字列である必要があります")
         if not _finite_number(entry.get("distance")) or entry["distance"] < 0:
             raise ValidationError(f"{key}.distance は 0 以上の有限数値である必要があります")
         if not isinstance(entry.get("outlier"), bool):
             raise ValidationError(f"{key}.outlier は boolean である必要があります")
-
-    executed_at = record.get("executed_at")
-    if not isinstance(executed_at, str):
-        raise ValidationError(
-            f"thumbnail_auto_selection.executed_at は有効な ISO 日時文字列である必要があります: {executed_at!r}"
-        )
-    try:
-        datetime.fromisoformat(executed_at)
-    except ValueError as exc:
-        raise ValidationError(
-            f"thumbnail_auto_selection.executed_at は有効な ISO 日時文字列である必要があります: {executed_at!r}"
-        ) from exc
 
 
 def _relative_to_channel(path: Path, channel_root: Path) -> str:
@@ -451,6 +457,21 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _report_selection_error(
+    exc: ConfigError | ValidationError,
+    json_output: bool,
+    reference_diagnostic: ReferencePoolDiagnostic | None,
+    channel_root: Path | None,
+) -> None:
+    """Report selection failures with available reference diagnostics."""
+    print(f"error: {exc}", file=sys.stderr)
+    if json_output:
+        payload: dict[str, object] = {"status": "error", "error": str(exc)}
+        if reference_diagnostic is not None and channel_root is not None:
+            payload["reference_diagnostics"] = _reference_diagnostic_payload(reference_diagnostic, channel_root)
+        print(json.dumps(payload, ensure_ascii=False))
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -477,7 +498,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
 
-        from youtube_automation.configuration import channel_dir
+        from youtube_automation.core.channel_context import channel_dir
 
         channel_root = channel_dir()
         reference_images = resolve_reference_images(cfg, channel_root)
@@ -502,53 +523,19 @@ def main(argv: list[str] | None = None) -> int:
         target = paths.assets_dir / _TARGET_FILENAME
         workflow_state_updated: bool | None = None
         if args.apply:
-            # 壊れた workflow-state はコピー前に検出し、部分適用状態を残さない
-            state = load_workflow_state(paths.workflow_state_path)
-            target_snapshot = _capture_file(target)
-            archive_update = None
-            try:
-                target = apply_selection(best, paths, force=args.force)
-                archive_update = archive_approved_thumbnail_transaction(
-                    paths.root,
-                    archive_config=cfg,
-                    channel_root=channel_root,
-                )
-                if state is not None:
-                    record_workflow_state(
-                        paths.workflow_state_path,
-                        best=best,
-                        scores=scores,
-                        reference_images=reference_images,
-                        channel_root=channel_root,
-                        executed_at=datetime.now(timezone.utc).isoformat(),
-                        mode=settings.mode,
-                        reference_diagnostic=reference_diagnostic,
-                    )
-            except (ConfigError, ValidationError) as exc:
-                rollback_errors = []
-                if archive_update is not None:
-                    try:
-                        archive_update.rollback()
-                    except ValidationError as rollback_exc:
-                        rollback_errors.append(rollback_exc)
-                try:
-                    _restore_file(target, target_snapshot)
-                except ValidationError as rollback_exc:
-                    rollback_errors.append(rollback_exc)
-                if rollback_errors:
-                    rollback_detail = "; ".join(str(error) for error in rollback_errors)
-                    raise ValidationError(
-                        f"自動選択の確定に失敗し、一部の状態も復元できません: {exc}; {rollback_detail}"
-                    ) from rollback_errors[0]
-                raise
-            workflow_state_updated = state is not None
+            target, workflow_state_updated = _commit_selection(
+                best,
+                paths,
+                force=args.force,
+                cfg=cfg,
+                channel_root=channel_root,
+                scores=scores,
+                reference_images=reference_images,
+                mode=settings.mode,
+                reference_diagnostic=reference_diagnostic,
+            )
     except (ConfigError, ValidationError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
-        if args.json:
-            payload: dict[str, object] = {"status": "error", "error": str(exc)}
-            if reference_diagnostic is not None and channel_root is not None:
-                payload["reference_diagnostics"] = _reference_diagnostic_payload(reference_diagnostic, channel_root)
-            print(json.dumps(payload, ensure_ascii=False))
+        _report_selection_error(exc, args.json, reference_diagnostic, channel_root)
         return 1
 
     mode = "apply" if args.apply else "dry-run"
@@ -579,6 +566,62 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
     return 0
+
+
+def _commit_selection(
+    best: CandidateScore,
+    paths: CollectionPaths,
+    *,
+    force: bool,
+    cfg: dict,
+    channel_root: Path,
+    scores: list[CandidateScore],
+    reference_images: list[Path],
+    mode: str,
+    reference_diagnostic: ReferencePoolDiagnostic,
+) -> tuple[Path, bool]:
+    """Apply the selected thumbnail and roll back files if recording the result fails."""
+    target = paths.assets_dir / _TARGET_FILENAME
+    # 壊れた workflow-state はコピー前に検出し、部分適用状態を残さない
+    state = load_workflow_state(paths.workflow_state_path)
+    target_snapshot = _capture_file(target)
+    archive_update = None
+    try:
+        target = apply_selection(best, paths, force=force)
+        archive_update = archive_approved_thumbnail_transaction(
+            paths.root,
+            archive_config=cfg,
+            channel_root=channel_root,
+        )
+        if state is not None:
+            record_workflow_state(
+                paths.workflow_state_path,
+                best=best,
+                scores=scores,
+                reference_images=reference_images,
+                channel_root=channel_root,
+                executed_at=datetime.now(timezone.utc).isoformat(),
+                mode=mode,
+                reference_diagnostic=reference_diagnostic,
+            )
+    except (ConfigError, ValidationError) as exc:
+        rollback_errors = []
+        if archive_update is not None:
+            try:
+                archive_update.rollback()
+            except ValidationError as rollback_exc:
+                rollback_errors.append(rollback_exc)
+        try:
+            _restore_file(target, target_snapshot)
+        except ValidationError as rollback_exc:
+            rollback_errors.append(rollback_exc)
+        if rollback_errors:
+            rollback_detail = "; ".join(str(error) for error in rollback_errors)
+            raise ValidationError(
+                f"自動選択の確定に失敗し、一部の状態も復元できません: {exc}; {rollback_detail}"
+            ) from rollback_errors[0]
+        raise
+    return target, state is not None
 
 
 if __name__ == "__main__":

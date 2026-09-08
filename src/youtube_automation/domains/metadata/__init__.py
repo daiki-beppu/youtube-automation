@@ -1,14 +1,8 @@
 """Metadata generation public API."""
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from youtube_automation.domains.metadata.service import BAHMetadataGenerator
-
 
 def __getattr__(name: str):
     exports = {
-        "BAHMetadataGenerator": ("service", "BAHMetadataGenerator"),
         "LOCALIZED_TITLE_PLACEHOLDERS": ("localizations", "LOCALIZED_TITLE_PLACEHOLDERS"),
         "SceneTitleViolation": ("localizations", "SceneTitleViolation"),
         "build_short_description": ("descriptions", "build_short_description"),
@@ -31,8 +25,7 @@ def __getattr__(name: str):
     return getattr(import_module(f"{__name__}.{module_name}"), attribute_name)
 
 
-__all__ = [  # noqa: RUF022 - public API order is part of the B2 contract
-    "BAHMetadataGenerator",
+__all__ = [
     "LOCALIZED_TITLE_PLACEHOLDERS",
     "SceneTitleViolation",
     "build_short_description",

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+import math
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+from abc import abstractmethod
 from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Protocol
@@ -146,17 +148,13 @@ class RegistryState:
 
 def create_registry_server(host: str, port: int, state: RegistryState) -> ThreadingHTTPServer:
     class RegistryHandler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:
+        def _handle_discovery(self) -> None:
             if not handle_registry_request(self, state):
                 _write_registry_json(self, 404, {"error": "not found"})
 
-        def do_POST(self) -> None:
-            if not handle_registry_request(self, state):
-                _write_registry_json(self, 404, {"error": "not found"})
-
-        def do_DELETE(self) -> None:
-            if not handle_registry_request(self, state):
-                _write_registry_json(self, 404, {"error": "not found"})
+        do_GET = _handle_discovery
+        do_POST = _handle_discovery
+        do_DELETE = _handle_discovery
 
         def _method_not_allowed(self) -> None:
             status = 405 if self.path == DISCOVERY_PATH else 404
@@ -208,22 +206,8 @@ def _read_registry_json(handler: BaseHTTPRequestHandler) -> object:
     return json.loads(handler.rfile.read(length))
 
 
-def handle_registry_request(handler: BaseHTTPRequestHandler, state: RegistryState) -> bool:
-    """Serve the discovery contract from either a dedicated or collection server."""
-    if handler.path != DISCOVERY_PATH:
-        return False
-    if handler.command == "GET":
-        _write_registry_json(handler, 200, state.snapshot())
-        return True
-    if handler.command not in {"POST", "DELETE"}:
-        _write_registry_json(handler, 405, {"error": "method not allowed"})
-        return True
-    if handler.headers.get("Origin") is not None:
-        _write_registry_json(handler, 403, {"error": "Origin header is not allowed"})
-        return True
-    if handler.headers.get_content_type() != "application/json":
-        _write_registry_json(handler, 415, {"error": "Content-Type must be application/json"})
-        return True
+def _handle_registry_mutation(handler: BaseHTTPRequestHandler, state: RegistryState) -> None:
+    """Apply a validated write request and translate registry errors to HTTP responses."""
     try:
         payload = _read_registry_json(handler)
         if handler.command == "POST":
@@ -240,12 +224,33 @@ def handle_registry_request(handler: BaseHTTPRequestHandler, state: RegistryStat
         _write_registry_json(handler, 400, {"error": str(error)})
     else:
         _write_registry_json(handler, 200, {})
+
+
+def handle_registry_request(handler: BaseHTTPRequestHandler, state: RegistryState) -> bool:
+    """Serve the discovery contract from either a dedicated or collection server."""
+    if handler.path != DISCOVERY_PATH:
+        return False
+    if handler.command == "GET":
+        _write_registry_json(handler, 200, state.snapshot())
+        return True
+    if handler.command not in {"POST", "DELETE"}:
+        _write_registry_json(handler, 405, {"error": "method not allowed"})
+        return True
+    if handler.headers.get("Origin") is not None:
+        _write_registry_json(handler, 403, {"error": "Origin header is not allowed"})
+        return True
+    if handler.headers.get_content_type() != "application/json":
+        _write_registry_json(handler, 415, {"error": "Content-Type must be application/json"})
+        return True
+    _handle_registry_mutation(handler, state)
     return True
 
 
 class RegistrationTransport(Protocol):
+    @abstractmethod
     def register(self, payload: dict[str, object]) -> None: ...
 
+    @abstractmethod
     def unregister(self, instance_id: str) -> None: ...
 
 
@@ -266,6 +271,60 @@ class _HttpTransport:
 
     def unregister(self, instance_id: str) -> None:
         self._send("DELETE", {"instance_id": instance_id})
+
+
+def _endpoint_responds(endpoint: str, timeout_seconds: float) -> bool:
+    try:
+        with urllib.request.urlopen(endpoint, timeout=timeout_seconds):
+            return True
+    except urllib.error.HTTPError:
+        return True
+    except OSError:
+        return False
+
+
+def _register_transport(transport: RegistrationTransport, payload: dict[str, object]) -> None:
+    """Map explicit HTTP registration rejection independently of the transport implementation."""
+    try:
+        transport.register(payload)
+    except urllib.error.HTTPError as error:
+        raise DiscoveryRegistryError(f"discovery registry rejected registration: HTTP {error.code}") from error
+
+
+def _is_positive_finite_registry_time(value: object) -> bool:
+    """Accept positive finite JSON numbers without coercing large integers to float."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and 0 < value < math.inf
+
+
+def _registry_endpoint_is_compatible(endpoint: str, timeout_seconds: float) -> bool:
+    """Probe the registry protocol without modifying lifecycle or registration state."""
+    try:
+        with urllib.request.urlopen(endpoint, timeout=timeout_seconds) as response:
+            if response.status != 200:
+                return False
+            payload = json.load(response)
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    if payload.get("schema_version") != DISCOVERY_SCHEMA_VERSION:
+        return False
+    ttl = payload.get("ttl_seconds")
+    servers = payload.get("servers")
+    if not _is_positive_finite_registry_time(ttl) or not isinstance(servers, list):
+        return False
+    if len(servers) > MAX_REGISTRY_ENTRIES:
+        return False
+    try:
+        for entry in servers:
+            # Registration validation also establishes the entry's object shape.
+            _validated_registration(entry)
+            expires_at = entry.get("expires_at")
+            if not _is_positive_finite_registry_time(expires_at):
+                return False
+    except ValueError:
+        return False
+    return True
 
 
 class DiscoveryLifecycle:
@@ -345,43 +404,10 @@ class DiscoveryLifecycle:
         return True
 
     def _endpoint_responds(self) -> bool:
-        try:
-            with urllib.request.urlopen(self._endpoint(), timeout=self._request_timeout_seconds):
-                return True
-        except urllib.error.HTTPError:
-            return True
-        except (OSError, urllib.error.URLError):
-            return False
+        return _endpoint_responds(self._endpoint(), self._request_timeout_seconds)
 
     def _registry_endpoint_is_compatible(self) -> bool:
-        try:
-            with urllib.request.urlopen(self._endpoint(), timeout=self._request_timeout_seconds) as response:
-                if response.status != 200:
-                    return False
-                payload = json.load(response)
-        except (OSError, urllib.error.URLError, json.JSONDecodeError):
-            return False
-        if not isinstance(payload, dict):
-            return False
-        if payload.get("schema_version") != DISCOVERY_SCHEMA_VERSION:
-            return False
-        ttl = payload.get("ttl_seconds")
-        servers = payload.get("servers")
-        if not isinstance(ttl, (int, float)) or isinstance(ttl, bool) or ttl <= 0 or not isinstance(servers, list):
-            return False
-        if len(servers) > MAX_REGISTRY_ENTRIES:
-            return False
-        try:
-            for entry in servers:
-                if not isinstance(entry, dict):
-                    return False
-                expires_at = entry.get("expires_at")
-                if not isinstance(expires_at, (int, float)) or isinstance(expires_at, bool) or expires_at <= 0:
-                    return False
-                _validated_registration(entry)
-        except ValueError:
-            return False
-        return True
+        return _registry_endpoint_is_compatible(self._endpoint(), self._request_timeout_seconds)
 
     def _current_transport(self) -> RegistrationTransport:
         if self.is_owner and self._state is not None:
@@ -391,10 +417,9 @@ class DiscoveryLifecycle:
         return _HttpTransport(self._endpoint(), timeout_seconds=self._request_timeout_seconds)
 
     def _register(self) -> None:
-        try:
-            self._current_transport().register({"instance_id": self.instance_id, "server_info": self.server_info})
-        except urllib.error.HTTPError as error:
-            raise DiscoveryRegistryError(f"discovery registry rejected registration: HTTP {error.code}") from error
+        _register_transport(
+            self._current_transport(), {"instance_id": self.instance_id, "server_info": self.server_info}
+        )
         self._registered = True
 
     def start(self) -> None:
@@ -408,7 +433,7 @@ class DiscoveryLifecycle:
         else:
             try:
                 self._register()
-            except (OSError, urllib.error.URLError):
+            except OSError:
                 pass
         if self._embedded_registry_state is not None:
             self._register()
@@ -426,7 +451,7 @@ class DiscoveryLifecycle:
             try:
                 self._register()
                 return
-            except (OSError, urllib.error.URLError) as error:
+            except OSError as error:
                 last_error = error
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -439,7 +464,7 @@ class DiscoveryLifecycle:
         while not self._wait(self.heartbeat_seconds):
             try:
                 self._register()
-            except (OSError, urllib.error.URLError):
+            except OSError:
                 continue
 
     def _ownership_loop(self) -> None:
@@ -451,7 +476,7 @@ class DiscoveryLifecycle:
             try:
                 with urllib.request.urlopen(self._endpoint(), timeout=1):
                     continue
-            except (OSError, urllib.error.URLError):
+            except OSError:
                 if self._become_owner():
                     return
 
@@ -464,7 +489,7 @@ class DiscoveryLifecycle:
         if self._registered:
             try:
                 self._current_transport().unregister(self.instance_id)
-            except (OSError, urllib.error.URLError):
+            except OSError:
                 pass
             else:
                 self._registered = False

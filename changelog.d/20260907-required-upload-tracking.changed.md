@@ -1,0 +1,1 @@
+- Shorts 投稿前の必須 tracking 読込を TrackingStore に集約し、ファイルを退避・変更せず読み取り失敗を UploadError として伝える境界を追加しました。

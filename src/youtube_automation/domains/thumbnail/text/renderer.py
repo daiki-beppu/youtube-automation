@@ -192,6 +192,27 @@ def _validate_background_pixels(image: Image.Image, *, background: Path) -> None
         )
 
 
+def _load_background_image(background: Path) -> Image.Image:
+    """Validate and decode the background before drawing text."""
+    _validate_background_file(background)
+    try:
+        with Image.open(background) as opened:
+            _validate_background_pixels(opened, background=background)
+            image = opened.convert("RGB")
+    except (OSError, UnidentifiedImageError, Image.DecompressionBombError) as exc:
+        raise ValidationError(f"背景画像を読み込めません: {background} ({exc})") from exc
+    return image
+
+
+def _aligned_text_offset(alignment: str, extent: int, text_extent: int, margin: int) -> int:
+    """Place either text axis at its leading edge, trailing edge, or center."""
+    if alignment in ("top", "left"):
+        return margin
+    if alignment in ("bottom", "right"):
+        return extent - margin - text_extent
+    return (extent - text_extent) // 2
+
+
 def compose_thumbnail_text(
     *,
     background: Path,
@@ -213,13 +234,7 @@ def compose_thumbnail_text(
     title_font = load_font(spec.title_style)
     channel_font = load_font(spec.channel_name_style) if channel_name and spec.channel_name_style else None
 
-    _validate_background_file(background)
-    try:
-        with Image.open(background) as opened:
-            _validate_background_pixels(opened, background=background)
-            image = opened.convert("RGB")
-    except (OSError, UnidentifiedImageError, Image.DecompressionBombError) as exc:
-        raise ValidationError(f"背景画像を読み込めません: {background} ({exc})") from exc
+    image = _load_background_image(background)
     draw = ImageDraw.Draw(image)
 
     title_line_height = round(_line_height(title_font) * spec.line_spacing)
@@ -231,43 +246,26 @@ def compose_thumbnail_text(
     if not horizontal:
         vertical, horizontal = "center", "center"  # anchor == "center"
 
-    if vertical == "top":
-        y = spec.margin_y
-    elif vertical == "bottom":
-        y = image.height - spec.margin_y - block_height
-    else:
-        y = (image.height - block_height) // 2
+    y = _aligned_text_offset(vertical, image.height, block_height, spec.margin_y)
 
-    def _x_for(width: int) -> int:
-        if horizontal == "left":
-            return spec.margin_x
-        if horizontal == "right":
-            return image.width - spec.margin_x - width
-        return (image.width - width) // 2
+    def _draw_line(text: str, font: ImageFont.FreeTypeFont, style: TextStyle, y: int) -> None:
+        width = _text_width(draw, text, font, style.stroke_width)
+        draw.text(
+            (_aligned_text_offset(horizontal, image.width, width, spec.margin_x), y),
+            text,
+            font=font,
+            fill=style.color,
+            stroke_width=style.stroke_width,
+            stroke_fill=style.stroke_color,
+        )
 
     for line in lines:
-        width = _text_width(draw, line, title_font, spec.title_style.stroke_width)
-        draw.text(
-            (_x_for(width), y),
-            line,
-            font=title_font,
-            fill=spec.title_style.color,
-            stroke_width=spec.title_style.stroke_width,
-            stroke_fill=spec.title_style.stroke_color,
-        )
+        _draw_line(line, title_font, spec.title_style, y)
         y += title_line_height
 
     if channel_font is not None and channel_name and spec.channel_name_style is not None:
         y += spec.gap
-        width = _text_width(draw, channel_name, channel_font, spec.channel_name_style.stroke_width)
-        draw.text(
-            (_x_for(width), y),
-            channel_name,
-            font=channel_font,
-            fill=spec.channel_name_style.color,
-            stroke_width=spec.channel_name_style.stroke_width,
-            stroke_fill=spec.channel_name_style.stroke_color,
-        )
+        _draw_line(channel_name, channel_font, spec.channel_name_style, y)
 
     _save_image_safely(image, output, channel_root=channel_root)
     return output

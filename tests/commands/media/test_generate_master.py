@@ -24,7 +24,7 @@ from youtube_automation.commands.media.generate_master import (
     generate_master as run_generate_master,
 )
 from youtube_automation.core.errors import ValidationError
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
+from youtube_automation.domains.collections.paths import CollectionPaths
 
 
 class TestResolveLoopCount:

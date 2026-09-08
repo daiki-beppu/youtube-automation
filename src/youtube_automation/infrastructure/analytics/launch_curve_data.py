@@ -9,6 +9,7 @@ from typing import Dict, Optional
 import pandas as pd
 
 from youtube_automation.infrastructure.analytics.ctr_resolver import index_reporting_per_video
+from youtube_automation.infrastructure.analytics.snapshots import load_latest_analytics_snapshot
 
 
 def build_launch_curve_frame(
@@ -98,23 +99,31 @@ def build_launch_curve_frame(
 
 def load_latest_daily_snapshot(channel_data_dir: Path) -> Optional[Dict]:
     """data/analytics/daily_per_video/ から最新の JSON を読み込む"""
-    daily_dir = channel_data_dir / "analytics" / "daily_per_video"
-    if not daily_dir.exists():
-        return None
-    files = sorted(daily_dir.glob("*.json"))
-    if not files:
-        return None
-    with open(files[-1], encoding="utf-8") as f:
-        return json.load(f)
+    return _load_latest_snapshot(channel_data_dir / "analytics" / "daily_per_video")
 
 
 def load_latest_reporting_snapshot(channel_data_dir: Path) -> Optional[Dict]:
     """data/analytics/reporting_api/ から最新の Reporting API impressions_summary を読み込む (#84)。"""
-    reporting_dir = channel_data_dir / "analytics" / "reporting_api"
-    if not reporting_dir.exists():
+    return _load_latest_snapshot(channel_data_dir / "analytics" / "reporting_api")
+
+
+def _load_latest_snapshot(snapshot_dir: Path) -> Optional[Dict]:
+    """Read the final JSON filename in one snapshot directory, if present."""
+    if not snapshot_dir.exists():
         return None
-    files = sorted(reporting_dir.glob("*.json"))
+    files = sorted(snapshot_dir.glob("*.json"))
     if not files:
         return None
     with open(files[-1], encoding="utf-8") as f:
         return json.load(f)
+
+
+def load_video_metadata(channel_dir: Path) -> dict:
+    """Extract published video titles and dates from the newest analytics snapshot."""
+    data = load_latest_analytics_snapshot(channel_dir)
+    meta = {}
+    for video_id, video in (data.get("video_analytics") or {}).items():
+        published_at = video.get("published_at")
+        if video_id and published_at:
+            meta[video_id] = {"title": video.get("title", ""), "published_at": published_at}
+    return meta

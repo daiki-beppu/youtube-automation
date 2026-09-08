@@ -2575,3 +2575,32 @@ def test_legacy_slug_cannot_select_from_parent_directory(tmp_path, monkeypatch):
 
     with pytest.raises(ConfigError, match="CHANNEL_DIR"):
         channel_dir()
+
+
+def test_core_and_configuration_share_root_cache_and_reset(tmp_path, monkeypatch):
+    from youtube_automation.core import channel_context
+
+    first = _setup_channel(tmp_path / "first", _minimal_sections())
+    second = _setup_channel(tmp_path / "second", _minimal_sections())
+    monkeypatch.setenv("CHANNEL_DIR", str(first))
+    assert channel_context.channel_dir() == first
+    assert channel_dir() == first
+    monkeypatch.setenv("CHANNEL_DIR", str(second))
+    assert channel_context.channel_dir() == first
+    reset()
+    assert channel_context.channel_dir() == second
+    assert channel_dir() == second
+
+
+def test_first_config_load_refreshes_previously_resolved_root(tmp_path, monkeypatch):
+    from youtube_automation.core import channel_context
+
+    first = _setup_channel(tmp_path / "first", _minimal_sections())
+    sections = _minimal_sections()
+    sections["meta.json"]["channel"]["name"] = "Second channel"
+    second = _setup_channel(tmp_path / "second", sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(first))
+    assert channel_context.channel_dir() == first
+    monkeypatch.setenv("CHANNEL_DIR", str(second))
+    assert load_config().meta.channel_name == "Second channel"
+    assert channel_context.channel_dir() == channel_dir() == second

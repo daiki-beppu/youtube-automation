@@ -6,8 +6,8 @@ import logging
 from pathlib import Path
 
 from youtube_automation.configuration import ChannelConfig, load_config
-from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.uploads.playlists import PlaylistManager
 from youtube_automation.infrastructure.google.youtube import YouTubeClients

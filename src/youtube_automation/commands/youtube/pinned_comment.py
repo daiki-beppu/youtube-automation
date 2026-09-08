@@ -31,15 +31,15 @@ from typing import Iterable, cast
 
 from googleapiclient.errors import HttpError
 
-from youtube_automation.configuration import channel_dir as _channel_dir
+from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
 from youtube_automation.configuration import load_config
+from youtube_automation.core.channel_context import channel_dir as _channel_dir
 from youtube_automation.core.errors import AutomationError, ValidationError, YouTubeAPIError
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
-from youtube_automation.infrastructure.auth.youtube import YouTubeOAuthHandler
 from youtube_automation.infrastructure.cost_tracker import log_quota
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
-from youtube_automation.infrastructure.media.collection_paths import CollectionPaths
 
 logger = logging.getLogger(__name__)
 

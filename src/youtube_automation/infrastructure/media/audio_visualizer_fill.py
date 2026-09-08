@@ -8,8 +8,12 @@ from pathlib import Path
 
 from PIL import Image
 
-_HEX_COLOR = re.compile(r"^(?:0x|#)?([0-9a-fA-F]{6})(?:[0-9a-fA-F]{2})?$")
-_NAMED_COLORS = {"white", "black", "red", "green", "blue", "yellow", "cyan", "magenta"}
+from youtube_automation.core.colors import (
+    normalize_ffmpeg_color as normalize_ffmpeg_color,
+)
+from youtube_automation.core.colors import (
+    parse_color as parse_color,
+)
 
 
 def parse_size(value: str) -> tuple[int, int]:
@@ -18,28 +22,6 @@ def parse_size(value: str) -> tuple[int, int]:
     if not match:
         raise ValueError(f"invalid visualizer size: {value!r} (expected WIDTHxHEIGHT)")
     return int(match.group(1)), int(match.group(2))
-
-
-def parse_color(value: str, *, allow_named: bool = False) -> tuple[int, int, int]:
-    """FFmpeg 形式の RGB hex を Pillow 用 tuple に変換する。"""
-    match = _HEX_COLOR.fullmatch(value)
-    if match:
-        rgb = match.group(1)
-        return tuple(int(rgb[index : index + 2], 16) for index in (0, 2, 4))  # type: ignore[return-value]
-    if allow_named and value.lower() in _NAMED_COLORS:
-        image = Image.new("RGB", (1, 1), value.lower())
-        return image.getpixel((0, 0))
-    raise ValueError(f"invalid fill color: {value!r} (expected 0xRRGGBB or #RRGGBB)")
-
-
-def normalize_ffmpeg_color(value: str) -> str:
-    """検証済み色を FFmpeg の ``0xRRGGBB`` 形式へ正規化する。"""
-    match = _HEX_COLOR.fullmatch(value)
-    if match:
-        return f"0x{match.group(1).upper()}"
-    if value.lower() in _NAMED_COLORS:
-        return value.lower()
-    raise ValueError(f"invalid fill color: {value!r} (expected 0xRRGGBB or a basic named color)")
 
 
 def create_fill_asset(

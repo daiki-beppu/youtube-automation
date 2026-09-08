@@ -83,7 +83,7 @@ from youtube_automation.infrastructure.media.veo_generator import (
 
 
 def _channel_root() -> Path:
-    from youtube_automation.configuration import channel_dir
+    from youtube_automation.core.channel_context import channel_dir
 
     return channel_dir()
 
@@ -339,6 +339,66 @@ def _run_skip_existing(output_path: Path) -> None:
     sys.exit(0)
 
 
+def _generate_engine_loop(
+    image_path: Path,
+    output_path: Path,
+    model: str,
+    prompt: str,
+    *,
+    engine: str,
+    engine_config: dict | None,
+    compression: dict | None,
+) -> bool:
+    """Invoke the configured provider while retaining its initialization failure policy."""
+    if engine == "fal":
+        fal_config = engine_config or {}
+        raw_canvas = fal_config.get("canvas", {})
+        canvas = {str(key): tuple(value) for key, value in raw_canvas.items()}
+        upscale = fal_config.get("upscale_to", DEFAULT_FAL_UPSCALE_TO)
+        return generate_fal_loop_video(
+            image_path,
+            output_path,
+            model,
+            prompt,
+            duration_seconds=int(fal_config.get("duration_seconds", DEFAULT_FAL_DURATION_SECONDS)),
+            aspect_ratio=str(fal_config.get("aspect_ratio", DEFAULT_FAL_ASPECT_RATIO)),
+            resolution=str(fal_config.get("resolution", DEFAULT_FAL_RESOLUTION)),
+            prompt_expansion_mode=str(fal_config.get("prompt_expansion_mode", DEFAULT_FAL_PROMPT_EXPANSION_MODE)),
+            timeout_sec=float(fal_config.get("timeout_seconds", DEFAULT_FAL_TIMEOUT_SEC)),
+            poll_interval_sec=float(fal_config.get("poll_interval_seconds", DEFAULT_FAL_POLL_INTERVAL_SEC)),
+            # 不正な型を丸めず、生成境界の整数検証へ渡す。
+            max_poll_retries=fal_config.get("max_poll_retries", DEFAULT_FAL_MAX_POLL_RETRIES),
+            allowed_models=frozenset(fal_config.get("allowed_models", DEFAULT_FAL_ALLOWED_MODELS)),
+            canvas=canvas or DEFAULT_FAL_CANVAS,
+            upscale_to=tuple(upscale) if upscale is not None else None,
+            compression=compression,
+        )
+    elif engine == "omni":
+        try:
+            client = create_omni_client()
+        except ConfigError as e:
+            print(f"[ERROR] {e}")
+            sys.exit(1)
+        omni_config = engine_config or {}
+        return generate_omni_loop_video(
+            client,
+            image_path,
+            output_path,
+            model,
+            prompt,
+            timeout_sec=float(omni_config.get("timeout_seconds", 600)),
+            poll_interval_sec=float(omni_config.get("poll_interval_seconds", 5)),
+            compression=compression,
+        )
+    else:
+        try:
+            client = create_veo_genai_client()
+        except ConfigError as e:
+            print(f"[ERROR] {e}")
+            sys.exit(1)
+        return generate_loop_video(client, image_path, output_path, model, prompt, compression=compression)
+
+
 def _run_generate(
     image_path: Path,
     output_path: Path,
@@ -376,53 +436,15 @@ def _run_generate(
         _backup_existing_loop(output_path, max_backups=max_backups)
 
     start_time = time.monotonic()
-    if engine == "fal":
-        fal_config = engine_config or {}
-        raw_canvas = fal_config.get("canvas", {})
-        canvas = {str(key): tuple(value) for key, value in raw_canvas.items()}
-        upscale = fal_config.get("upscale_to", DEFAULT_FAL_UPSCALE_TO)
-        success = generate_fal_loop_video(
-            image_path,
-            output_path,
-            model,
-            prompt,
-            duration_seconds=int(fal_config.get("duration_seconds", DEFAULT_FAL_DURATION_SECONDS)),
-            aspect_ratio=str(fal_config.get("aspect_ratio", DEFAULT_FAL_ASPECT_RATIO)),
-            resolution=str(fal_config.get("resolution", DEFAULT_FAL_RESOLUTION)),
-            prompt_expansion_mode=str(fal_config.get("prompt_expansion_mode", DEFAULT_FAL_PROMPT_EXPANSION_MODE)),
-            timeout_sec=float(fal_config.get("timeout_seconds", DEFAULT_FAL_TIMEOUT_SEC)),
-            poll_interval_sec=float(fal_config.get("poll_interval_seconds", DEFAULT_FAL_POLL_INTERVAL_SEC)),
-            # 不正な型を丸めず、生成境界の整数検証へ渡す。
-            max_poll_retries=fal_config.get("max_poll_retries", DEFAULT_FAL_MAX_POLL_RETRIES),
-            allowed_models=frozenset(fal_config.get("allowed_models", DEFAULT_FAL_ALLOWED_MODELS)),
-            canvas=canvas or DEFAULT_FAL_CANVAS,
-            upscale_to=tuple(upscale) if upscale is not None else None,
-            compression=compression,
-        )
-    elif engine == "omni":
-        try:
-            client = create_omni_client()
-        except ConfigError as e:
-            print(f"[ERROR] {e}")
-            sys.exit(1)
-        omni_config = engine_config or {}
-        success = generate_omni_loop_video(
-            client,
-            image_path,
-            output_path,
-            model,
-            prompt,
-            timeout_sec=float(omni_config.get("timeout_seconds", 600)),
-            poll_interval_sec=float(omni_config.get("poll_interval_seconds", 5)),
-            compression=compression,
-        )
-    else:
-        try:
-            client = create_veo_genai_client()
-        except ConfigError as e:
-            print(f"[ERROR] {e}")
-            sys.exit(1)
-        success = generate_loop_video(client, image_path, output_path, model, prompt, compression=compression)
+    success = _generate_engine_loop(
+        image_path,
+        output_path,
+        model,
+        prompt,
+        engine=engine,
+        engine_config=engine_config,
+        compression=compression,
+    )
     elapsed = time.monotonic() - start_time
 
     print()

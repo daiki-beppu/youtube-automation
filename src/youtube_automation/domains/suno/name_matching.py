@@ -52,6 +52,12 @@ def suno_name_lookup_candidates(name: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(candidate for candidate in candidates if candidate))
 
 
+def suno_prompt_lookup_candidates(name: str, title: str | None = None) -> tuple[str, ...]:
+    """Combine prompt-name and optional title aliases, retaining first-match priority."""
+    sources = (name, title) if title else (name,)
+    return tuple(dict.fromkeys(candidate for source in sources for candidate in suno_name_lookup_candidates(source)))
+
+
 def suno_filename_lookup_candidates(stem: str) -> tuple[str, ...]:
     """Return lookup candidates for a downloaded audio filename stem.
 

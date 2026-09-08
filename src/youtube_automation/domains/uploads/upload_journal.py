@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
-from youtube_automation.core.adapters.media import CollectionPaths
 from youtube_automation.core.errors import UploadJournalCorruptError, UploadJournalSaveError
+from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.infrastructure.filesystem import (
     JSONValue,
     file_lock,
@@ -35,6 +35,16 @@ class UploadJournalStatus:
     status: str | None
     quarantine_path: Path | None = None
 
+    @property
+    def is_corrupt(self) -> bool:
+        """Whether the journal was quarantined and must not be treated as absent."""
+        return self.outcome is UploadJournalOutcome.CORRUPT
+
+    def ensure_usable(self) -> None:
+        """Reject operations on a status known to be corrupt."""
+        if self.is_corrupt:
+            raise UploadJournalCorruptError(f"upload journal is corrupt and was quarantined: {self.quarantine_path}")
+
 
 class UploadAttempt:
     """特定 upload kind の再開 token と遷移操作。"""
@@ -55,14 +65,8 @@ class UploadAttempt:
         if uri is not None and not isinstance(uri, str):
             raise TypeError("upload session URI must be a string or null")
 
-        def mutate(record: dict[str, JSONValue]) -> None:
-            if uri is None:
-                record.pop("resume_session_uri", None)
-            else:
-                record["resume_session_uri"] = uri
-            record["journal_status"] = "in_progress"
-
-        self._journal._mutate(self.kind, mutate)
+        fields: dict[str, JSONValue] = {"resume_session_uri": uri} if uri is not None else {}
+        self._transition("in_progress", fields, clear_resume=uri is None)
 
     def complete(self, video: Mapping[str, JSONValue]) -> None:
         """upload 完了を記録し、再開 token を破棄する。"""
@@ -71,16 +75,12 @@ class UploadAttempt:
         if not isinstance(video_id, str) or not video_id:
             raise TypeError("completed upload video_id must be a non-empty string")
 
-        def mutate(record: dict[str, JSONValue]) -> None:
-            record.pop("resume_session_uri", None)
-            record["journal_status"] = "completed"
-            record["video_id"] = video_id
-            for key in ("video_url", "upload_source"):
-                value = video.get(key)
-                if value is not None:
-                    record[key] = value
-
-        self._journal._mutate(self.kind, mutate)
+        fields: dict[str, JSONValue] = {"video_id": video_id}
+        for key in ("video_url", "upload_source"):
+            value = video.get(key)
+            if value is not None:
+                fields[key] = value
+        self._transition("completed", fields, clear_resume=True)
 
     def fail(self, error: str) -> None:
         """upload 失敗を記録する。resume token は retry のため保持する。"""
@@ -88,17 +88,21 @@ class UploadAttempt:
         if not isinstance(error, str) or not error:
             raise TypeError("upload failure must be a non-empty string")
 
+        self._transition("failed", {"journal_error": error})
+
+    def _transition(self, status: str, fields: dict[str, JSONValue], *, clear_resume: bool = False) -> None:
+        """指定フィールドだけを変更し、再開 token と状態を同じ lock 内で保存する。"""
+
         def mutate(record: dict[str, JSONValue]) -> None:
-            record["journal_status"] = "failed"
-            record["journal_error"] = error
+            if clear_resume:
+                record.pop("resume_session_uri", None)
+            record["journal_status"] = status
+            record.update(fields)
 
         self._journal._mutate(self.kind, mutate)
 
     def _ensure_usable(self) -> None:
-        if self.status.outcome is UploadJournalOutcome.CORRUPT:
-            raise UploadJournalCorruptError(
-                f"upload journal is corrupt and was quarantined: {self.status.quarantine_path}"
-            )
+        self.status.ensure_usable()
 
 
 class UploadJournal:
@@ -146,11 +150,8 @@ class UploadJournal:
     def _load(self) -> tuple[UploadJournalOutcome, dict[str, JSONValue], Path | None]:
         if not path_exists(self.path):
             return UploadJournalOutcome.ABSENT, {}, None
-        try:
-            document = json.loads(read_file_text(self.path))
-            if not isinstance(document, dict):
-                raise json.JSONDecodeError("root must be an object", read_file_text(self.path), 0)
-        except (json.JSONDecodeError, UnicodeDecodeError):
+        document = _read_journal_document(self.path)
+        if document is None:
             quarantine_path = self._quarantine()
             return UploadJournalOutcome.CORRUPT, {}, quarantine_path
         return UploadJournalOutcome.READY, document, None
@@ -185,6 +186,15 @@ class UploadJournal:
         except (OSError, TypeError, ValueError) as exc:
             temporary.unlink(missing_ok=True)
             raise UploadJournalSaveError(f"upload journal could not be saved: {self.path}") from exc
+
+
+def _read_journal_document(path: Path) -> dict[str, JSONValue] | None:
+    """Read a journal object, distinguishing malformed content from filesystem errors."""
+    try:
+        document = json.loads(read_file_text(path))
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    return document if isinstance(document, dict) else None
 
 
 def _validate_kind(kind: str) -> None:

@@ -13,8 +13,8 @@ from youtube_automation.application.thumbnail_review import (
     run_thumbnail_review,
 )
 from youtube_automation.commands._shared.cli_harness import run_cli
-from youtube_automation.configuration import channel_dir
 from youtube_automation.configuration.skills import load_skill_config
+from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import ValidationError
 
 

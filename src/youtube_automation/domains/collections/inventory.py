@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -46,6 +47,25 @@ def _require_directory(path: Path, *, label: str) -> None:
         raise WorkflowStateError(f"{label} is not a directory: {path}")
 
 
+def _stage_collection_dirs(stage_dir: Path, stage: Stage) -> Iterator[Path]:
+    """Yield valid collection directories in order, rejecting structural hazards lazily."""
+    if not stage_dir.exists() and not stage_dir.is_symlink():
+        return
+    _require_directory(stage_dir, label=f"collection stage {stage}")
+    try:
+        entries = sorted(stage_dir.iterdir(), key=lambda path: path.name)
+    except OSError as exc:
+        raise WorkflowStateError(f"collection stage could not be read: {stage_dir}") from exc
+    for directory in entries:
+        if directory.name.startswith((".", "_")):
+            continue
+        if directory.is_symlink():
+            raise WorkflowStateError(f"collection must not be a symlink: {directory}")
+        if not directory.is_dir():
+            continue
+        yield directory
+
+
 def iter_collections(
     channel_dir: Path,
     stages: tuple[Stage, ...] = _DEFAULT_STAGES,
@@ -66,21 +86,7 @@ def iter_collections(
     records: list[CollectionRecord] = []
     names: dict[str, Stage] = {}
     for stage in stages:
-        stage_dir = collections_root / stage
-        if not stage_dir.exists() and not stage_dir.is_symlink():
-            continue
-        _require_directory(stage_dir, label=f"collection stage {stage}")
-        try:
-            entries = sorted(stage_dir.iterdir(), key=lambda path: path.name)
-        except OSError as exc:
-            raise WorkflowStateError(f"collection stage could not be read: {stage_dir}") from exc
-        for directory in entries:
-            if directory.name.startswith((".", "_")):
-                continue
-            if directory.is_symlink():
-                raise WorkflowStateError(f"collection must not be a symlink: {directory}")
-            if not directory.is_dir():
-                continue
+        for directory in _stage_collection_dirs(collections_root / stage, stage):
             previous_stage = names.get(directory.name)
             if previous_stage is not None:
                 raise WorkflowStateError(

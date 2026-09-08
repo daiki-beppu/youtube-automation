@@ -1,0 +1,1 @@
+- readiness の uv project・automation パッケージ検査で、グローバル導入済み環境を認識する処理を共通化しました。

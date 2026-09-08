@@ -8,10 +8,11 @@ import json
 import sys
 from collections.abc import Mapping
 
+from youtube_automation.commands._shared.arguments import add_optional_collection_argument
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.errors import ValidationError
+from youtube_automation.domains.collections.paths import resolve_collection_dir
 from youtube_automation.domains.suno.selection import select_suno_tracks
-from youtube_automation.infrastructure.media.collection_paths import resolve_collection_dir
 
 
 def _configured_min_song_sec(cfg: Mapping[str, object]) -> float | None:
@@ -28,7 +29,7 @@ def _configured_min_song_sec(cfg: Mapping[str, object]) -> float | None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Suno clips を歌詞-aware に選別し、尺外音源を除外する")
-    parser.add_argument("collection", nargs="?", help="コレクションディレクトリ (省略時は CWD)")
+    add_optional_collection_argument(parser)
     parser.add_argument("--dry-run", action="store_true", help="ファイル移動せず plan と log を stdout 表示")
     parser.add_argument(
         "--allow-best-effort-over-max",

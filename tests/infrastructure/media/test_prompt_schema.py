@@ -194,3 +194,51 @@ def test_from_skill_config_round_trip_to_render_does_not_crash() -> None:
     assert "Use case: product-mockup" in rendered
     assert "Asset type: YouTube thumbnail" in rendered
     assert "Constraints: タイトルは 2 行以内" in rendered
+
+
+def test_prompt_parts_keep_order_and_ignore_blank_or_non_string_values():
+    config = {
+        "image_generation": {
+            "gemini": {
+                "fixed_character": {
+                    "species": "  cat ",
+                    "description": ["ignored"],
+                    "outfit": "  coat\n",
+                    "accessories": 42,
+                    "expression": " ",
+                    "pose": "  sitting ",
+                },
+                "composition_rules": {
+                    "character_pose": "  facing camera ",
+                    "text_lines": "  two lines ",
+                    "environment": False,
+                },
+                "thumbnail_text": {
+                    "title_format": "  title ",
+                    "title_prefix": "\t",
+                    "channel_name": " channel ",
+                    "channel_name_style": {},
+                    "font": {"copy": " serif ", "genre_tag": " sans ", "other": "ignored"},
+                },
+            }
+        }
+    }
+    schema = prompt_schema.from_skill_config(config)
+    assert schema.subject == "cat. coat. sitting. facing camera"
+    assert schema.text == "title. channel. copy: serif. genre_tag: sans. two lines"
+    assert schema.scene is None
+    assert config["image_generation"]["gemini"]["fixed_character"]["species"] == "  cat "
+
+
+def test_non_mapping_font_and_non_string_text_produce_no_text():
+    schema = prompt_schema.from_skill_config(
+        {
+            "image_generation": {
+                "gemini": {
+                    "thumbnail_text": {"font": ["not a font map"], "title_format": 123},
+                    "composition_rules": {"text_lines": False},
+                }
+            }
+        }
+    )
+    assert schema.text is None
