@@ -1,0 +1,1 @@
+- Windows のパス区切りで渡された `auth/client_secrets.json` と `auth/token.json` も secret edit guard で拒否するようにした。

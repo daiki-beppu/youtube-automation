@@ -22,7 +22,7 @@ def edit_path(payload: object) -> str:
     file_path = tool_input.get("file_path")
     if not isinstance(file_path, str) or not file_path.strip() or "\x00" in file_path:
         raise ValueError("Expected a nonempty file_path")
-    return os.path.normpath(file_path)
+    return os.path.normpath(file_path).replace("\\", "/")
 
 
 def main() -> int:
