@@ -1,0 +1,1 @@
+- Windows 版 Claude Code Desktop の BOM 付きフック入力を解釈し、`fcntl` がない環境でも SessionStart を起動できるようにした。

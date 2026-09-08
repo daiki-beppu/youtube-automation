@@ -30,7 +30,9 @@ def main() -> int:
     parser.add_argument("--protect-lockfiles", action="store_true", help="Also reject repository lockfile edits")
     args = parser.parse_args()
     try:
-        file_path = edit_path(json.load(sys.stdin))
+        # ``json.loads`` auto-detects UTF-8/16/32 byte encodings and their BOMs.
+        # Claude Code Desktop on Windows may not encode hook stdin as UTF-8.
+        file_path = edit_path(json.loads(sys.stdin.buffer.read()))
     except ValueError:
         print("BLOCKED: 編集対象を確認できません。PreToolUse JSON 入力を確認してください。", file=sys.stderr)
         return 2
