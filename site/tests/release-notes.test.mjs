@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -72,6 +72,64 @@ const updateRoutes = [
 const publicOperatorRoutes = [...operatorRoutes, ...updateRoutes];
 /** 公開 route に、navigation から除外される /onboarding を足した生成 route 総数。 */
 const generatedRouteCount = publicOperatorRoutes.length + 1;
+
+test("OAuth ガイドの再生 UI は字幕・アクセシビリティ・本文幅に対応する", async () => {
+  const html = await readOperatorDoc("/getting-started/oauth-setup");
+  const video = html.match(/<video\b[^>]*>[\s\S]*?<\/video>/u)?.[0];
+  assert.ok(video, "production HTML に再生 UI がある");
+  assert.match(video, /\bcontrols\b/u);
+  assert.match(video, /\bplaysinline\b/u);
+  assert.match(video, /preload="none"/u);
+  assert.doesNotMatch(video, /\bautoplay\b/u);
+  assert.match(video, /title="Google Auth Platform[^"\n]+"/u);
+  assert.match(video, /aria-label="Google Auth Platform[^"\n]+"/u);
+  assert.match(video, /width:100%;max-width:100%;height:auto/u);
+  assert.match(video, /<track\b[^>]*kind="captions"[^>]*srclang="ja"/u);
+});
+
+test("OAuth ガイドの配信ファイルは再生 UI に接続され Pages の上限内に収まる", async () => {
+  const html = await readOperatorDoc("/getting-started/oauth-setup");
+  const video = html.match(/<video\b[^>]*>[\s\S]*?<\/video>/u)?.[0];
+  assert.ok(video, "production HTML に再生 UI がある");
+  for (const path of ["oauth-guide.mp4", "oauth-guide.ja.vtt", "poster.jpg"]) {
+    const bytes = await stat(new URL(`../dist/media/oauth-guide/${path}`, import.meta.url));
+    assert.ok(bytes.size > 0 && bytes.size <= 25 * 1024 * 1024, `${path} は Pages の単一ファイル上限内`);
+    assert.ok(video.includes(`/media/oauth-guide/${path}`), `${path} が再生 UI に接続されている`);
+  }
+});
+
+test("OAuth ガイドの字幕は時刻順に並び操作内容と未完了事項を伝える", async () => {
+  const captions = await readFile(new URL("../dist/media/oauth-guide/oauth-guide.ja.vtt", import.meta.url), "utf8");
+  assert.match(captions, /^WEBVTT\n/u);
+  const cueTimes = [...captions.matchAll(/(\d{2}):(\d{2}):(\d{2}\.\d{3}) --> (\d{2}):(\d{2}):(\d{2}\.\d{3})/gu)].map(
+    (match) => [Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]), Number(match[4]) * 3600 + Number(match[5]) * 60 + Number(match[6])]
+  );
+  assert.ok(cueTimes.length > 0, "字幕に時刻がある");
+  for (const [index, [start, end]] of cueTimes.entries()) {
+    assert.ok(end > start, "字幕は正の表示時間を持つ");
+    if (index > 0) assert.ok(start >= cueTimes[index - 1][1], "場面間で字幕が重ならない");
+  }
+  assert.match(captions, /初回設定/u);
+  assert.match(captions, /シークレットを追加し/u);
+  assert.match(captions, /本番環境への切り替えは完了していません/u);
+  assert.doesNotMatch(captions, /@|GOCSPX-|apps\.googleusercontent\.com/u);
+});
+
+test("OAuth ガイドは確認日・録画範囲・文章による代替を表示する", async () => {
+  const html = await readOperatorDoc("/getting-started/oauth-setup");
+  assert.match(html, /In production/u);
+  assert.match(html, /画面確認日: <strong>\d{4}-\d{2}-\d{2}<\/strong>/u);
+  assert.match(html, /文章で操作を確認する/u);
+  assert.match(html, /Add secret → JSON ダウンロードの実操作/u);
+  assert.match(html, /切替は未完了/u);
+});
+
+test("OAuth ガイドの Markdown 配布は動画リンクと文章による代替を維持する", async () => {
+  const markdown = await readFile(new URL("../dist/getting-started/oauth-setup.md", import.meta.url), "utf8");
+  assert.match(markdown, /<video\b/u);
+  assert.match(markdown, /\[動画を直接開く\]\(https:\/\/youtube-automation-release-notes\.pages\.dev\/media\/oauth-guide\/oauth-guide\.mp4\)/u);
+  assert.match(markdown, /### 文章で操作を確認する/u);
+});
 
 const readStylesheetClosure = async (html) => {
   const inlineStyles = [...html.matchAll(/<style(?:\s[^>]*)?>([\s\S]*?)<\/style>/g)].map(

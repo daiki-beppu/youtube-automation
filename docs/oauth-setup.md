@@ -43,6 +43,24 @@ external user は上流リポジトリを clone し、同じ README に従って
 
 ## Google Auth Platform 手動設定
 
+### 操作画面を動画で確認する
+
+初回の「開始」からアプリ情報・外部ユーザー・連絡先の保存、Test users の登録、Desktop app の作成と JSON ダウンロードまでを、日本語ナレーション・字幕付きで確認できる（約 2 分 10 秒）。画面確認日: **2026-09-08**。黄色い枠の「非表示」パネルは、メールアドレスや認証情報を隠すために動画編集で加えたもの。Google Cloud の画面には表示されない。
+
+<video controls playsinline preload="none" width="1920" height="1080" style="display:block;width:100%;max-width:100%;height:auto;aspect-ratio:16/9" title="Google Auth Platform の設定画面と JSON ダウンロード" aria-label="Google Auth Platform の設定画面と JSON ダウンロード" poster="/media/oauth-guide/poster.jpg">
+  <source src="/media/oauth-guide/oauth-guide.mp4" type="video/mp4" />
+  <track kind="captions" src="/media/oauth-guide/oauth-guide.ja.vtt" srclang="ja" label="日本語" default />
+  動画を再生できない場合は、この下の文章手順を参照してください。
+</video>
+
+[動画を直接開く](https://youtube-automation-release-notes.pages.dev/media/oauth-guide/oauth-guide.mp4) · [日本語字幕](https://youtube-automation-release-notes.pages.dev/media/oauth-guide/oauth-guide.ja.vtt)
+
+動画は専用デモ環境で初期設定・テストユーザー登録・クライアント作成を実際に保存した操作例。補足の追加シークレットは、同日に別のデモクライアントで撮影した **Add secret → JSON ダウンロードの実操作**を示す。撮り直した初期設定とは別環境であることを動画の見出しにも表示する。デモの Audience は **Testing** のままで、**In production への切替は未完了**。Console にアプリ構成未完了の警告が出ているため、切替完了の例としては扱わない。実運用では下記の手順で不足するアプリ情報を確認して切り替える。JSON の配置・再診断と本人の OAuth 同意は、本文と wizard に戻って進める。
+
+音声合成: Irodori-TTS。フリー素材キャラクター「つくよみちゃん」が無料公開している音声データ、[つくよみちゃんコーパス（CV.夢前黎）](https://tyc.rei-yumesaki.net/material/corpus/)を使用。BGM は本動画用のオリジナル曲。動画は視聴用の教材であり、音声素材としての二次利用は許可していない。
+
+### 文章で操作を確認する
+
 Console 操作の正本は [OAuth client wizard](../.claude/skills/setup/references/oauth-client-wizard.sh)。チャンネルリポジトリのルートで起動する:
 
 ```bash
