@@ -3080,10 +3080,19 @@ export default defineContentScript({
           "実行中は選択中 clip を採用できません。停止または完了後に再実行してください。"
         );
       }
+      running = true;
+      aborted = false;
       return readSelectedClipIds({
         isAborted: () => aborted,
         expectedClipCount: data.expectedClipCount,
-      }).then((clipIds) => ({ ok: true as const, clipIds }));
+      })
+        .then((clipIds) => {
+          if (aborted) throw new Error("選択中 clip の採用を中断しました。");
+          return { ok: true as const, clipIds };
+        })
+        .finally(() => {
+          running = false;
+        });
     });
 
     // fallow-ignore-next-line complexity
