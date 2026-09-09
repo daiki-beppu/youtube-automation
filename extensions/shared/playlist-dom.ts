@@ -86,6 +86,8 @@ const VIRTUAL_SCROLL_RETRY_PASSES = 2;
  * 見続けて全 target を missing にするため、描画 signature の変化を poll で検知する。
  */
 const VIRTUAL_WINDOW_HYDRATION_WAIT_MS = 3000;
+/** Bound the entire scan, including retries and growing libraries. */
+const VIRTUAL_SCAN_TIMEOUT_MS = 60_000;
 /** loadSettleTimeoutMs のデフォルト基準値 (ms)。 */
 const SETTLE_BASE_MS = 3000;
 /** loadSettleTimeoutMs を targetIds.length でスケールする係数 (ms/clip)。 */
@@ -729,6 +731,7 @@ function computeClipWindowSignature(scroller: HTMLElement): {
 }
 
 interface VirtualWindowScanOptions {
+  deadline: number;
   isAborted: () => boolean;
   renderWaitMs: number;
   hydrationWaitMs: number;
@@ -764,6 +767,12 @@ async function settleVirtualClipWindow(
   const deadline = Date.now() + options.hydrationWaitMs;
   for (;;) {
     await sleep(options.renderWaitMs);
+    if (Date.now() >= options.deadline) {
+      restoreClipListHead(scroller);
+      throw new Error(
+        "clip 一覧の走査がタイムアウトしました。Suno で対象曲だけの一覧を開いて再実行してください。"
+      );
+    }
     if (options.isAborted()) {
       return { done: true, signature: prevSignature };
     }
@@ -816,7 +825,10 @@ async function scanVirtualClipWindows(
     if (pos >= maxScroll) {
       return;
     }
-    pos += Math.max(scroller.clientHeight, CLIP_LIST_LOAD_SCROLL_STEP_PX);
+    pos +=
+      scroller.clientHeight > 0
+        ? Math.min(scroller.clientHeight, CLIP_LIST_LOAD_SCROLL_STEP_PX)
+        : CLIP_LIST_LOAD_SCROLL_STEP_PX;
   }
 }
 
@@ -863,8 +875,8 @@ export async function scrollAndMultiSelectByIds(
   }
 
   const foundIds = new Set<string>();
-  const titleMatchedIds = new Set<string>();
   const titleMatchedRows = new WeakSet<HTMLElement>();
+  const titleMatchedRowIds = new Set<string>();
 
   async function selectMatchingRows(): Promise<void> {
     const buttons = scroller!.querySelectorAll<HTMLElement>(
@@ -872,6 +884,7 @@ export async function scrollAndMultiSelectByIds(
     );
     const seen = new Set<HTMLElement>();
     for (const button of buttons) {
+      if (isAborted()) return;
       const row = resolveClipRowFromSelectButton(button);
       if (!row || seen.has(row) || !isVisible(row)) continue;
       seen.add(row);
@@ -886,7 +899,12 @@ export async function scrollAndMultiSelectByIds(
           matched = true;
         }
       }
-      if (!matched && titleFallbackMap && titleFallbackMap.size > 0) {
+      if (
+        !matched &&
+        titleFallbackMap &&
+        titleFallbackMap.size > 0 &&
+        ![...rowIds].some((id) => titleMatchedRowIds.has(id))
+      ) {
         const title = collectClipRowTitle(row);
         if (title) {
           for (const [id, t] of titleFallbackMap) {
@@ -894,7 +912,6 @@ export async function scrollAndMultiSelectByIds(
               t === title &&
               uniqueTargetIds.has(id) &&
               !foundIds.has(id) &&
-              !titleMatchedIds.has(id) &&
               !titleMatchedRows.has(row)
             ) {
               titleMatchedId = id;
@@ -911,8 +928,9 @@ export async function scrollAndMultiSelectByIds(
           foundIds.add(id);
         }
         if (titleMatchedId) {
-          titleMatchedIds.add(titleMatchedId);
+          foundIds.add(titleMatchedId);
           titleMatchedRows.add(row);
+          for (const id of rowIds) titleMatchedRowIds.add(id);
         }
       };
 
@@ -928,6 +946,7 @@ export async function scrollAndMultiSelectByIds(
         let verified = false;
         for (let attempt = 0; attempt < 3; attempt++) {
           await sleep(50);
+          if (isAborted()) return;
           if (row.querySelector(DESELECT_CLIP_BUTTON_ANY_SELECTOR)) {
             verified = true;
             break;
@@ -942,13 +961,13 @@ export async function scrollAndMultiSelectByIds(
     }
   }
 
-  const allFound = () =>
-    foundIds.size + titleMatchedIds.size >= uniqueTargetIds.size;
+  const allFound = () => foundIds.size >= uniqueTargetIds.size;
 
+  const deadline = Date.now() + VIRTUAL_SCAN_TIMEOUT_MS;
   for (let pass = 0; pass <= VIRTUAL_SCROLL_RETRY_PASSES; pass++) {
     await scanVirtualClipWindows(
       scroller,
-      { isAborted, renderWaitMs, hydrationWaitMs },
+      { isAborted, renderWaitMs, hydrationWaitMs, deadline },
       async () => {
         await selectMatchingRows();
         return allFound();
@@ -959,21 +978,21 @@ export async function scrollAndMultiSelectByIds(
 
   // 中断時は従来どおり throw せず、見つかった分の件数を即返す。
   if (isAborted()) {
-    return foundIds.size + titleMatchedIds.size;
+    return foundIds.size;
   }
 
   restoreClipListHead(scroller);
 
   if (!allFound()) {
     const missing = [...uniqueTargetIds]
-      .filter((id) => !foundIds.has(id) && !titleMatchedIds.has(id))
+      .filter((id) => !foundIds.has(id))
       .join(", ");
     throw new Error(
       `playlist 対象 clip row が見つかりませんでした。missing clip ID: ${missing}`
     );
   }
 
-  return foundIds.size + titleMatchedIds.size;
+  return foundIds.size;
 }
 
 export interface ReadSelectedClipIdsOptions {
@@ -1049,26 +1068,31 @@ export async function readSelectedClipIds(
     }
   }
 
-  const enoughSelected = () =>
-    expectedClipCount !== undefined && selectedIds.size >= expectedClipCount;
+  const tooManySelected = () =>
+    expectedClipCount !== undefined && selectedIds.size > expectedClipCount;
   const exceededStopCount = () =>
     stopAboveCount !== undefined && selectedIds.size > stopAboveCount;
-  const scanDone = () => isAborted() || enoughSelected() || exceededStopCount();
+  const scanDone = () =>
+    isAborted() || tooManySelected() || exceededStopCount();
 
+  const deadline = Date.now() + VIRTUAL_SCAN_TIMEOUT_MS;
   for (let pass = 0; pass < maxScanPasses; pass++) {
     await scanVirtualClipWindows(
       scroller,
-      { isAborted, renderWaitMs, hydrationWaitMs },
+      { isAborted, renderWaitMs, hydrationWaitMs, deadline },
       () => {
         collectVisibleSelectedRows();
         return scanDone();
       }
     );
-    if (scanDone()) break;
+    if (scanDone() || selectedIds.size === expectedClipCount) break;
   }
 
   restoreClipListHead(scroller);
 
+  if (isAborted()) {
+    throw new Error("選択中 clip の採用を中断しました。");
+  }
   const ids = Array.from(selectedIds);
   if (ids.length === 0) {
     throw new Error(
