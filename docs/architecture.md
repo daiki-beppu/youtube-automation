@@ -465,7 +465,7 @@ GET の schema v1 応答は次の完全形。`schema_version` は互換性番号
 
 拡張側 storage schema は Suno が `chrome.storage.local["sunoServerUrl"]`、DistroKid が `chrome.storage.local["serverUrl"]` に選択中 URL 文字列だけを保存する。共通の旧候補配列 `chrome.storage.local["ytCollectionServeSources"]` は更新時 migration で削除し、以後は再作成しない。
 
-## fal 動画生成の解像度
+### fal 動画生成の解像度
 
 MiniMax H3 Max Turbo / H3 Max の image-to-video は `resolution` に `480P` / `768P` / `1080P` を指定できる（既定値 `768P`）。サムネイル用動画は thumbnail skill の `loop.fal.resolution`、ショート用動画は short skill の `fal.resolution` で設定する。1080P は 768P ソースから潜在空間で高解像度化されるため、入力 canvas の変更は不要。生成後の出力サイズは従来どおり `upscale_to` の設定に従う。
 
