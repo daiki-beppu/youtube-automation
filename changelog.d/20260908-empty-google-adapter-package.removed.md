@@ -1,1 +1,0 @@
-- 子 facade の移行後に空になった `youtube_automation.core.adapters.google` パッケージを削除。Google 機能は `infrastructure.google.youtube` / `infrastructure.google.upload` を参照する。明示 adapter 集合と配布物の検査を更新し、空パッケージの再導入も拒否。

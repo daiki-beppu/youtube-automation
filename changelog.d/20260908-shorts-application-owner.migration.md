@@ -1,2 +1,0 @@
-- Shorts 投稿の設定・履歴・予約・transport の組み立てを application 層へ移し、CLI と検証の参照先を更新しました。投稿挙動とログ名は維持します。
-- 直接 import している利用者は `youtube_automation.domains.uploads.shorts` から `youtube_automation.application.uploads.shorts` へ更新してください。旧モジュールの再エクスポートは提供しません。

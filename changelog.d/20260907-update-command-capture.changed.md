@@ -1,1 +1,0 @@
-- automation-update の出力取得付きコマンド実行と git status の失敗診断を共通化しました。

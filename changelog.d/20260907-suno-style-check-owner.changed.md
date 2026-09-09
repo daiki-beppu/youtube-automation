@@ -1,1 +1,0 @@
-- Suno Style の文字数検証を Suno 設定モジュールへ移し、Suno artifact 検証から upload preflight への依存を解消しました。従来の import は再公開して維持します。

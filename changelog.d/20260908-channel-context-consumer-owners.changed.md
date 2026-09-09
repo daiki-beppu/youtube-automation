@@ -1,1 +1,0 @@
-- 内部のチャンネル位置解決 API 呼出しを core.channel_context に統一し、設定 loader と互換再公開への間接依存を減らす。

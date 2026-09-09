@@ -1,2 +1,0 @@
-- Windows 版 Claude Code Desktop の BOM 付きフック入力を解釈し、`fcntl` がない環境でも SessionStart を起動できるようにした。
-- SessionStart の多重起動防止を共通の `infrastructure.file_lock` へ寄せ、Windows でも `msvcrt` で実際に排他制御が効くようにした。

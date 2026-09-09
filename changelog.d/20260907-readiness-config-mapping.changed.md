@@ -1,1 +1,0 @@
-- readiness の JSON・YAML 読み取りで、任意ファイルの扱い・object 検証・診断結果の生成を共通化しました。

@@ -1,2 +1,0 @@
-- 再開可能な YouTube アップロードコアから設定・本人性確認・メタデータ・コレクション投稿の組み立てを application 層へ分離しました。既存の継承関係と投稿挙動を維持します。
-- 直接 import している利用者は `youtube_automation.domains.uploads.youtube` から `youtube_automation.application.uploads.youtube` へ更新してください。旧モジュールの再エクスポートは提供しません。

@@ -1,1 +1,0 @@
-- automation 更新対象の pin 検出を uv source / dependency / Git ref の構文別に分離し、公式 upstream と ref の検証を維持しました。

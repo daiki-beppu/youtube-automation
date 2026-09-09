@@ -1,2 +1,0 @@
-- コレクション投稿の組み立てと実行ループを application 層へ移し、設定・履歴・外部処理への依存を domain の共有ルールから分離しました。投稿挙動とログ名は維持します。
-- 直接 import している利用者は `youtube_automation.domains.uploads.collection` から `youtube_automation.application.uploads.collection` へ更新してください。旧モジュールの再エクスポートは提供しません。

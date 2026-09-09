@@ -1,1 +1,0 @@
-- AnalyticsCollector の playlist・視聴者分析を多重継承から明示的な query client 委譲へ変更し、既存の分析結果と mixin API を維持しました。

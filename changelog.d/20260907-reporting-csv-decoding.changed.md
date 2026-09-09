@@ -1,1 +1,0 @@
-- Reporting API の CSV 解釈を通信クライアントから分離し、公開 parse_csv と列名候補・欠損値処理を維持。

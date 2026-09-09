@@ -1,1 +1,0 @@
-- AnalyticsCollector の Reporting API 取得を多重継承から明示的な client 委譲へ変更し、取得失敗時の分析継続と既存 mixin API を維持しました。

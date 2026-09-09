@@ -1,1 +1,0 @@
-- skills sync/diff の全 asset 巡回を共通化し、asset ごとの既定 target・実行順・終了コードの集約を一元化しました。

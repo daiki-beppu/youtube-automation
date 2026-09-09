@@ -1,1 +1,0 @@
-- ダッシュボードの設定切替・更新調停を application.analytics.dashboard_refresh へ移し、infrastructure から設定機能層への依存を解消。CLI の動作は維持。

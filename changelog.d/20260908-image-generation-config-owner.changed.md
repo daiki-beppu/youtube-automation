@@ -1,1 +1,0 @@
-- 画像生成の設定読み込みを configuration.image_generation へ移し、プロバイダーから設定ローダーへの依存を解消。下流の utils.image_provider 経路は同じ関数を引き続き公開し、CLI と制作手順は正本へ追従。

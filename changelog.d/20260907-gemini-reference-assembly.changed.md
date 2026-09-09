@@ -1,1 +1,0 @@
-- Gemini の参照画像・プロンプト組み立てを実行クラスから分離し、画像順序・MIME 判定・variation guard を維持。

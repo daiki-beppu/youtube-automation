@@ -1,1 +1,0 @@
-- workflow-state の既知object section検証を読込・代入で共通化し、未知キーの保持と代入失敗時の既存値保護を維持。
