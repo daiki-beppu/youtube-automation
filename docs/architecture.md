@@ -464,3 +464,9 @@ GET の schema v1 応答は次の完全形。`schema_version` は互換性番号
 同じ `instance_id` の POST は entry を増やさず `expires_at` を更新する。正常終了は `{"instance_id":"fixture-instance"}` を DELETE して即時削除し、異常終了した entry は TTL 境界（`expires_at` と同時刻）で失効する。最大 body は 16384 bytes、`instance_id` は最大 128 文字、同時登録は最大 128 件。POST/DELETE は JSON 以外を 415、`Origin` 付き要求を 403、不正 schema を 400、body 超過を 413、登録数超過を 429 にし、状態を変更しない。未知 path は 404、未対応 method は 405。
 
 拡張側 storage schema は Suno が `chrome.storage.local["sunoServerUrl"]`、DistroKid が `chrome.storage.local["serverUrl"]` に選択中 URL 文字列だけを保存する。共通の旧候補配列 `chrome.storage.local["ytCollectionServeSources"]` は更新時 migration で削除し、以後は再作成しない。
+
+## fal 動画生成の解像度
+
+MiniMax H3 Max Turbo / H3 Max の image-to-video は `resolution` に `480P` / `768P` / `1080P` を指定できる（既定値 `768P`）。サムネイル用動画は thumbnail skill の `loop.fal.resolution`、ショート用動画は short skill の `fal.resolution` で設定する。1080P は 768P ソースから潜在空間で高解像度化されるため、入力 canvas の変更は不要。生成後の出力サイズは従来どおり `upscale_to` の設定に従う。
+
+公式仕様: [H3 Max Turbo](https://fal.ai/models/minimax/h3-max-turbo/image-to-video/api) / [H3 Max](https://fal.ai/models/minimax/h3-max/image-to-video/api)。

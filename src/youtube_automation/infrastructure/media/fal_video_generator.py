@@ -31,7 +31,7 @@ DEFAULT_ALLOWED_MODELS = frozenset({DEFAULT_MODEL, "minimax/h3-max/image-to-vide
 DEFAULT_CANVAS = {"16:9": (1344, 768), "9:16": (768, 1344)}
 DEFAULT_UPSCALE_TO = (1920, 1080)
 _MAX_PROMPT_CHARS = 2000
-_RESOLUTIONS = {"480P", "768P"}
+_RESOLUTIONS = {"480P", "768P", "1080P"}
 _MODES = {"balanced", "quality"}
 
 
@@ -79,7 +79,7 @@ def _validate(
     if not isinstance(duration_seconds, int) or isinstance(duration_seconds, bool) or not 5 <= duration_seconds <= 15:
         raise ValidationError("fal duration_seconds は 5〜15 の整数である必要があります")
     if resolution not in _RESOLUTIONS:
-        raise ValidationError("fal resolution は 480P または 768P が必要です")
+        raise ValidationError("fal resolution は 480P、768P または 1080P が必要です")
     if prompt_expansion_mode not in _MODES:
         raise ValidationError("fal prompt_expansion_mode は balanced または quality が必要です")
     if model not in allowed_models:
