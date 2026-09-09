@@ -51,6 +51,9 @@ async function loadContentScript(overrides?: {
   durationsById?: Record<string, number | undefined>;
   guardSelectedClipIds?: string[];
   readSelectedClipIdsError?: Error;
+  readSelectedClips?: (options: {
+    isAborted: () => boolean;
+  }) => Promise<string[]>;
   studioExportError?: Error;
   startDownloadResult?: { ok: true } | { ok: false; message: string };
   postDownloadedError?: Error;
@@ -199,13 +202,15 @@ async function loadContentScript(overrides?: {
     openAddToPlaylistDialogViaCmdP: vi.fn(() =>
       Promise.resolve({} as HTMLElement)
     ),
-    readSelectedClipIds: overrides?.readSelectedClipIdsError
-      ? vi.fn(() => Promise.reject(overrides.readSelectedClipIdsError))
-      : vi.fn(() =>
-          Promise.resolve(
-            overrides?.guardSelectedClipIds ?? ["clip-1", "clip-2"]
-          )
-        ),
+    readSelectedClipIds:
+      overrides?.readSelectedClips ??
+      (overrides?.readSelectedClipIdsError
+        ? vi.fn(() => Promise.reject(overrides.readSelectedClipIdsError))
+        : vi.fn(() =>
+            Promise.resolve(
+              overrides?.guardSelectedClipIds ?? ["clip-1", "clip-2"]
+            )
+          )),
     scrollAndMultiSelectByIds: scrollAndMultiSelectByIdsMock,
     waitForPlaylistDialogClose: vi.fn(() => Promise.resolve()),
   }));
@@ -947,6 +952,51 @@ describe('content onMessage("adoptSelectedClips"): 手動選択 clip 採用', ()
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("resets the previous stop flag before adoption", async () => {
+    const { handlers } = await loadContentScript({
+      readSelectedClips: async (options) => {
+        if (options.isAborted()) throw new Error("stale abort");
+        return ["a", "b"];
+      },
+    });
+    handlers.get("stop")!({ data: undefined });
+    await expect(
+      handlers.get("adoptSelectedClips")!({ data: { expectedClipCount: 2 } })
+    ).resolves.toEqual({ ok: true, clipIds: ["a", "b"] });
+  });
+
+  it("blocks overlapping adoption and releases the lock after failure", async () => {
+    let rejectRead: (error: Error) => void = () => {};
+    const { handlers } = await loadContentScript({
+      readSelectedClips: () =>
+        new Promise((_, reject) => {
+          rejectRead = reject;
+        }),
+    });
+    const first = handlers.get("adoptSelectedClips")!({
+      data: { expectedClipCount: 2 },
+    }) as Promise<unknown>;
+    const firstResult = first.catch((error) => error);
+    let secondError: unknown;
+    try {
+      const second = handlers.get("adoptSelectedClips")!({
+        data: { expectedClipCount: 2 },
+      });
+      if (second instanceof Promise) void second.catch(() => {});
+    } catch (error) {
+      secondError = error;
+    }
+    expect(secondError).toBeInstanceOf(Error);
+    rejectRead(new Error("read failed"));
+    await firstResult;
+    const next = handlers.get("adoptSelectedClips")!({
+      data: { expectedClipCount: 2 },
+    }) as Promise<unknown>;
+    const nextResult = next.catch((error) => error);
+    rejectRead(new Error("next read failed"));
+    expect(String(await nextResult)).toContain("next read failed");
   });
 
   it("Given 選択済み clip が期待件数分ある When adoptSelectedClips Then clipIds を返す", async () => {
