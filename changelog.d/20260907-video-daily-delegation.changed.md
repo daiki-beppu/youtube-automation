@@ -1,1 +1,0 @@
-- AnalyticsCollector の動画日次取得を多重継承から明示的な client 委譲へ変更し、動画フィルター・行変換・parser override を維持しました。

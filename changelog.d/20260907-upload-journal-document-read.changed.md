@@ -1,1 +1,0 @@
-- upload journal のJSON読込・object検証を分離し、不正なrootの二重読込と人工的なJSON例外生成を除去。破損隔離とI/Oエラー伝播は維持。

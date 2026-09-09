@@ -1,1 +1,0 @@
-- collection inventory の stage 別ディレクトリ走査を分離し、名前順・symlink 拒否・stage 間重複検出・state 読取不能の扱いを維持しました。

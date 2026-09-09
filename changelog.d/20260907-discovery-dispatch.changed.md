@@ -1,1 +1,0 @@
-- collection discovery の GET・POST・DELETE が共有するリクエスト処理を一箇所にまとめ、メソッド別の重複を解消した。

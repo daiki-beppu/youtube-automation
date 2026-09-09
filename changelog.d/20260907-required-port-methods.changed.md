@@ -1,1 +1,0 @@
-- review・analytics・media store・hybrid runner・broadcast recovery の port に実装必須の抽象メソッドを明示し、未実装の明示継承クラスを生成できないようにした。構造的部分型による既存アダプターの利用は維持する。

@@ -1,1 +1,0 @@
-- 生成 HTML の値なし http-equiv 属性を安全に検証し、CSP が欠けた文書を DocumentRenderError として拒否する。

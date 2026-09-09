@@ -1,1 +1,0 @@
-- GCP readiness 診断の失敗結果に付与する Terraform 復旧案内を共通化しました。
