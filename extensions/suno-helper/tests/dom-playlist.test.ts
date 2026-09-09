@@ -2579,3 +2579,224 @@ describe("新 Create UI (#2043): clip-row 検出・タイトル抽出・仮想�
     await expect(pending).resolves.toEqual([idA]);
   });
 });
+
+describe("reported playlist/adoption regressions", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("does not skip a viewport shorter than 600px", async () => {
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      value: 1000,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    scroller.addEventListener("scroll", () => {
+      getOrCreateClipList().replaceChildren();
+      const row = addClipRow({
+        songId: scroller.scrollTop === 200 ? "target" : "other",
+      });
+      selectOnClick(row.btn);
+    });
+    const pending = scrollAndMultiSelectByIds(["target"], {
+      isAborted: () => false,
+      renderWaitMs: 10,
+      hydrationWaitMs: 20,
+    });
+    const result = pending.catch((error) => error);
+    await vi.runAllTimersAsync();
+    expect(await result).toBe(1);
+  });
+
+  it("selects and adopts all 20 clips across remounted short viewports", async () => {
+    const ids = Array.from({ length: 20 }, (_, index) => `clip-${index}`);
+    const selected = new Set<string>();
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      value: 4000,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    scroller.addEventListener("scroll", () => {
+      getOrCreateClipList().replaceChildren();
+      const id = ids[Math.min(19, Math.floor(scroller.scrollTop / 200))];
+      const row = addClipRow({
+        songId: id,
+        selectLabel: selected.has(id) ? "Deselect clip" : "Select clip",
+      });
+      selectOnClick(row.btn);
+      row.btn.addEventListener("click", () => selected.add(id));
+    });
+    const selecting = scrollAndMultiSelectByIds(ids, {
+      isAborted: () => false,
+      renderWaitMs: 10,
+    });
+    await vi.runAllTimersAsync();
+    expect(await selecting).toBe(20);
+    expect(selected).toEqual(new Set(ids));
+    const adopting = readSelectedClipIds({
+      isAborted: () => false,
+      expectedClipCount: 20,
+      renderWaitMs: 10,
+    });
+    await vi.runAllTimersAsync();
+    expect(await adopting).toEqual(ids);
+  });
+
+  it("bounds adoption when a long list never reveals the selected clips", async () => {
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      value: 1000000,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    addClipRow({ songId: "unselected" });
+    let failure: unknown;
+    const pending = readSelectedClipIds({
+      isAborted: () => false,
+      expectedClipCount: 20,
+    });
+    void pending.catch((error) => {
+      failure = error;
+    });
+    await vi.advanceTimersByTimeAsync(61000);
+    expect(failure).toBeInstanceOf(Error);
+    expect(String(failure)).toContain("タイムアウト");
+    vi.clearAllTimers();
+  });
+
+  it("does not count a title match again when its real ID hydrates", async () => {
+    const first = addClipRow();
+    appendTitle(first.row, "Dawn");
+    first.btn.addEventListener("click", () => {
+      first.row.dataset.songId = "target-a";
+    });
+    selectOnClick(first.btn);
+    const second = addClipRow({ songId: "target-b" });
+    selectOnClick(second.btn);
+    const pending = scrollAndMultiSelectByIds(
+      ["target-a", "target-b", "missing"],
+      {
+        isAborted: () => false,
+        titleFallbackMap: new Map([["target-a", "Dawn"]]),
+        renderWaitMs: 10,
+        hydrationWaitMs: 20,
+      }
+    );
+    const result = pending.catch((error) => error);
+    await vi.runAllTimersAsync();
+    expect(String(await result)).toContain("missing clip ID: missing");
+  });
+});
+
+describe("adoption safety regressions", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it("rejects extra selected clips beyond the first matching viewport", async () => {
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      value: 400,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    scroller.addEventListener("scroll", () => {
+      getOrCreateClipList().replaceChildren();
+      addClipRow({
+        songId: scroller.scrollTop === 0 ? "first" : "extra",
+        selectLabel: "Deselect clip",
+      });
+    });
+    const result = readSelectedClipIds({
+      isAborted: () => false,
+      expectedClipCount: 1,
+      renderWaitMs: 10,
+    }).catch((error) => error);
+    await vi.runAllTimersAsync();
+    expect(String(await result)).toContain("expected 1, got 2");
+  });
+
+  it("does not return a partial adoption as success after stop", async () => {
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      value: 400,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    addClipRow({ songId: "first", selectLabel: "Deselect clip" });
+    let aborted = false;
+    const result = readSelectedClipIds({
+      isAborted: () => {
+        aborted ||= scroller.scrollTop > 0;
+        return aborted;
+      },
+      renderWaitMs: 10,
+    }).catch((error) => error);
+    await vi.runAllTimersAsync();
+    expect(String(await result)).toContain("中断");
+  });
+
+  it("does not click the remaining rows after stop during selection", async () => {
+    let aborted = false;
+    const a = addClipRow({ songId: "a" });
+    const b = addClipRow({ songId: "b" });
+    selectOnClick(a.btn);
+    selectOnClick(b.btn);
+    a.btn.addEventListener("click", () => {
+      aborted = true;
+    });
+    const secondClick = vi.fn();
+    b.btn.addEventListener("click", secondClick);
+    const result = scrollAndMultiSelectByIds(["a", "b"], {
+      isAborted: () => aborted,
+      renderWaitMs: 10,
+    });
+    await vi.runAllTimersAsync();
+    await result;
+    expect(secondClick).not.toHaveBeenCalled();
+  });
+
+  it("does not adopt a remounted title fallback row as a second clip", async () => {
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      value: 400,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    scroller.addEventListener("scroll", () => {
+      getOrCreateClipList().replaceChildren();
+      const row = addClipRow({ songId: "same-physical-clip" });
+      appendTitle(row.row, "Same title");
+      selectOnClick(row.btn);
+    });
+    const result = scrollAndMultiSelectByIds(["a", "b"], {
+      isAborted: () => false,
+      renderWaitMs: 10,
+      hydrationWaitMs: 20,
+      titleFallbackMap: new Map([
+        ["a", "Same title"],
+        ["b", "Same title"],
+      ]),
+    }).catch((error) => error);
+    await vi.runAllTimersAsync();
+    expect(String(await result)).toContain("missing clip ID: b");
+  });
+});
