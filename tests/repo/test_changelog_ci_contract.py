@@ -95,7 +95,7 @@ _EXPECTED_RUN_LINES = [
     "set -eu",
     'if [[ ",${PR_LABELS}," == *",skip-changelog,"* ]]; then',
     'changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")',
-    'if [[ "$HEAD_REF" == release/* ]]; then',
+    'if [[ "$HEAD_REF" == release/v* ]]; then',
     "if echo \"$changed\" | grep -q '^CHANGELOG\\.md$'; then",
     f"if ! echo \"$changed\" | grep -qE '{_PATH_FILTER_PATTERN}'; then",
     f"if ! echo \"$changed\" | grep -qE '{_CHANGELOG_FRAGMENT_PATTERN}'; then",
@@ -193,7 +193,7 @@ def test_claude_requires_fragments_and_forbids_direct_changelog_edits() -> None:
 
     assert "通常 PR の変更履歴は `changelog.d/<issue>-<slug>.<type>.md` に追加" in claude
     assert "`CHANGELOG.md` を直接編集しない" in claude
-    assert "`release/*` の release prepare だけが例外" in claude
+    assert "`release/v*` の release prepare だけが例外" in claude
 
 
 def test_ci_workflow_declares_changelog_job_for_pull_requests_only() -> None:
@@ -265,7 +265,7 @@ def test_ci_workflow_changelog_job_checks_expected_paths_and_messages() -> None:
         ),
         (
             ("CHANGELOG.md",),
-            "release/1.2.3",
+            "release/v1.2.3",
             0,
             "Release CHANGELOG update found",
         ),
@@ -460,3 +460,23 @@ def test_readme_lists_every_fragment_type() -> None:
 
     for section in SECTION_ORDER:
         assert f"`{section}`" in readme, f"changelog.d/README.md に type `{section}` の記載が無い"
+
+
+@pytest.mark.parametrize(
+    ("head_ref", "changed_files", "expected_code"),
+    [
+        ("release/ext-v0.4.1", ("extensions/suno-helper/package.json",), 0),
+        ("release/ext-v0.4.1", ("pyproject.toml",), 1),
+        ("release/ext-v0.4.1", ("CHANGELOG.md",), 1),
+    ],
+)
+def test_release_series_changelog_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    head_ref: str,
+    changed_files: tuple[str, ...],
+    expected_code: int,
+) -> None:
+    """拡張の版数更新を許可し、本体変更や CHANGELOG 直接編集の混入は拒否する。"""
+    result = _run_changelog_gate(tmp_path, monkeypatch, changed_files=changed_files, head_ref=head_ref)
+    assert result.returncode == expected_code, result.stdout + result.stderr

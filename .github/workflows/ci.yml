@@ -352,7 +352,7 @@ jobs:
           changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
           echo "Changed files:"
           echo "$changed"
-          if [[ "$HEAD_REF" == release/* ]]; then
+          if [[ "$HEAD_REF" == release/v* ]]; then
             if ! echo "$changed" | grep -q '^CHANGELOG\.md$'; then
               echo "::error::Release PRs must update CHANGELOG.md."
               exit 1
