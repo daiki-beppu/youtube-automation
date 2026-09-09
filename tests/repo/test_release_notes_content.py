@@ -68,7 +68,7 @@ def _assert_frontmatter_and_body_contract(path: Path) -> None:
     assert isinstance(metadata["sidebar"]["order"], int)
     assert metadata["sidebar"]["order"] < 0
     assert not body.lstrip().startswith("# "), "ページタイトルは Blume に一度だけ描画させる"
-    command = "/automation --update" if metadata["kind"] == "main" else "/ext-install"
+    command = "/automation --update" if metadata["kind"] == "main" else "/extension"
     assert f"```text\n{command}\n```" in body
 
     for heading in REQUIRED_HEADINGS:
@@ -141,7 +141,7 @@ def _write_fixture_note(
 
 
 def _fixture_body(version: str, *, kind: str = "main", omit_heading: str | None = None) -> str:
-    command = "/automation --update" if kind == "main" else "/ext-install"
+    command = "/automation --update" if kind == "main" else "/extension"
     sections: list[str] = []
     for heading in REQUIRED_HEADINGS:
         if heading == omit_heading:
@@ -227,3 +227,14 @@ def test_release_note_contract_rejects_reversed_same_day_kind_order(tmp_path: Pa
     # kind キーを落とした退行では入力順のまま昇順になり、この raises が失敗して退行を検出する
     with pytest.raises(AssertionError):
         _assert_sidebar_order((newer, same_day_extension, same_day_main))
+
+
+def test_extension_release_note_rejects_retired_install_command(tmp_path: Path) -> None:
+    """旧インストール入口を案内するノートの再混入を拒否する。"""
+    note = _write_fixture_note(
+        tmp_path / "ext-v1.0.0.md",
+        body=_fixture_body("ext-v1.0.0", kind="extension").replace("/extension", "/ext-install"),
+        kind="extension",
+    )
+    with pytest.raises(AssertionError):
+        _assert_frontmatter_and_body_contract(note)
