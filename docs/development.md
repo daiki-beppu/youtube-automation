@@ -344,7 +344,7 @@ devShell の運用:
 
 通常の PR は `changelog.d/<issue>-<slug>.<type>.md` という PR 固有ファイルへ変更履歴を
 書き、リリース prepare で `uv run yt-changelog-compile` を実行して `[Unreleased]` へ
-集約する。通常 PR では `CHANGELOG.md` を直接編集しない。直接編集は `release/*` の release prepare だけが例外（`CLAUDE.md` の規約）。CI が後方互換のため直接編集を受理することは、通常 PR での推奨手順を変えない。
+集約する。通常 PR では `CHANGELOG.md` を直接編集しない。直接編集は `release/v*` の release prepare だけが例外（`CLAUDE.md` の規約）。CI が後方互換のため直接編集を受理することは、通常 PR での推奨手順を変えない。
 
 `<type>` は added / changed / deprecated / removed / fixed / security / migration のいずれかで、本文は全非空行を `- ` 始まりの bullet にする。書式の正本は [changelog.d/README.md](../changelog.d/README.md)。`python .github/scripts/validate-changelog-fragments.py` で全 fragment を検証する。
 
