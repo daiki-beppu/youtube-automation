@@ -111,6 +111,20 @@ describe("download flow", () => {
     vi.clearAllMocks();
   });
 
+  it("does not start Studio export when stopped while arming the watcher", async () => {
+    let aborted = false;
+    messagingMocks.sendMessage.mockImplementation(async (message: string) => {
+      if (message === "startDownload") aborted = true;
+      return { ok: true };
+    });
+    const flow = createSubject(() => aborted);
+    await flow.performDownload(CONTEXT, "collection", 2, 2, CLIP_IDS);
+    expect(
+      studioExportMocks.requestStudioMultitrackExport
+    ).not.toHaveBeenCalled();
+    expectOnlyStartAndCancelMessages();
+  });
+
   it("DOM 操作が throw すると watcher を一回 cancel し resolver を破棄する", async () => {
     studioExportMocks.requestStudioMultitrackExport.mockRejectedValueOnce(
       new Error("download button missing")

@@ -229,6 +229,10 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
       message: "Studio Multitrack export（WAV）",
     });
     await startDownloadWatcher();
+    if (deps.isAborted()) {
+      await cancelDownloadWatcher();
+      return;
+    }
     const filename = await waitForDownloadedFilename(collectionId, clipIds);
     if (filename === null) return;
     return await postDownloadedArchive(
