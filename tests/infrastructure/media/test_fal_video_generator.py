@@ -20,7 +20,7 @@ def _image(path: Path, size: tuple[int, int] = (1400, 800)) -> Path:
     [
         ({"duration_seconds": 4}, (1400, 800)),
         ({"duration_seconds": True}, (1400, 800)),
-        ({"resolution": "1080P"}, (1400, 800)),
+        ({"resolution": "2160P"}, (1400, 800)),
         ({"prompt_expansion_mode": "fast"}, (1400, 800)),
         ({"model": "unapproved/model"}, (1400, 800)),
         ({"prompt": ""}, (1400, 800)),
@@ -46,9 +46,13 @@ def test_invalid_input_fails_before_upload(
     upload.assert_not_called()
 
 
+@pytest.mark.parametrize("resolution", ["480P", "768P", "1080P"])
+@pytest.mark.parametrize("model", sorted(generator.DEFAULT_ALLOWED_MODELS))
 def test_submit_uses_one_resized_url_and_records_metadata_only(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    resolution: str,
+    model: str,
 ) -> None:
     image = _image(tmp_path / "main.png")
     output = tmp_path / "10-assets" / "loop.mp4"
@@ -89,11 +93,14 @@ def test_submit_uses_one_resized_url_and_records_metadata_only(
     assert generator.generate_loop_video(
         image,
         output,
-        generator.DEFAULT_MODEL,
+        model,
         "gentle motion",
+        resolution=resolution,
         channel_root=tmp_path / "channel",
     )
+    assert submit.call_args.args[0] == model
     payload = submit.call_args.args[1]
+    assert payload["resolution"] == resolution
     assert payload["image_url"] == payload["end_image_url"]
     [(prepared_path, prepared_size)] = uploaded
     assert prepared_path.parent == tmp_path / "channel" / "tmp" / "fal-video-inputs"
@@ -104,6 +111,7 @@ def test_submit_uses_one_resized_url_and_records_metadata_only(
     assert entry["unit"] == "second"
     assert entry["quantity"] == 5
     assert entry["estimated_cost_usd"] is None
+    assert entry["metadata"]["resolution"] == resolution
     assert entry["metadata"]["request_id"] == "request-1"
     assert (tmp_path / "10-assets" / "loop.expanded-prompt.txt").read_text() == "expanded\n"
 
