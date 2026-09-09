@@ -3,11 +3,35 @@ from __future__ import annotations
 import fcntl
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
+from tests.helpers.paths import REPO_ROOT
 from youtube_automation.commands.system import session_start
+
+
+def test_module_import_succeeds_without_fcntl() -> None:
+    code = """
+import builtins
+original_import = builtins.__import__
+def import_without_fcntl(name, *args, **kwargs):
+    if name == "fcntl":
+        raise ImportError("No module named 'fcntl'")
+    return original_import(name, *args, **kwargs)
+builtins.__import__ = import_without_fcntl
+from youtube_automation.commands.system import session_start
+from youtube_automation.infrastructure import file_lock
+assert session_start.try_file_lock is file_lock.try_file_lock
+"""
+
+    environment = os.environ | {"PYTHONPATH": str(REPO_ROOT / "src")}
+    completed = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, check=False, env=environment
+    )
+
+    assert completed.returncode == 0, completed.stderr
 
 
 def _repo(tmp_path: Path, pin: str) -> Path:

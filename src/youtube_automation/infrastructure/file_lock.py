@@ -56,6 +56,41 @@ def file_lock(path: Path) -> Iterator[None]:
                 _release_lock(lock_file)
 
 
+@contextlib.contextmanager
+def try_file_lock(path: Path) -> Iterator[bool]:
+    """Try to lock ``path`` without waiting, yielding whether the lock was taken.
+
+    ``file_lock`` と同じ lock file・同じ platform 実装を使う non-blocking 版で、
+    Windows でも ``msvcrt`` の byte-range lock で実際に排他制御が効く。
+    """
+    if _fcntl is None and _msvcrt is None:
+        acquired = _IN_PROCESS_LOCK.acquire(blocking=False)
+        try:
+            yield acquired
+        finally:
+            if acquired:
+                _IN_PROCESS_LOCK.release()
+        return
+
+    if not _IN_PROCESS_LOCK.acquire(blocking=False):
+        yield False
+        return
+    try:
+        lock_path = path.with_suffix(path.suffix + _LOCK_FILE_SUFFIX)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+b") as lock_file:
+            _prepare_lock_file(lock_file)
+            if not _try_acquire_lock(lock_file):
+                yield False
+                return
+            try:
+                yield True
+            finally:
+                _release_lock(lock_file)
+    finally:
+        _IN_PROCESS_LOCK.release()
+
+
 def _prepare_lock_file(lock_file: BinaryIO) -> None:
     lock_file.seek(0, 2)
     size = lock_file.tell()
@@ -72,6 +107,25 @@ def _acquire_lock(lock_file: BinaryIO, *, wait_forever: bool = False) -> None:
     if _msvcrt is not None:
         _acquire_msvcrt_lock(lock_file, wait_forever=wait_forever)
         return
+    raise RuntimeError("platform file locks are unavailable")
+
+
+def _try_acquire_lock(lock_file: BinaryIO) -> bool:
+    if _fcntl is not None:
+        try:
+            _fcntl.flock(lock_file.fileno(), _fcntl.LOCK_EX | _fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        return True
+    if _msvcrt is not None:
+        lock_file.seek(0)
+        try:
+            _msvcrt.locking(lock_file.fileno(), _msvcrt.LK_NBLCK, _LOCK_REGION_BYTES)
+        except OSError as error:
+            if _is_msvcrt_lock_contention(error):
+                return False
+            raise
+        return True
     raise RuntimeError("platform file locks are unavailable")
 
 
