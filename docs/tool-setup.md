@@ -18,7 +18,7 @@
 
 Finder などで空のフォルダを作る。Claude デスクトップアプリを開き、ファイルアクセスを許可したうえで、そのフォルダを作業対象として選ぶ。ターミナルから `claude` を起動する手順は前提にしない。
 
-Windows でも Claude Code Desktop 経由で同じ手順を実行できる。非特権環境などで `.agents/skills` の symlink を作れない場合は警告が表示されるが、skill の同期は継続する。
+Windows でも同じ Claude デスクトップアプリで、ここから先の手順をそのまま実行できる。非特権環境などで `.agents/skills` の symlink を作れない場合は警告が表示されるが、skill の同期は継続する。
 
 `config/channel/*.json` はまだ不要である。
 
