@@ -445,6 +445,8 @@ test(`onboarding は直接描画だけを維持し、公開operator docs ${publi
   const features = await readOperatorDoc("/skills/features");
   const toolSetup = await readOperatorDoc("/getting-started/tool-setup");
   const oauth = await readOperatorDoc("/getting-started/oauth-setup");
+  assert.match(toolSetup, /macOS \/ Windows \/ Linux/);
+  assert.doesNotMatch(toolSetup, /WSL2/);
   assert.match(features, /href="\/guides\/workflow-cheatsheet"/);
   assert.match(features, /href="\/skills"/);
   assert.match(onboarding, /href="\/getting-started\/oauth-setup"/);
