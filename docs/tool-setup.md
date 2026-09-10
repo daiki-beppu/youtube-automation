@@ -10,13 +10,15 @@
 
 事前に用意するもの:
 
-- macOS または Linux（Windows は WSL2 を推奨）
+- macOS / Windows / Linux
 - Google アカウントと、セットアップ対象の YouTube チャンネル
 - [Claude デスクトップアプリ](https://claude.ai/download)
 - Python 3.11 以上、FFmpeg（動画・音声を処理するツール）、Google Cloud SDK（Google Cloud を操作するツール）
 - Vertex AI（Google Cloud の AI サービス）を使う GCP（Google Cloud Platform）project には Billing account（課金先）が必要
 
 Finder などで空のフォルダを作る。Claude デスクトップアプリを開き、ファイルアクセスを許可したうえで、そのフォルダを作業対象として選ぶ。ターミナルから `claude` を起動する手順は前提にしない。
+
+Windows でも同じ Claude デスクトップアプリで、ここから先の手順をそのまま実行できる。非特権環境などで `.agents/skills` の symlink を作れない場合は警告が表示されるが、skill の同期は継続する。
 
 `config/channel/*.json` はまだ不要である。
 
