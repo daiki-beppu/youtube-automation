@@ -228,43 +228,6 @@ def build_filter(cfg: CleanupConfig, *, duration_sec: float | None = None) -> st
     return ",".join(filters) if filters else "anull"
 
 
-def probe_trimmed_duration(path: Path, cfg: CleanupConfig) -> float:
-    """Measure the duration after the same leading/trailing silence trim used by cleanup."""
-    trim_only = replace(
-        cfg,
-        adaptive_eq=False,
-        volume_smoothing=False,
-        limiter=False,
-        loudnorm=False,
-        tail_fade_guard=False,
-    )
-    cmd = [
-        "ffmpeg",
-        "-nostdin",
-        "-i",
-        str(path),
-        "-af",
-        build_filter(trim_only),
-        "-progress",
-        "pipe:1",
-        "-nostats",
-        "-f",
-        "null",
-        "-",
-    ]
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"ffmpeg trim duration probe failed ({path.name}, rc={proc.returncode}):\n{proc.stderr}")
-    durations = [
-        int(line.removeprefix("out_time_us=")) / 1_000_000
-        for line in proc.stdout.splitlines()
-        if line.startswith("out_time_us=") and line.removeprefix("out_time_us=").isdigit()
-    ]
-    if not durations:
-        raise RuntimeError(f"ffmpeg trim duration probe returned no duration: {path.name}")
-    return max(durations)
-
-
 def collect_audio_files(collection_dir: Path) -> list[Path]:
     music_dir = CollectionPaths(collection_dir).music_dir
     if not music_dir.is_dir():
@@ -301,6 +264,10 @@ def _tmp_output_for(path: Path) -> Path:
     return path.with_name(f".{path.stem}.cleanup-tmp{path.suffix}")
 
 
+def _prefade_output_for(path: Path) -> Path:
+    return path.with_name(f".{path.stem}.cleanup-prefade.wav")
+
+
 def _backup_path_for(path: Path) -> Path:
     return path.parent / _BACKUP_DIRNAME / path.name
 
@@ -312,30 +279,56 @@ def process_file(path: Path, cfg: CleanupConfig, *, apply: bool, force: bool, qu
             print(f"skip already cleaned: {path.name} (backup exists)")
         return False
 
-    if apply and cfg.trim_silence and cfg.trim_silence_trailing and cfg.tail_fade_guard:
-        duration = probe_trimmed_duration(path, cfg)
-    else:
-        duration = probe_duration(path)
     tmp = _tmp_output_for(path)
-    cmd = build_ffmpeg_cmd(path, tmp, cfg, duration_sec=duration)
 
     if not apply:
+        cmd = build_ffmpeg_cmd(path, tmp, cfg, duration_sec=probe_duration(path))
         print(" ".join(cmd))
         return False
 
     if shutil.which("ffmpeg") is None:
         raise ValidationError("ffmpeg が見つかりません (brew install ffmpeg など)")
 
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
+    prefade = _prefade_output_for(path)
+    try:
+        if cfg.tail_fade_guard:
+            prefade_cfg = replace(cfg, tail_fade_guard=False)
+            _run_ffmpeg(build_ffmpeg_cmd(path, prefade, prefade_cfg, duration_sec=None), path)
+            fade_cfg = replace(
+                cfg,
+                trim_silence=False,
+                adaptive_eq=False,
+                volume_smoothing=False,
+                limiter=False,
+                loudnorm=False,
+            )
+            prefade_duration = probe_duration(prefade)
+            if prefade_duration is None:
+                raise RuntimeError(f"ffprobe failed to measure prefade duration: {prefade.name}")
+            _run_ffmpeg(build_ffmpeg_cmd(prefade, tmp, fade_cfg, duration_sec=prefade_duration), path)
+        else:
+            _run_ffmpeg(build_ffmpeg_cmd(path, tmp, cfg, duration_sec=None), path)
+    except RuntimeError:
         if tmp.exists():
             tmp.unlink()
-        raise RuntimeError(f"ffmpeg cleanup failed ({path.name}, rc={proc.returncode}):\n{proc.stderr}")
+        raise
+    finally:
+        if prefade.exists():
+            prefade.unlink()
 
     _install_cleaned_audio(path, tmp, backup, backup_originals=cfg.backup_originals)
     if not quiet:
         print(f"cleaned: {path.name}")
     return True
+
+
+def _run_ffmpeg(cmd: list[str], source_path: Path) -> None:
+    proc = subprocess.run(cmd, capture_output=True, text=True)
+    if proc.returncode != 0:
+        output_path = Path(cmd[-1])
+        if output_path.exists():
+            output_path.unlink()
+        raise RuntimeError(f"ffmpeg cleanup failed ({source_path.name}, rc={proc.returncode}):\n{proc.stderr}")
 
 
 def _install_cleaned_audio(path: Path, tmp: Path, backup: Path, *, backup_originals: bool) -> None:

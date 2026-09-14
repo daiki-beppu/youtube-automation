@@ -17,17 +17,11 @@ from youtube_automation.commands.suno.suno_audio_cleanup import (
     build_filter,
     cleanup_collection,
     collect_audio_files,
-    probe_trimmed_duration,
     process_file,
     resolve_cleanup_config,
     resolve_max_workers,
 )
 from youtube_automation.core.errors import ConfigError
-
-
-@pytest.fixture(autouse=True)
-def _reuse_input_duration_unless_duration_probe_is_under_test(monkeypatch) -> None:
-    monkeypatch.setattr(mod, "probe_trimmed_duration", lambda path, _cfg: mod.probe_duration(path))
 
 
 def _make_collection(tmp_path: Path, names: list[str]) -> Path:
@@ -213,20 +207,6 @@ def test_build_filter_disabled_trim_has_no_leading_or_trailing_trim() -> None:
     assert "areverse" not in filt
 
 
-def test_probe_trimmed_duration_reads_ffmpeg_progress(monkeypatch, tmp_path: Path) -> None:
-    source = tmp_path / "track.wav"
-    source.write_bytes(b"audio")
-
-    def fake_run(cmd, capture_output, text):
-        assert cmd[cmd.index("-af") + 1].count("areverse") == 2
-        assert ["-f", "null", "-"] == cmd[cmd.index("-f") : cmd.index("-f") + 3]
-        return subprocess.CompletedProcess(cmd, 0, stdout="out_time_us=57000000\nprogress=end\n", stderr="")
-
-    monkeypatch.setattr(mod.subprocess, "run", fake_run)
-
-    assert probe_trimmed_duration(source, CleanupConfig()) == 57.0
-
-
 @pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is required")
 def test_trailing_trim_preserves_mid_track_silence(tmp_path: Path) -> None:
     source = tmp_path / "track.wav"
@@ -269,6 +249,36 @@ def test_trailing_trim_preserves_mid_track_silence(tmp_path: Path) -> None:
     assert process_file(source, cfg, apply=True, force=False, quiet=True) is True
     output_duration = mod.probe_duration(source)
     assert 6.0 < output_duration < 8.0
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg is required")
+def test_tail_fade_does_not_silence_audio_before_the_actual_tail(tmp_path: Path) -> None:
+    source = tmp_path / "track.wav"
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=440:duration=12", str(source)],
+        check=True,
+        capture_output=True,
+    )
+    cfg = CleanupConfig(
+        backup_originals=False,
+        trim_silence=False,
+        adaptive_eq=False,
+        volume_smoothing=False,
+        limiter=False,
+        loudnorm=False,
+        tail_fade_sec=3,
+    )
+
+    assert process_file(source, cfg, apply=True, force=False, quiet=True) is True
+    probe = subprocess.run(
+        ["ffmpeg", "-ss", "6", "-t", "1", "-i", str(source), "-af", "volumedetect", "-f", "null", "-"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    mean_volume_line = next(line for line in probe.stderr.splitlines() if "mean_volume:" in line)
+    mean_volume_db = float(mean_volume_line.split("mean_volume:", 1)[1].removesuffix(" dB"))
+    assert mean_volume_db > -40
 
 
 def test_collect_audio_files_uses_supported_extensions(tmp_path: Path) -> None:
@@ -654,13 +664,18 @@ def test_process_file_apply_backs_up_original_and_replaces(tmp_path: Path, monke
     assert source.read_bytes() == b"cleaned"
 
 
-def test_process_file_positions_fade_from_trimmed_duration(tmp_path: Path, monkeypatch) -> None:
+def test_process_file_positions_fade_from_prefade_output_duration(tmp_path: Path, monkeypatch) -> None:
     collection = _make_collection(tmp_path, ["01-a.mp3"])
     source = collection / "02-Individual-music" / "01-a.mp3"
     commands: list[list[str]] = []
 
-    monkeypatch.setattr(mod, "probe_duration", lambda _path: 120)
-    monkeypatch.setattr(mod, "probe_trimmed_duration", lambda _path, _cfg: 60)
+    probed_paths: list[Path] = []
+
+    def fake_probe_duration(path: Path) -> float:
+        probed_paths.append(path)
+        return 60 if path.suffix == ".wav" else 120
+
+    monkeypatch.setattr(mod, "probe_duration", fake_probe_duration)
     monkeypatch.setattr(mod.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
 
     def fake_run(cmd, capture_output, text):
@@ -672,9 +687,35 @@ def test_process_file_positions_fade_from_trimmed_duration(tmp_path: Path, monke
 
     process_file(source, CleanupConfig(enabled=True), apply=True, force=False, quiet=True)
 
-    audio_filter = commands[0][commands[0].index("-af") + 1]
-    assert "afade=t=out:st=57:d=3" in audio_filter
-    assert "st=117" not in audio_filter
+    assert len(commands) == 2
+    prefade_filter = commands[0][commands[0].index("-af") + 1]
+    fade_filter = commands[1][commands[1].index("-af") + 1]
+    assert "afade" not in prefade_filter
+    assert fade_filter == "afade=t=out:st=57:d=3"
+    assert probed_paths == [source.with_name(".01-a.cleanup-prefade.wav")]
+
+
+def test_process_file_fails_when_prefade_duration_cannot_be_measured(tmp_path: Path, monkeypatch) -> None:
+    collection = _make_collection(tmp_path, ["01-a.mp3"])
+    source = collection / "02-Individual-music" / "01-a.mp3"
+    prefade = source.with_name(".01-a.cleanup-prefade.wav")
+    tmp_output = source.with_name(".01-a.cleanup-tmp.mp3")
+
+    monkeypatch.setattr(mod, "probe_duration", lambda _path: None)
+    monkeypatch.setattr(mod.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+
+    def fake_run(cmd, capture_output, text):
+        Path(cmd[-1]).write_bytes(b"prefade")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+
+    with pytest.raises(RuntimeError, match="ffprobe failed to measure prefade duration"):
+        process_file(source, CleanupConfig(enabled=True), apply=True, force=False, quiet=True)
+
+    assert source.read_bytes() == b"audio"
+    assert not prefade.exists()
+    assert not tmp_output.exists()
 
 
 @pytest.mark.parametrize(
@@ -689,13 +730,13 @@ def test_process_file_apply_uses_container_matching_codec(
 ) -> None:
     collection = _make_collection(tmp_path, [filename])
     source = collection / "02-Individual-music" / filename
-    captured_cmd: list[str] = []
+    captured_cmds: list[list[str]] = []
 
     monkeypatch.setattr(mod, "probe_duration", lambda _path: 60)
     monkeypatch.setattr(mod.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
 
     def fake_run(cmd, capture_output, text):
-        captured_cmd.extend(cmd)
+        captured_cmds.append(cmd)
         Path(cmd[-1]).write_bytes(b"cleaned")
         return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
@@ -705,7 +746,8 @@ def test_process_file_apply_uses_container_matching_codec(
 
     assert changed is True
     assert source.read_bytes() == b"cleaned"
-    assert captured_cmd[captured_cmd.index("-c:a") + 1] == expected_codec
+    final_cmd = captured_cmds[-1]
+    assert final_cmd[final_cmd.index("-c:a") + 1] == expected_codec
 
 
 def test_process_file_ffmpeg_failure_preserves_original_and_removes_partial_output(tmp_path: Path, monkeypatch) -> None:

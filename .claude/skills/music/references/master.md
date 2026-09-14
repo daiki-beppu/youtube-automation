@@ -333,7 +333,7 @@ uv run yt-suno-audio-cleanup apply <collection-path>  # 元ファイルを origi
 uv run yt-suno-audio-cleanup apply <collection-path> --jobs 1  # 明示的な直列実行
 ```
 
-`apply` は曲単位で最大2件を並列処理する。最大並列数は `--jobs` → `post_processing.suno_audio_cleanup.max_workers` → `2` の順で解決し、安全上限は8とする。失敗時は新しい曲を投入せず、開始済み処理を回収してファイル名順にエラーを報告する。`--jobs 1` は worker thread を作らず、従来どおり各曲の進捗と例外を直ちに呼び出し元へ渡す。`plan` はファイル名順に ffprobe で長さを調べてコマンドを表示するが、ffmpeg encode は起動しない。
+`apply` は曲単位で最大2件を並列処理する。最大並列数は `--jobs` → `post_processing.suno_audio_cleanup.max_workers` → `2` の順で解決し、安全上限は8とする。末尾 fade guard が有効な場合は、無音カット〜LUFS 正規化を一時 WAV へ適用し、その実測尺を基準に fade を別 pass で適用する。失敗時は新しい曲を投入せず、開始済み処理を回収してファイル名順にエラーを報告する。`--jobs 1` は worker thread を作らず、従来どおり各曲の進捗と例外を直ちに呼び出し元へ渡す。`plan` はファイル名順に ffprobe で長さを調べてコマンドを表示するが、ffmpeg encode は起動しない。
 
 Audio Studio で調整した値が `20-documentation/audio-adjustments.json::tracks.<filename>` にある場合、その曲だけ skill-config の値へ差分上書きして plan / apply する。ファイル不在・空・対象曲なしは従来どおり skill-config を使う。UI の EQ は Web Audio による即時プレビューであり、確定処理は plan に表示される ffmpeg filter を正とする。
 
