@@ -692,13 +692,36 @@ def test_process_file_positions_fade_from_prefade_output_duration(tmp_path: Path
     fade_filter = commands[1][commands[1].index("-af") + 1]
     assert "afade" not in prefade_filter
     assert fade_filter == "afade=t=out:st=57:d=3"
-    assert probed_paths == [source.with_name(".01-a.cleanup-prefade.wav")]
+    assert probed_paths == [source.with_name(".01-a.mp3.cleanup-prefade.wav")]
+
+
+def test_process_file_gives_same_stem_inputs_distinct_intermediates(tmp_path: Path, monkeypatch) -> None:
+    collection = _make_collection(tmp_path, ["01-a.mp3", "01-a.wav"])
+    music = collection / "02-Individual-music"
+    commands: list[list[str]] = []
+
+    monkeypatch.setattr(mod, "probe_duration", lambda _path: 60)
+    monkeypatch.setattr(mod.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+
+    def fake_run(cmd, capture_output, text):
+        commands.append(cmd)
+        Path(cmd[-1]).write_bytes(b"cleaned")
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+
+    for name in ("01-a.mp3", "01-a.wav"):
+        process_file(music / name, CleanupConfig(enabled=True), apply=True, force=False, quiet=True)
+
+    prefade_outputs = [cmd[-1] for cmd in commands if cmd[-1].endswith("cleanup-prefade.wav")]
+    assert len(prefade_outputs) == 2
+    assert len(set(prefade_outputs)) == 2
 
 
 def test_process_file_fails_when_prefade_duration_cannot_be_measured(tmp_path: Path, monkeypatch) -> None:
     collection = _make_collection(tmp_path, ["01-a.mp3"])
     source = collection / "02-Individual-music" / "01-a.mp3"
-    prefade = source.with_name(".01-a.cleanup-prefade.wav")
+    prefade = source.with_name(".01-a.mp3.cleanup-prefade.wav")
     tmp_output = source.with_name(".01-a.cleanup-tmp.mp3")
 
     monkeypatch.setattr(mod, "probe_duration", lambda _path: None)

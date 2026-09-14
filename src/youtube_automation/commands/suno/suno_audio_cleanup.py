@@ -265,7 +265,8 @@ def _tmp_output_for(path: Path) -> Path:
 
 
 def _prefade_output_for(path: Path) -> Path:
-    return path.with_name(f".{path.stem}.cleanup-prefade.wav")
+    """Keep the source extension in the name so same-stem inputs never share one intermediate."""
+    return path.with_name(f".{path.name}.cleanup-prefade.wav")
 
 
 def _backup_path_for(path: Path) -> Path:
