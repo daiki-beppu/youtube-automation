@@ -11,6 +11,7 @@ from youtube_automation.core.errors import ConfigError
 
 LIVE_DURATION_ISO = "P0D"
 TTP_VIDEO_ANALYZE_TOP_N = 5
+_SHORT_MAX_DURATION_SECONDS = 3 * 60
 
 
 def find_latest_benchmark_json(data_dir: Path) -> Path | None:
@@ -75,13 +76,14 @@ def load_benchmark_videos(
 
 
 def is_short_benchmark_duration(duration_iso: str) -> bool:
-    """Return whether an ISO duration is shorter than five minutes."""
+    """Return whether an ISO duration is at most three minutes."""
     match = re.fullmatch(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", duration_iso)
     if not match or all(group is None for group in match.groups()):
         return False
     hours = int(match.group(1) or 0)
     minutes = int(match.group(2) or 0)
-    return hours == 0 and minutes < 5
+    seconds = int(match.group(3) or 0)
+    return hours * 3600 + minutes * 60 + seconds <= _SHORT_MAX_DURATION_SECONDS
 
 
 def is_short_benchmark_video(video: dict) -> bool:

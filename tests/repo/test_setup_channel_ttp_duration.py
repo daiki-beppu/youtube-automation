@@ -38,7 +38,7 @@ def test_derives_top_long_vod_range_and_records_short_and_live_exclusions() -> N
             "rival",
             [
                 _video("LIVE", 100_000, "P0D"),
-                _video("SHORT", 90_000, "PT4M59S"),
+                _video("SHORT", 90_000, "PT3M"),
                 _video("A", 80_000, "PT61M30S"),
                 _video("B", 70_000, "PT2H0M1S"),
                 _video("C", 60_000, "PT90M"),

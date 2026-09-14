@@ -16,8 +16,10 @@ from youtube_automation.domains.analytics.benchmark import (
 @pytest.mark.parametrize(
     ("duration_iso", "expected"),
     [
-        ("PT4M59S", True),
-        ("PT5M", False),
+        ("PT2M59S", True),
+        ("PT3M", True),
+        ("PT3M1S", False),
+        ("PT4M59S", False),
         ("PT1H", False),
         ("PT0S", True),
         ("P0D", False),
@@ -53,7 +55,7 @@ def test_top_vod_selection_skips_live_and_honors_limit(
 ) -> None:
     videos = [
         {"video_id": "live-first", "duration_iso": "P0D"},
-        {"video_id": "short", "duration_iso": "PT4M59S"},
+        {"video_id": "short", "duration_iso": "PT3M"},
         {"video_id": "vod", "duration_iso": "PT1H"},
         {"video_id": "live-middle", "duration_iso": "P0D"},
         {"video_id": "vod-next", "duration_iso": "PT30M"},
@@ -75,13 +77,14 @@ def test_summary_uses_long_videos_for_averages_and_all_videos_for_tags() -> None
             "tags": ["Study", "calm"],
         },
         {"duration_iso": "PT20M", "views": 201, "daily_views": 2.5, "engagement_rate": 3.01, "tags": ["CALM"]},
+        {"duration_iso": "PT3M15S", "views": 599, "daily_views": 5.25, "engagement_rate": 7.489, "tags": []},
         {"duration_iso": "PT1M", "views": 9000, "daily_views": 999, "engagement_rate": 50, "tags": ["study", "Short"]},
     ]
 
     assert summarize_benchmark_videos(videos) == {
-        "avg_views": 150,
-        "avg_daily_views": 1.9,
-        "avg_engagement_rate": 2.51,
+        "avg_views": 300,
+        "avg_daily_views": 3.0,
+        "avg_engagement_rate": 4.17,
         "top_tags": [{"tag": "study", "count": 2}, {"tag": "calm", "count": 2}, {"tag": "short", "count": 1}],
     }
     assert videos[0]["tags"] == ["Study", "calm"]
