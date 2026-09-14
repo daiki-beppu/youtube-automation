@@ -293,7 +293,7 @@ def process_file(path: Path, cfg: CleanupConfig, *, apply: bool, force: bool, qu
     try:
         if cfg.tail_fade_guard:
             prefade_cfg = replace(cfg, tail_fade_guard=False)
-            _run_ffmpeg(build_ffmpeg_cmd(path, prefade, prefade_cfg, duration_sec=None), path)
+            _run_ffmpeg(build_ffmpeg_cmd(path, prefade, prefade_cfg, duration_sec=None), path, prefade)
             fade_cfg = replace(
                 cfg,
                 trim_silence=False,
@@ -305,13 +305,9 @@ def process_file(path: Path, cfg: CleanupConfig, *, apply: bool, force: bool, qu
             prefade_duration = probe_duration(prefade)
             if prefade_duration is None:
                 raise RuntimeError(f"ffprobe failed to measure prefade duration: {prefade.name}")
-            _run_ffmpeg(build_ffmpeg_cmd(prefade, tmp, fade_cfg, duration_sec=prefade_duration), path)
+            _run_ffmpeg(build_ffmpeg_cmd(prefade, tmp, fade_cfg, duration_sec=prefade_duration), path, tmp)
         else:
-            _run_ffmpeg(build_ffmpeg_cmd(path, tmp, cfg, duration_sec=None), path)
-    except RuntimeError:
-        if tmp.exists():
-            tmp.unlink()
-        raise
+            _run_ffmpeg(build_ffmpeg_cmd(path, tmp, cfg, duration_sec=None), path, tmp)
     finally:
         if prefade.exists():
             prefade.unlink()
@@ -322,10 +318,9 @@ def process_file(path: Path, cfg: CleanupConfig, *, apply: bool, force: bool, qu
     return True
 
 
-def _run_ffmpeg(cmd: list[str], source_path: Path) -> None:
+def _run_ffmpeg(cmd: list[str], source_path: Path, output_path: Path) -> None:
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
-        output_path = Path(cmd[-1])
         if output_path.exists():
             output_path.unlink()
         raise RuntimeError(f"ffmpeg cleanup failed ({source_path.name}, rc={proc.returncode}):\n{proc.stderr}")
