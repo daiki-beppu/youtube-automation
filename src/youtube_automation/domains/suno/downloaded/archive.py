@@ -27,7 +27,10 @@ from youtube_automation.domains.suno.name_matching import (
 )
 
 _AUDIO_EXTENSIONS = frozenset({".mp3", ".m4a", ".wav"})
-_ZIP_MAX_TOTAL_SIZE = 2 * 1024 * 1024 * 1024
+# Studio Multitrack は全 stem をプロジェクト長までパディングする。長尺 WAV 20 曲の
+# 実測 3.6 GiB を安全に受け入れつつ、zip bomb 防御として 8 GiB の有限上限を維持する。
+_ZIP_MAX_TOTAL_SIZE = 8 * 1024 * 1024 * 1024
+_ZIP_MAX_TOTAL_SIZE_GIB = _ZIP_MAX_TOTAL_SIZE // (1024 * 1024 * 1024)
 _ZIP_MAX_SINGLE_FILE = 500 * 1024 * 1024
 _ZIP_MAX_ENTRIES = 1000
 
@@ -409,7 +412,11 @@ def _zip_within_size_limits(infos: list[zipfile.ZipInfo]) -> bool:
             return False
         total_size += info.file_size
     if total_size > _ZIP_MAX_TOTAL_SIZE:
-        print(f"[yt-collection-serve] ZIP 総展開サイズが上限超過 ({total_size} bytes): skip")
+        print(
+            "[yt-collection-serve] ZIP 総展開サイズが上限超過 "
+            f"(実サイズ {total_size} bytes / 上限 {_ZIP_MAX_TOTAL_SIZE} bytes): skip。"
+            f"{_ZIP_MAX_TOTAL_SIZE_GIB} GiB を超える場合は Studio export を複数バッチに分割してください"
+        )
         return False
     return True
 
