@@ -201,6 +201,8 @@ describe("download flow", () => {
         expected_file_count: 56,
         format: "wav",
         download_path: "collection.zip",
+        clip_ids: CLIP_IDS,
+        generated_at: expect.any(String),
       },
     });
   });

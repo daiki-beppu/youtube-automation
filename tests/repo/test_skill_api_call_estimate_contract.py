@@ -107,6 +107,7 @@ NON_BILLED_CLIS: dict[str, str] = {
     "yt-generate-master": "ローカル ffmpeg クロスフェード結合のみ",
     "yt-generate-videos-batch": "ローカル generate_videos.sh の並列 ffmpeg 処理のみ",
     "yt-generate-suno": "ローカルの Suno プロンプト生成のみ",
+    "yt-suno-content-id-evidence": "ローカルの生成証跡 JSON 読み書きのみ",
     "yt-hybrid-runner": "MediaStore・Git・agent CLIを束ねるだけで、課金は委譲先CLIの分類に従う",
     "yt-human-tasks": "ローカルstateからMarkdownを生成し、無料のDiscord webhookへ要約するのみ",
     "yt-codex-canary-notify": "Codex canary結果を無料のDiscord webhookへ通知するのみ",

@@ -184,7 +184,8 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number,
-    filename: string
+    filename: string,
+    clipIds: string[]
   ): Promise<DownloadSummary | undefined> {
     deps.emitProgress({
       phase: PHASE.PLACING_ARCHIVE,
@@ -199,6 +200,8 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
         expected_file_count: expectedFileCount,
         format: "wav",
         download_path: filename,
+        clip_ids: clipIds,
+        generated_at: new Date().toISOString(),
       },
     });
     // 部分完了（Suno の生成数不足）はサーバーが warning 付き 200 で受理する (#1913)。
@@ -240,7 +243,8 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
       collectionId,
       progressTotal,
       expectedFileCount,
-      filename
+      filename,
+      clipIds
     );
   }
 

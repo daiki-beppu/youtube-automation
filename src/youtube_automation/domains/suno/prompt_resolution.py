@@ -105,6 +105,7 @@ class ResolvedPrompts:
     title: str
     is_vocal: bool
     genre_line: str
+    model: str
     banned_artists: tuple[str, ...]
     auto_lyrics_structure: bool
     duration_filter: Mapping[str, int | float]
@@ -134,6 +135,7 @@ class _ResolvedBase:
     title: str
     is_vocal: bool
     genre_line: str
+    model: str
     banned_artists: tuple[str, ...]
     auto_lyrics_structure: bool
     duration_filter: Mapping[str, int | float]
@@ -424,6 +426,7 @@ def _resolve_base(
         title=cast(str, patterns.get("title", "Suno Prompts")),
         is_vocal=is_vocal,
         genre_line=genre_line,
+        model=str(config.get("model", "V5.5")),
         banned_artists=head.banned_artists,
         auto_lyrics_structure=head.auto_lyrics_structure,
         duration_filter=head.duration_filter,
@@ -507,6 +510,7 @@ def _finalize(
         title=base.title,
         is_vocal=base.is_vocal,
         genre_line=base.genre_line,
+        model=base.model,
         banned_artists=base.banned_artists,
         auto_lyrics_structure=base.auto_lyrics_structure,
         duration_filter=base.duration_filter,
