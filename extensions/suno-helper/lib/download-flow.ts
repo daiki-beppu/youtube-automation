@@ -1,6 +1,10 @@
 import type { DownloadSummary } from "../../shared/api";
 import type { ProgressPayload } from "../../shared/constants";
-import { PHASE } from "../../shared/constants";
+import {
+  PHASE,
+  STUDIO_EXPORT_RESULT_GRACE_MS,
+  STUDIO_EXPORT_WATCH_TIMEOUT_MS,
+} from "../../shared/constants";
 import { onMessage, sendMessage } from "./messaging";
 import {
   closeStudioExportTab,
@@ -70,8 +74,10 @@ export interface DownloadContext {
   baseUrl: string;
 }
 
-// Studio Multitrack の長尺 WAV 20 曲は実測で約 13 分かかるため、余裕を持って 30 分待つ。
-const DOWNLOAD_COMPLETE_TIMEOUT_MS = 1_800_000;
+// watcher 側の監視上限より必ず猶予分だけ長く待つ。同値にすると、監視タイムアウト時の
+// 「完了済み download を拾って downloadComplete を送る」fallback が届く前にここで倒れてしまう。
+const DOWNLOAD_COMPLETE_TIMEOUT_MS =
+  STUDIO_EXPORT_WATCH_TIMEOUT_MS + STUDIO_EXPORT_RESULT_GRACE_MS;
 const DOWNLOADING_PHASE_SUFFIX = "(phase=downloading)";
 
 function withDownloadingPhase(error: unknown): Error {

@@ -115,6 +115,17 @@ export const QUEUE_SLOT_WAIT_TIMEOUT_MS = 300000;
  * この時間まったく変化しないときのみ「Suno 側が固まった」とみなして throw する。 */
 export const INFLIGHT_STALL_TIMEOUT_MS = 600000;
 
+/** Studio Multitrack export の download 監視上限 (#5131)。長尺 WAV 20 曲（ZIP 約 2.2GB）は
+ * 書き出し＋ダウンロードに実測 13 分前後かかり、旧値 10 分では完走直前で打ち切られた。
+ * background の watcher と content script 側の完了待ちが同じ値から導出されるよう、ここを SSOT とする。 */
+export const STUDIO_EXPORT_WATCH_TIMEOUT_MS = 1_800_000;
+
+/** 監視タイムアウト時の fallback 結果が content script へ届くまでの猶予 (#5131)。
+ * watcher は上限到達時に「Studio 側で既に完了した download」を拾って downloadComplete を送るが、
+ * 完了待ち側の deadline が監視上限と同値だとその通知が届く前に先へ倒れ、
+ * 書き出し済みなのに取り込めなくなる。完了待ちは必ず監視上限 + 本猶予とする。 */
+export const STUDIO_EXPORT_RESULT_GRACE_MS = 60_000;
+
 /** inject 後に in-flight が CLIPS_PER_REQUEST 増えるまで poll wait する上限 (#864 root cause 3)。 */
 export const INJECT_ACK_TIMEOUT_MS = 30000;
 

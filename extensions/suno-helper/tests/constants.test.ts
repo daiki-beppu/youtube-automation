@@ -33,6 +33,8 @@ import {
   RUN_MODES,
   SERVER_HOST_PERMISSIONS,
   STORAGE_KEY,
+  STUDIO_EXPORT_RESULT_GRACE_MS,
+  STUDIO_EXPORT_WATCH_TIMEOUT_MS,
   UNATTENDED_RUN_STATE_KEY,
   type ObservedClip,
   type RunModeId,
@@ -259,6 +261,20 @@ describe("shared/constants: inject 検証 + queue 待機 timeout 独立化 (#864
 
   it("Given MAX_YIELD_RETRY When 読む Then duration NG 時の最大 retry 回数 2 である", () => {
     expect(MAX_YIELD_RETRY).toBe(2);
+  });
+});
+
+describe("shared/constants: Studio Multitrack export の待ち時間 (#5131)", () => {
+  it("Given STUDIO_EXPORT_WATCH_TIMEOUT_MS When 読む Then 実測 13 分に余裕を持つ 30 分である", () => {
+    // 長尺 WAV 20 曲（ZIP 約 2.2GB）は書き出し＋DL に実測 13 分前後かかり、旧値 10 分では
+    // 完走直前で打ち切られた。
+    expect(STUDIO_EXPORT_WATCH_TIMEOUT_MS).toBe(1_800_000);
+  });
+
+  it("Given STUDIO_EXPORT_RESULT_GRACE_MS When 読む Then fallback 通知を待てる正の猶予である", () => {
+    // 0 だと完了待ちが監視上限と同値になり、watcher の「完了済み download 拾い上げ」通知が
+    // 届く前にフロー側が倒れる。
+    expect(STUDIO_EXPORT_RESULT_GRACE_MS).toBeGreaterThan(0);
   });
 });
 
