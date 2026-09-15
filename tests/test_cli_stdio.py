@@ -83,6 +83,7 @@ EXPECTED_ENTRYPOINT_MODULES = {
     "yt-stock-preview": "youtube_automation.commands.media.stock_preview",
     "yt-stock-prune": "youtube_automation.commands.media.stock_prune",
     "yt-suno-audio-cleanup": "youtube_automation.commands.suno.suno_audio_cleanup",
+    "yt-suno-content-id-evidence": "youtube_automation.commands.suno.content_id_evidence",
     "yt-suno-unattended-request": "youtube_automation.commands.suno.suno_unattended_request",
     "yt-suno-select-tracks": "youtube_automation.commands.suno.suno_select_tracks",
     "yt-suno-verify": "youtube_automation.commands.suno.suno_verify",
