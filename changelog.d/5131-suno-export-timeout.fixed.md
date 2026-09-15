@@ -1,1 +1,1 @@
-- Suno Studio Multitrack export の監視とダウンロード完了待ちを 30 分へ延長し、タイムアウト時の再実行案内を追加した（#5131）。
+- Suno Studio Multitrack export の download 監視上限を 30 分へ延長し、完了待ちは監視上限 + 猶予 1 分とした。監視タイムアウト時に書き出し済みの download を拾い上げる fallback が確実に届くため、13 分前後かかる長尺 WAV 20 曲でも打ち切られない（#5131）。

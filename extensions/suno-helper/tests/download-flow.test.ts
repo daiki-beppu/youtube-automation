@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PHASE } from "../../shared/constants";
+import {
+  PHASE,
+  STUDIO_EXPORT_RESULT_GRACE_MS,
+  STUDIO_EXPORT_WATCH_TIMEOUT_MS,
+} from "../../shared/constants";
 import { createDownloadFlow } from "../lib/download-flow";
 
 // REQ-2915-01: every watcher-side failure cancels once and clears its resolver.
@@ -148,13 +152,39 @@ describe("download flow", () => {
       "Studio Multitrack export がタイムアウトしました。Download から export を再実行できます"
     );
 
-    await vi.advanceTimersByTimeAsync(1_800_000);
+    await vi.advanceTimersByTimeAsync(
+      STUDIO_EXPORT_WATCH_TIMEOUT_MS + STUDIO_EXPORT_RESULT_GRACE_MS
+    );
     await rejection;
 
     expectOnlyStartAndCancelMessages();
     dispatchDownloadComplete();
     await Promise.resolve();
     expectOnlyStartAndCancelMessages();
+  });
+
+  it("監視上限到達後の fallback downloadComplete を猶予内で取り込む", async () => {
+    messagingMocks.sendMessage.mockImplementation(async (message: string) => {
+      if (message === "postDownloaded") {
+        return { summary: PARTIAL_SUMMARY };
+      }
+      return { ok: true };
+    });
+    const flow = createSubject(() => false);
+    const result = flow.performDownload(CONTEXT, "collection", 2, 2, CLIP_IDS);
+
+    // watcher は監視上限ちょうどに「完了済み download」を拾って downloadComplete を送る。
+    // 完了待ちが同値で倒れていると、書き出し済みなのに取り込めない (#5131)。
+    await vi.advanceTimersByTimeAsync(STUDIO_EXPORT_WATCH_TIMEOUT_MS);
+    dispatchDownloadComplete();
+    await vi.advanceTimersByTimeAsync(1_000);
+
+    await expect(result).resolves.toEqual(PARTIAL_SUMMARY);
+    expect(
+      messagingMocks.sendMessage.mock.calls.some(
+        ([message]) => message === "postDownloaded"
+      )
+    ).toBe(true);
   });
 
   it("abort すると watcher を一回 cancel し post も resolver も残さない", async () => {
@@ -337,7 +367,9 @@ describe("download flow", () => {
       "Studio Multitrack export がタイムアウトしました。Download から export を再実行できます"
     );
 
-    await vi.advanceTimersByTimeAsync(1_800_000);
+    await vi.advanceTimersByTimeAsync(
+      STUDIO_EXPORT_WATCH_TIMEOUT_MS + STUDIO_EXPORT_RESULT_GRACE_MS
+    );
     await rejection;
 
     expect(studioExportMocks.closeStudioExportTab).toHaveBeenCalledWith(

@@ -987,7 +987,7 @@ describe('background onMessage("startDownload"): 成功時にタイムアウト�
     await flushPromises();
     expect(removedDownloadListeners).toHaveLength(0);
 
-    // 10 分を advance — timeout は clearTimeout 済みなので発火しない
+    // 30 分を advance — timeout は clearTimeout 済みなので発火しない
     vi.advanceTimersByTime(1800000);
 
     // タイムアウト warn が出ていないことを確認
