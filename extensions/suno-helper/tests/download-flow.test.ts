@@ -145,10 +145,10 @@ describe("download flow", () => {
     const flow = createSubject(() => false);
     const result = flow.performDownload(CONTEXT, "collection", 2, 2, CLIP_IDS);
     const rejection = expect(result).rejects.toThrow(
-      "Studio Multitrack export がタイムアウトしました"
+      "Studio Multitrack export がタイムアウトしました。Download から export を再実行できます"
     );
 
-    await vi.advanceTimersByTimeAsync(660_000);
+    await vi.advanceTimersByTimeAsync(1_800_000);
     await rejection;
 
     expectOnlyStartAndCancelMessages();
@@ -334,10 +334,10 @@ describe("download flow", () => {
     const flow = createSubject(() => false);
     const result = flow.performDownload(CONTEXT, "collection", 2, 2, CLIP_IDS);
     const rejection = expect(result).rejects.toThrow(
-      "Studio Multitrack export がタイムアウトしました"
+      "Studio Multitrack export がタイムアウトしました。Download から export を再実行できます"
     );
 
-    await vi.advanceTimersByTimeAsync(660_000);
+    await vi.advanceTimersByTimeAsync(1_800_000);
     await rejection;
 
     expect(studioExportMocks.closeStudioExportTab).toHaveBeenCalledWith(

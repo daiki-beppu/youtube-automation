@@ -5,7 +5,8 @@ const TRUSTED_DOWNLOAD_HOSTS = [
 const TRUSTED_DOWNLOAD_HOST_SUFFIXES = [".suno.com", ".suno.ai"];
 const DOWNLOAD_WATCHER_SESSION_KEY = "suno-helper:downloadWatcher";
 const DOWNLOAD_COMPLETE_POLL_MS = 3000;
-const DOWNLOAD_WATCH_TIMEOUT_MS = 600000;
+// Studio Multitrack の長尺 WAV 20 曲は実測で約 13 分かかるため、余裕を持って 30 分監視する。
+const DOWNLOAD_WATCH_TIMEOUT_MS = 1_800_000;
 
 type DownloadMessageSender = (
   type: "downloadComplete" | "downloadFailed",
@@ -175,7 +176,7 @@ export function installDownloadWatcher(deps: {
             return;
           }
           const message =
-            "Studio export 監視タイムアウト（10 分）。listener を解除しました。";
+            "Studio export 監視タイムアウト（30 分）。listener を解除しました。Download から export を再実行できます。";
           console.warn(`[suno-helper] ${message}`);
           cleanupWatcher(watcher);
           notifyDownloadFailed(watcher, message);
