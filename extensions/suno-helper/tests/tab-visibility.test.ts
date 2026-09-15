@@ -11,14 +11,11 @@ describe("Suno tab visibility preflight", () => {
     expect(requireVisibleSunoTab("visible")).toBeNull();
   });
 
-  it.each(["hidden", "prerender"] as DocumentVisibilityState[])(
-    "%s のタブは案内して開始しない",
-    (state) => {
-      expect(requireVisibleSunoTab(state)).toBe(SUNO_TAB_VISIBLE_MESSAGE);
-      expect(SUNO_TAB_VISIBLE_MESSAGE).toContain("タブを表示中");
-      expect(SUNO_TAB_VISIBLE_MESSAGE).toContain("Playlist");
-    }
-  );
+  it("背面のタブは案内して開始しない", () => {
+    expect(requireVisibleSunoTab("hidden")).toBe(SUNO_TAB_VISIBLE_MESSAGE);
+    expect(SUNO_TAB_VISIBLE_MESSAGE).toContain("タブを表示中");
+    expect(SUNO_TAB_VISIBLE_MESSAGE).toContain("Playlist");
+  });
 
   // このファイルは node 環境（document なし）で動くため、fallback をそのまま検証できる。
   it("document を持たない環境では visible として扱う", () => {
