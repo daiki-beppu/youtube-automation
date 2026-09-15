@@ -9,6 +9,7 @@
     "schema_version": {"title": "Schema version", "const": 1, "x-view": {"order": 0, "collapsed": true}},
     "generated_at": {"title": "生成日時", "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$", "x-view": {"order": 1, "collapsed": true}},
     "engine": {"title": "Music engine", "enum": ["suno", "lyria"], "x-view": {"order": 2, "collapsed": true}},
+    "model": {"title": "Generation model", "type": "string", "minLength": 1, "x-view": {"order": 4, "collapsed": true}},
     "collection_id": {"title": "Collection", "type": "string", "minLength": 1, "x-view": {"order": 3, "collapsed": true}},
     "provenance": {"title": "Provenance", "$ref": "#/definitions/provenance", "x-view": {"order": 10, "collapsed": true}},
     "entries": {"title": "Album flow / prompt entries", "description": "アルバム順と各トラックの生成入力・品質根拠", "type": "array", "minItems": 1, "items": {"$ref": "#/definitions/entry"}, "x-view": {"order": 20, "presentation": "cards", "summary": true, "priority": "high"}},

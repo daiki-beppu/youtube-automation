@@ -883,6 +883,8 @@ export interface DownloadedPayload {
   format: "mp3" | "m4a" | "wav";
   suno_playlist_url?: string;
   download_path?: string;
+  clip_ids?: string[];
+  generated_at?: string;
 }
 
 /**

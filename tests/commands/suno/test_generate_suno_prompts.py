@@ -1165,7 +1165,8 @@ def test_main_json_output_is_loadable_array_of_entries(channel_dir, tmp_path, mo
     main()
 
     data = json.loads((patterns_path.parent / "suno-prompts.json").read_text(encoding="utf-8"))
-    assert set(data) == {"entries", "duration_filter"}
+    assert set(data) == {"model", "entries", "duration_filter"}
+    assert data["model"] == "V5.5"
     assert data["duration_filter"] == {"min_sec": 60, "max_sec": 300}
     assert len(data["entries"]) == 1
     # #900: strict 等価から subset 検証へ緩和 (build_prompt_entries 側の relaxation と同様)。
