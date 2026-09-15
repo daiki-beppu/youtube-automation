@@ -426,7 +426,7 @@ def _pair_competitor(
             set(),
             0,
         ),
-        ("Shorts", {"winner_duration": "PT4M59S"}, date(2026, 9, 6), set(), 0),
+        ("Shorts", {"winner_duration": "PT3M"}, date(2026, 9, 6), set(), 0),
         ("ライブ", {"winner_duration": "P0D"}, date(2026, 9, 6), set(), 0),
         ("走査プール 9 本", {"filler_views": _FILLER_VIEWS[:7]}, date(2026, 9, 6), set(), 0),
         ("走査プール 10 本", {"filler_views": _FILLER_VIEWS[:8]}, date(2026, 9, 6), set(), 1),
