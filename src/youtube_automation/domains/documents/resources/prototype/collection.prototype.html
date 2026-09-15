@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>collection.html PROTOTYPE (#5116)</title>
+<!--
+  PROTOTYPE — THROWAWAY. wayfinder #5108 / ticket #5116
+  質問: 「制作設計書 1 回承認」の collection.html を、非エンジニアが迷わず承認できる形は何か。
+  3 案 (?variant=A|B|C) を 1 ファイルで切替え、底部バーで「状態」も切替える。
+  A = 一枚の契約書（縦読み・最後に承認）
+  B = 要約先行（承認に必要な要点を最初に、詳細は折りたたみ）
+  C = 工程タイムライン（成果物ごとに確認して進む、全工程チェックで承認）
+  状態 = proposals（初版）/ review（本設計・承認待ち）/ overcap（見積>上限）/ escalated（逸脱）/ approved（承認済み進行中）
+  本番は CSP script-src 'none'。ここで JS を使うのは切替と描画だけで、操作はすべて <form method="post"> の形にしてある。
+  データは #5111〜#5114 の schema に沿った collection.json 相当のサンプル 1 件（下の SAMPLE）。
+-->
+<style>
+/* ===== foundation.css（本番と同一）===== */
+:root {
+  color-scheme: dark;
+  --color-paper: oklch(13.5% 0.028 250deg);
+  --color-surface: oklch(17% 0.026 250deg);
+  --color-surface-muted: oklch(21% 0.032 250deg);
+  --color-ink: oklch(94% 0.012 250deg);
+  --color-ink-muted: oklch(72% 0.025 250deg);
+  --color-rule: oklch(30% 0.028 250deg);
+  --color-rule-strong: oklch(48% 0.045 250deg);
+  --color-link: oklch(72% 0.14 250deg);
+  --color-link-soft: oklch(24% 0.06 250deg);
+  --color-focus: oklch(78% 0.16 250deg);
+  --color-pass-border: oklch(72% 0.13 155deg);
+  --color-pass-text: oklch(80% 0.12 155deg);
+  --color-fail-border: oklch(68% 0.18 25deg);
+  --color-fail-text: oklch(78% 0.14 25deg);
+  --color-fail-soft: oklch(23% 0.065 25deg);
+  --color-warning-border: oklch(76% 0.14 80deg);
+  --color-warning-text: oklch(83% 0.11 80deg);
+  --color-warning-soft: oklch(23% 0.05 80deg);
+  --font-body: "Geist", "Inter", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Yu Gothic", Meiryo, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --space-3xs: 0.25rem; --space-2xs: 0.5rem; --space-xs: 0.75rem; --space-sm: 1rem; --space-md: 1.5rem; --space-lg: 2rem; --space-xl: 3rem;
+  --space-page: clamp(var(--space-sm), 4vw, var(--space-xl));
+  --measure-page: 72rem; --measure-copy: 68ch; --radius-media: 0.25rem;
+  --focus-outline: 0.1875rem solid var(--color-focus); --focus-offset: var(--space-3xs);
+  background: var(--color-paper); color: var(--color-ink); font-family: var(--font-body); line-height: 1.6;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html, body { max-width: 100%; overflow-x: clip; }
+body { margin: 0; padding: var(--space-page); padding-block-end: 7rem; background: var(--color-paper); }
+.page-header, main { width: min(var(--measure-page), 100%); min-width: 0; margin-inline: auto; }
+button:focus-visible, a:focus-visible, summary:focus-visible, [tabindex]:focus-visible { outline: var(--focus-outline); outline-offset: var(--focus-offset); }
+
+/* ===== base.css の流用部分 ===== */
+.page-header { display: grid; gap: var(--space-sm); margin-block-end: var(--space-xl); padding-block: var(--space-sm) var(--space-lg); border-block: 0.25rem solid var(--color-ink); }
+.eyebrow { margin: 0; color: var(--color-ink-muted); font-family: var(--font-mono); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+h1 { min-width: 0; max-width: var(--measure-copy); margin: 0; font-size: clamp(1.75rem, 5vw, 3.5rem); font-weight: 750; letter-spacing: -0.035em; line-height: 1.08; overflow-wrap: anywhere; }
+h2 { min-width: 0; margin-block: 0 var(--space-sm); font-size: 1.125rem; line-height: 1.3; overflow-wrap: anywhere; }
+h3 { margin: 0 0 var(--space-xs); font-size: 1rem; }
+.document-description { max-width: var(--measure-copy); color: var(--color-ink-muted); margin: 0; }
+main { display: grid; gap: var(--space-lg); counter-reset: document-section; }
+.view-card { min-width: 0; margin: 0; padding: var(--space-md); border-block-start: 1px solid var(--color-rule-strong); background: var(--color-surface); counter-increment: document-section; }
+.view-card::before { display: block; margin-block-end: var(--space-sm); color: var(--color-ink-muted); content: counter(document-section, decimal-leading-zero); font-family: var(--font-mono); font-size: 0.75rem; }
+.view-summary { border-block-start-width: 0.25rem; border-block-start-color: var(--color-ink); }
+dl { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-2xs) var(--space-md); margin: 0; }
+dt { color: var(--color-ink-muted); font-size: 0.8125rem; font-weight: 700; }
+dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+dd + dt { margin-block-start: var(--space-2xs); }
+@media (min-width: 40rem) { dl { grid-template-columns: minmax(8rem, 0.35fr) minmax(0, 1fr); } dd + dt { margin-block-start: 0; } }
+ul { margin: 0; padding-inline-start: var(--space-md); }
+.table-scroll { max-width: 100%; overflow-x: auto; }
+.view-table { width: 100%; border-collapse: collapse; }
+.view-table th, .view-table td { padding: var(--space-xs) var(--space-sm); border-block-start: 1px solid var(--color-rule); text-align: start; vertical-align: top; overflow-wrap: anywhere; }
+.view-table th { color: var(--color-ink-muted); background: var(--color-surface-muted); font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.03em; }
+.copyable-content { white-space: pre-wrap; overflow-wrap: anywhere; padding: var(--space-sm); border: 1px solid var(--color-rule-strong); background: var(--color-paper); font-family: var(--font-mono); font-size: .875rem; }
+.status-chip { display: inline-block; padding: 0.125rem 0.5rem; border: 1px solid currentColor; font-weight: 750; white-space: nowrap; font-size: .8125rem; }
+.status-pass { color: var(--color-pass-text); } .status-fail { color: var(--color-fail-text); } .status-warning { color: var(--color-warning-text); } .status-neutral { color: var(--color-ink-muted); }
+.approval-summary { padding: var(--space-md); border: 0.25rem solid var(--color-rule-strong); background: var(--color-surface); }
+.approval-summary.approval-fail { border-color: var(--color-fail-border); }
+.approval-summary.approval-warning { border-color: var(--color-warning-border); }
+.approval-summary.approval-pass { border-color: var(--color-pass-border); }
+button { min-height: 2.75rem; padding: var(--space-xs) var(--space-md); border: 1px solid var(--color-ink); border-radius: var(--radius-media); background: var(--color-ink); color: var(--color-surface); cursor: pointer; font: inherit; font-weight: 700; white-space: nowrap; }
+button:hover:not(:disabled) { background: var(--color-link); border-color: var(--color-link); }
+button:disabled { cursor: not-allowed; opacity: .55; }
+button.secondary { background: transparent; color: var(--color-ink); }
+button.secondary:hover:not(:disabled) { background: var(--color-link-soft); color: var(--color-ink); }
+button.danger { border-color: var(--color-fail-border); background: var(--color-fail-soft); color: var(--color-fail-text); }
+textarea { width: 100%; min-height: 4.5rem; padding: var(--space-xs); border: 1px solid var(--color-rule-strong); border-radius: var(--radius-media); background: var(--color-paper); color: var(--color-ink); font: inherit; resize: vertical; }
+img, video { display: block; max-width: 100%; }
+.preview-img { width: 100%; height: auto; aspect-ratio: 16/9; object-fit: cover; background: var(--color-surface-muted); border-radius: var(--radius-media); }
+.preview-320 { width: 320px; max-width: 100%; }
+.review-images { display: grid; gap: var(--space-sm); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.review-images figure { margin: 0; } .review-images figcaption { margin-block-end: var(--space-2xs); color: var(--color-ink-muted); font-family: var(--font-mono); font-size: .75rem; font-weight: 700; }
+.empty { color: var(--color-ink-muted); font-style: italic; }
+
+/* ===== 試作固有 ===== */
+.src { display: inline-block; margin-inline-start: var(--space-2xs); padding: 0 .35rem; border-radius: .2rem; font-family: var(--font-mono); font-size: .6875rem; letter-spacing: .04em; vertical-align: middle; }
+.src-interview { background: var(--color-link-soft); color: var(--color-link); }
+.src-recommended { background: var(--color-surface-muted); color: var(--color-ink-muted); }
+.src-config { background: var(--color-surface-muted); color: var(--color-ink-muted); border: 1px dashed var(--color-rule-strong); }
+.src-analytics { background: var(--color-warning-soft); color: var(--color-warning-text); }
+.legend { display: flex; flex-wrap: wrap; gap: var(--space-xs); color: var(--color-ink-muted); font-size: .8125rem; align-items: center; }
+.action-row { display: flex; flex-wrap: wrap; gap: var(--space-sm); align-items: center; }
+.action-row form { margin: 0; display: contents; }
+.muted { color: var(--color-ink-muted); }
+.mono { font-family: var(--font-mono); font-size: .8125rem; }
+.cost-grid { display: grid; gap: var(--space-2xs) var(--space-sm); grid-template-columns: auto 1fr auto; align-items: center; }
+.cost-bar { height: .625rem; border: 1px solid var(--color-rule-strong); background: var(--color-paper); position: relative; }
+.cost-bar > i { position: absolute; inset-block: 0; inset-inline-start: 0; background: var(--color-pass-border); }
+.cost-bar.over > i { background: var(--color-fail-border); }
+.checks td:first-child { font-family: var(--font-mono); font-size: .8125rem; }
+details.fold { border-block-start: 1px solid var(--color-rule); }
+details.fold > summary { cursor: pointer; padding: var(--space-xs) 0; font-weight: 700; }
+details.fold > summary::marker { color: var(--color-link); }
+.fold-body { padding: var(--space-xs) 0 var(--space-sm); }
+.escalation { border: .25rem solid var(--color-fail-border); background: var(--color-surface); padding: var(--space-md); display: grid; gap: var(--space-md); }
+.escalation-grid { display: grid; gap: var(--space-md); }
+@media (min-width: 48rem) { .escalation-grid { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); } }
+.progress-line { display: flex; flex-wrap: wrap; gap: var(--space-2xs) var(--space-sm); font-size: .8125rem; color: var(--color-ink-muted); }
+.hint { margin: 0; color: var(--color-ink-muted); font-size: .8125rem; }
+
+/* --- Variant A: 契約書 --- */
+.va main { max-width: 52rem; }
+.va .sign-footer { position: sticky; inset-block-end: 3.75rem; z-index: 2; margin-block-start: var(--space-lg); padding: var(--space-md); border: .25rem solid var(--color-ink); background: var(--color-paper); }
+.va .clause { display: grid; gap: var(--space-2xs); }
+.va .clause + .clause { margin-block-start: var(--space-md); padding-block-start: var(--space-md); border-block-start: 1px solid var(--color-rule); }
+.va .clause h3 { font-size: .8125rem; color: var(--color-ink-muted); font-family: var(--font-mono); letter-spacing: .06em; text-transform: uppercase; }
+.va .proposal-row { display: grid; gap: var(--space-sm); }
+@media (min-width: 48rem) { .va .proposal-row { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.va .proposal { padding: var(--space-sm); border: 1px solid var(--color-rule-strong); background: var(--color-surface-muted); display: grid; gap: var(--space-xs); }
+.va .proposal.recommended { border: .25rem solid var(--color-ink); }
+
+/* --- Variant B: 要約先行 --- */
+.vb .layout { display: grid; gap: var(--space-lg); }
+@media (min-width: 60rem) { .vb .layout { grid-template-columns: 14rem minmax(0, 1fr); align-items: start; } .vb .toc { position: sticky; inset-block-start: var(--space-sm); } }
+.vb .toc { padding: var(--space-sm); border: 1px solid var(--color-rule-strong); background: var(--color-surface); }
+.vb .toc ol { margin: 0; padding-inline-start: 1.25rem; display: grid; gap: var(--space-3xs); }
+.vb .toc a { color: var(--color-link); text-decoration: none; }
+.vb .hero { display: grid; gap: var(--space-md); padding: var(--space-md); border: .25rem solid var(--color-ink); background: var(--color-surface); }
+@media (min-width: 48rem) { .vb .hero { grid-template-columns: minmax(0, 1fr) 20rem; } }
+.vb .hero-facts { display: grid; gap: var(--space-xs); }
+.vb .fact { display: grid; grid-template-columns: 6.5rem 1fr; gap: var(--space-sm); align-items: baseline; }
+.vb .fact b { color: var(--color-ink-muted); font-size: .8125rem; font-weight: 700; }
+.vb .fact .big { font-size: 1.25rem; font-weight: 750; letter-spacing: -.01em; }
+.vb .hero-actions { grid-column: 1 / -1; display: grid; gap: var(--space-sm); padding-block-start: var(--space-sm); border-block-start: 1px solid var(--color-rule); }
+.vb .proposals { display: grid; gap: var(--space-sm); }
+@media (min-width: 48rem) { .vb .proposals { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.vb .proposal { display: grid; gap: var(--space-xs); padding: var(--space-sm); border: 1px solid var(--color-rule-strong); background: var(--color-surface); }
+.vb .proposal.recommended { border-color: var(--color-ink); border-width: .25rem; }
+.vb .sect { padding: var(--space-md); border-block-start: 1px solid var(--color-rule-strong); background: var(--color-surface); }
+.vb .sect > summary { cursor: pointer; font-weight: 700; font-size: 1.0625rem; display: flex; justify-content: space-between; gap: var(--space-sm); flex-wrap: wrap; }
+.vb .sect > summary .sub { color: var(--color-ink-muted); font-weight: 400; font-size: .875rem; }
+.vb .sect[open] > summary { margin-block-end: var(--space-sm); padding-block-end: var(--space-sm); border-block-end: 1px solid var(--color-rule); }
+
+/* --- Variant C: 工程タイムライン --- */
+.vc .steps { display: flex; gap: 0; margin: 0; padding: 0; list-style: none; overflow-x: auto; border-block-end: 1px solid var(--color-rule-strong); }
+.vc .steps li { flex: 1 0 8rem; }
+.vc .steps button { width: 100%; min-height: 3.5rem; border: 0; border-radius: 0; background: transparent; color: var(--color-ink-muted); display: grid; gap: .125rem; justify-items: start; padding: var(--space-xs) var(--space-sm); border-block-end: .25rem solid transparent; font-weight: 600; }
+.vc .steps button .n { font-family: var(--font-mono); font-size: .6875rem; letter-spacing: .08em; }
+.vc .steps button .s { font-size: .75rem; font-weight: 400; }
+.vc .steps button.active { color: var(--color-ink); border-block-end-color: var(--color-ink); background: var(--color-surface); }
+.vc .steps button.done .n::before { content: "✓ "; color: var(--color-pass-text); }
+.vc .steps button.dev .n::before { content: "! "; color: var(--color-fail-text); }
+.vc .stage { display: grid; gap: var(--space-md); padding: var(--space-md); background: var(--color-surface); }
+@media (min-width: 48rem) { .vc .stage { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .vc .stage .full { grid-column: 1 / -1; } }
+.vc .stage-nav { display: flex; justify-content: space-between; gap: var(--space-sm); align-items: center; flex-wrap: wrap; }
+.vc .ack { display: flex; gap: var(--space-xs); align-items: center; padding: var(--space-sm); border: 1px dashed var(--color-rule-strong); }
+.vc .ack input { width: 1.25rem; height: 1.25rem; }
+.vc .final { padding: var(--space-md); border: .25rem solid var(--color-ink); background: var(--color-surface); display: grid; gap: var(--space-sm); }
+
+/* --- 底部切替バー（試作専用、評価対象外）--- */
+#proto-bar { position: fixed; inset-inline: 0; inset-block-end: .75rem; z-index: 50; display: flex; justify-content: center; pointer-events: none; }
+#proto-bar > div { pointer-events: auto; display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; padding: .5rem .75rem; border-radius: 999px; background: #ffe066; color: #1a1a1a; box-shadow: 0 .5rem 1.5rem rgba(0,0,0,.5); font-family: var(--font-mono); font-size: .8125rem; font-weight: 700; }
+#proto-bar button, #proto-bar select { min-height: 1.75rem; padding: 0 .6rem; border: 2px solid #1a1a1a; border-radius: 999px; background: #fff; color: #1a1a1a; font: inherit; font-weight: 700; cursor: pointer; }
+#proto-bar .lbl { padding: 0 .25rem; }
+</style>
+</head>
+<body>
+<header class="page-header" id="hdr"></header>
+<main id="app"></main>
+
+<div id="proto-bar"><div>
+  <span class="lbl">PROTOTYPE</span>
+  <button id="prev" title="←">←</button>
+  <span id="vlabel" class="lbl"></span>
+  <button id="next" title="→">→</button>
+  <span class="lbl">状態</span>
+  <select id="state">
+    <option value="proposals">初版（推奨 + 代替案）</option>
+    <option value="review">本設計・承認待ち</option>
+    <option value="overcap">見積 &gt; 上限</option>
+    <option value="escalated">逸脱あり（照合）</option>
+    <option value="approved">承認済み・進行中</option>
+  </select>
+</div></div>
+
+<script>
+// =====================================================================
+// SAMPLE: collection.json 相当（#5111 schema の抜粋。値は架空）
+// =====================================================================
+const svgThumb = (bg, fg, text, sub) => 'data:image/svg+xml;utf8,' + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 720"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${bg}"/><stop offset="1" stop-color="#0b0f1a"/></linearGradient></defs><rect width="1280" height="720" fill="url(#g)"/><circle cx="1000" cy="200" r="110" fill="${fg}" opacity=".35"/><rect x="80" y="420" width="640" height="16" fill="${fg}" opacity=".5"/><text x="80" y="330" font-family="sans-serif" font-size="96" font-weight="800" fill="#fff">${text}</text><text x="80" y="600" font-family="sans-serif" font-size="44" fill="#fff" opacity=".8">${sub}</text></svg>`);
+
+const SAMPLE = {
+  collection_id: "2026-09-20-rainy-night-cafe",
+  design: {
+    plan: {
+      collection_name: "雨の夜のカフェ", theme_slug: "rainy-night-cafe",
+      title: { ja: "雨音とカフェの Lo-fi Jazz｜作業・勉強・眠りにやさしい 3 時間", en: "Rainy Night Café Lo-fi Jazz — 3 Hours for Study & Sleep" },
+      target_persona: "在宅で夜に作業する 20〜30 代。BGM は歌なし、通知音に負けない中低域", viewing_scene: "22 時以降の作業・勉強・寝落ち前",
+      theme: "雨の夜のカフェ", genre: "Lo-fi Jazz", direction: "ピアノ主体、ブラシドラム、雨音は曲間だけ。テンポは 70〜80",
+      rationale: { selection_reason: "直近 90 日で『雨』テーマの平均視聴維持が他テーマ比 +18%（analytics）", evidence: ["競合 3ch の雨系が週次上位", "自 ch の rainy-window が登録者流入 1 位"], constraint_compliance: ["歌なし: pass", "尺 3h±10min: pass", "禁止語なし: pass"] },
+      sources: { theme: "interview", genre: "interview", direction: "recommended", title: "recommended", target_persona: "config", viewing_scene: "interview", rationale: "analytics" }
+    },
+    music: {
+      engine: "lyria_pro", model: "lyria-3.5-pro", track_count: 12,
+      vocal: { mode: "instrumental", language: null, gender: null },
+      parameters: { mood: ["calm", "nostalgic"], atmosphere: "rain on window, late night café", tempo: "70-80 bpm", instruments: ["felt piano", "upright bass", "brush drums", "rhodes"], exclude: ["vocals", "synth lead", "drops"] },
+      prompts: [ { name: "01 Umbrella Stand", style: "lo-fi jazz, felt piano, brush drums, 74 bpm, warm tape hiss, no vocals", track_role: "opener" }, { name: "02 Window Seat", style: "lo-fi jazz, rhodes and upright bass, 72 bpm, rain ambience between phrases", track_role: "body" }, { name: "…（全 12 件）", style: "", track_role: "" } ],
+      target_duration: { min_sec: 150, max_sec: 240 }, mastering: { raw_as_final: false, loudness_target: -14 },
+      sources: { engine: "config", model: "config", track_count: "recommended", vocal: "interview", parameters: "recommended", prompts: "recommended", target_duration: "config", mastering: "config" }
+    },
+    thumbnail: {
+      theme: "雨の窓辺のカフェ", direction: "窓越しの街灯ボケ、テーブルにコーヒー、キャラクターは窓際で本を読む", text_render: { mode: "ai_burn_in" },
+      text: { lines: ["雨の夜の", "Lo-fi Jazz"] }, composition: "左に文字・右にキャラクター・奥に窓", provider: "vertex", model: "gemini-image",
+      ab_test: { enabled: false, patterns: [] },
+      sources: { theme: "recommended", direction: "interview", text: "recommended", composition: "config", provider: "config", model: "config", text_render: "config", ab_test: "recommended" }
+    },
+    video: { direction: "サムネ背景をループ、雨粒が窓を伝う微動", background: { kind: "loop", engine: "veo", model: "veo-3.1", duration_sec: 8 }, overlay: { enabled: true, kind: "rain" }, effect: "slow-zoom", resolution: "1920x1080", fps: 24,
+      sources: { direction: "recommended", background: "config", overlay: "recommended", effect: "config", resolution: "config", fps: "config" } },
+    shorts: { enabled: true, count: 2, publish_time: "18:00", source: "サビ相当の 30 秒 × 2 曲", sources: { enabled: "interview", count: "recommended", publish_time: "config", source: "recommended" } },
+    publish: {
+      publish_at: "2026-09-20T21:00:00+09:00", privacy_status: "public",
+      playlists: [ { title: "Rainy Night Lo-fi", auto_create: false }, { title: "Study Jazz 3h", auto_create: true } ],
+      description: { sections: { ja: "雨の夜、カフェの窓辺で流れる Lo-fi Jazz を 3 時間。\n\n{tracklist}\n\n#lofi #jazz #勉強用BGM", en: "Three hours of lo-fi jazz from a rainy café window.\n\n{tracklist}" }, tags: ["lofi", "jazz", "study", "rain"] },
+      pinned_comment: { enabled: true, body: { ja: "今夜も雨ですね ☔ 好きな曲があれば時間で教えてください。", en: "Rainy night again ☔ Tell me your favourite timestamp." } },
+      community_post: { enabled: false, posts: [] },
+      sources: { publish_at: "interview", privacy_status: "config", playlists: "recommended", description: "recommended", pinned_comment: "config", community_post: "recommended" }
+    },
+    cost: {
+      estimate: { lyria_pro: 12, veo: 8, gemini_image: 4 },
+      cap: { lyria_pro: 16, veo: 16, gemini_image: 8 },
+      pre_approval: { gemini_image: 3 },
+      subscription: { suno: 0, codex: 0 },
+      pricing: { lyria_pro: { usd_per_unit: 0.20, as_of: "2026-08-01" }, veo: { usd_per_unit: 0.40, as_of: "2026-08-01" } }
+    },
+    config_digest: { "thumbnail.json": "3f9a…c21e", "pinned-comment.json": "a07d…9b44", "cost.json": "77e1…0d2f" }
+  },
+  proposals: [
+    { id: "p1", label: "雨の夜のカフェ（推奨）", axis: "定番テーマの深掘り", theme: "雨の夜のカフェ", genre: "Lo-fi Jazz", title: "雨音とカフェの Lo-fi Jazz｜作業・勉強・眠りにやさしい 3 時間", why: "『雨』テーマの維持率 +18%。既存プレイリストに積める", img: svgThumb("#274060", "#f5c26b", "雨の夜の", "Lo-fi Jazz · 3 hours"), differ: "—" },
+    { id: "p2", label: "夜行列車の車窓", axis: "シーンを移動に振る", theme: "夜行列車", genre: "Lo-fi Jazz", title: "夜行列車の Lo-fi Jazz｜車窓の灯りと 3 時間", why: "同ジャンルで『移動』シーンは未開拓。維持率は未検証", img: svgThumb("#3a2a4a", "#9bd1ff", "夜行列車", "Night Train Lo-fi"), differ: "viewing_scene" },
+    { id: "p3", label: "図書館の閉館前", axis: "ジャンルを Piano Solo に", theme: "閉館前の図書館", genre: "Piano Solo", title: "閉館前の図書館ピアノ｜静かな 3 時間", why: "ジャンル差分で新規流入を狙う。Lyria の楽器指定が単純で失敗率低", img: svgThumb("#2a3a2a", "#ffd9a0", "閉館前の", "Library Piano"), differ: "genre" }
+  ],
+  state: {
+    phase: "planning", owner: "local",
+    design: { status: "draft", approved_at: null, digest: "sha256:5b1c…e930" },
+    interview: { status: "completed", pending: [], rounds_used: 2, max_rounds: 5 },
+    cost: { actual: { lyria_pro: 12, veo: 8, gemini_image: 4 }, raised: {} },
+    attempts: { thumbnail: 1 },
+    assets: { music: "done", thumbnail: "escalated", loop_video: "done", master_video: "waiting", shorts: "waiting", upload: "waiting" }
+  },
+  verification: [
+    { id: "v-thumb-01", at: "2026-09-15T10:12:00+09:00", target: { kind: "thumbnail", path: "10-thumbnail/candidate-01.jpg" }, target_digest: "sha256:c9e0…4a17", design_digest: "sha256:5b1c…e930", design_section: "thumbnail", attempt: 1,
+      checks: [ { id: "pil_ok", status: "pass", message: "破損なし 1280×720" }, { id: "ratio_16_9", status: "pass", message: "1.778" }, { id: "jpeg_size", status: "warning", message: "1.9 MiB（上限 2 MiB に近い）" }, { id: "design_digest", status: "pass", message: "一致" }, { id: "agent:text_match", status: "fail", message: "2 行目が『Lo-fi Jazz』ではなく『Lofi Jazz』（ハイフン欠落）" }, { id: "agent:fixed_character", status: "pass", message: "窓際で読書" }, { id: "agent:artifacts", status: "pass", message: "崩れ・透かしなし" } ],
+      judgment: { actor: "agent", verdict: "deviation", notes: "文字の一字一句一致に失敗" }, outcome: "escalated", cost: { gemini_image: 1 }, hint: "" },
+    { id: "v-loop-01", at: "2026-09-15T10:20:00+09:00", target: { kind: "loop_video", path: "15-video/loop.mp4" }, target_digest: "sha256:7712…03aa", design_digest: "sha256:5b1c…e930", design_section: "video", attempt: 1,
+      checks: [ { id: "ffprobe", status: "pass", message: "ok" }, { id: "duration", status: "pass", message: "8.02s" }, { id: "resolution", status: "pass", message: "1920x1080" }, { id: "fps", status: "pass", message: "24" } ], judgment: null, outcome: "pass", cost: {} }
+  ],
+  decisions: [
+    { id: "d1", at: "2026-09-14T22:30:00+09:00", category: "interview_answer", subject: "plan.theme", decision: "雨の夜のカフェ", reason: "秋の入りで雨が多い", actor: "human" },
+    { id: "d2", at: "2026-09-14T22:31:00+09:00", category: "interview_answer", subject: "music.vocal.mode", decision: "instrumental", reason: "作業用なので歌なし", actor: "human" },
+    { id: "d3", at: "2026-09-14T22:33:00+09:00", category: "interview_answer", subject: "publish.publish_at", decision: "2026-09-20T21:00+09:00", reason: "土曜の夜", actor: "human" }
+  ]
+};
+const UNIT = { lyria_pro: "曲", veo: "秒", fal: "秒", gemini_image: "枚", omni: "秒" };
+const ENGINE_JA = { lyria_pro: "Lyria（音源）", veo: "Veo（ループ動画）", gemini_image: "Gemini（画像）", fal: "fal（ループ動画）", omni: "Omni（画像）" };
+const SRC_JA = { interview: "自分で決めた", recommended: "推奨で埋めた", config: "チャンネル設定", analytics: "分析結果" };
+const SECTION_JA = { plan: "企画", music: "音楽", thumbnail: "サムネイル", video: "動画", shorts: "ショート", publish: "公開", cost: "コストと上限" };
+
+// =====================================================================
+// 状態ごとの data 派生（切替バーで選ぶ）
+// =====================================================================
+function dataFor(stateKey) {
+  const d = JSON.parse(JSON.stringify(SAMPLE));
+  d.verification = [];
+  d.state.assets = { music: "waiting", thumbnail: "waiting", loop_video: "waiting", master_video: "waiting", shorts: "waiting", upload: "waiting" };
+  d.state.cost.actual = {};
+  if (stateKey === "proposals") { d.state.design.status = "draft"; d.showProposals = true; }
+  if (stateKey === "review") { d.state.design.status = "draft"; d.proposals = []; }
+  if (stateKey === "overcap") { d.state.design.status = "draft"; d.proposals = []; d.design.cost.estimate.veo = 24; d.design.video.background.duration_sec = 24; }
+  if (stateKey === "escalated") { d.state.design.status = "approved"; d.state.design.approved_at = "2026-09-15T09:40:00+09:00"; d.proposals = []; d.verification = SAMPLE.verification; d.state.assets = SAMPLE.state.assets; d.state.cost.actual = SAMPLE.state.cost.actual; d.state.phase = "thumbnail"; }
+  if (stateKey === "approved") { d.state.design.status = "approved"; d.state.design.approved_at = "2026-09-15T09:40:00+09:00"; d.proposals = []; d.verification = [SAMPLE.verification[1]]; d.state.assets = { music: "done", thumbnail: "done", loop_video: "done", master_video: "running", shorts: "waiting", upload: "waiting" }; d.state.cost.actual = { lyria_pro: 12, veo: 8, gemini_image: 4 }; d.state.phase = "video"; }
+  d.overCap = Object.keys(d.design.cost.estimate).some(k => d.design.cost.estimate[k] > (d.design.cost.cap[k] ?? 0));
+  d.escalations = d.verification.filter(v => v.outcome === "escalated");
+  d.stateKey = stateKey;
+  return d;
+}
+
+// =====================================================================
+// 共通の小部品（data → HTML 断片）。レイアウトは各 Variant が決める
+// =====================================================================
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const src = (sec, key) => { const s = sec.sources?.[key]; return s ? `<span class="src src-${s}" title="${SRC_JA[s]}">${SRC_JA[s]}</span>` : ""; };
+const val = v => Array.isArray(v) ? v.map(esc).join("、") : (v && typeof v === "object") ? `<span class="mono">${esc(JSON.stringify(v))}</span>` : (v === null ? '<span class="empty">未設定</span>' : esc(v));
+const row = (sec, key, label, v) => `<dt>${esc(label)}${src(sec, key)}</dt><dd>${v}</dd>`;
+
+function planRows(d) { const p = d.design.plan; return row(p, "title", "タイトル", `<b>${esc(p.title.ja)}</b><br><span class="muted">${esc(p.title.en)}</span>`) + row(p, "theme", "テーマ", val(p.theme)) + row(p, "genre", "ジャンル", val(p.genre)) + row(p, "direction", "方向性", val(p.direction)) + row(p, "target_persona", "想定視聴者", val(p.target_persona)) + row(p, "viewing_scene", "視聴シーン", val(p.viewing_scene)) + row(p, "rationale", "根拠", `${esc(p.rationale.selection_reason)}<ul>${p.rationale.evidence.map(e => `<li>${esc(e)}</li>`).join("")}</ul><p class="hint">制約チェック: ${p.rationale.constraint_compliance.map(c => `<span class="status-chip status-pass">${esc(c)}</span>`).join(" ")}</p>`); }
+function musicRows(d) { const m = d.design.music; return row(m, "engine", "生成エンジン", `${esc(ENGINE_JA[m.engine] || m.engine)} / ${esc(m.model)}`) + row(m, "track_count", "曲数", `${m.track_count} 曲`) + row(m, "vocal", "ボーカル", m.vocal.mode === "instrumental" ? "なし（インスト）" : `あり（${m.vocal.language} / ${m.vocal.gender}）`) + row(m, "parameters", "雰囲気", `${val(m.parameters.mood)} / ${esc(m.parameters.atmosphere)} / ${esc(m.parameters.tempo)}<br>楽器: ${val(m.parameters.instruments)}<br>除外: ${val(m.parameters.exclude)}`) + row(m, "target_duration", "1 曲の長さ", `${m.target_duration.min_sec}〜${m.target_duration.max_sec} 秒`) + row(m, "mastering", "マスタリング", `ラウドネス ${m.mastering.loudness_target} LUFS`) + row(m, "prompts", "曲ごとの指示", `<details class="fold"><summary>${m.track_count} 曲分を開く</summary><div class="fold-body">${m.prompts.map(p => `<p class="mono"><b>${esc(p.name)}</b> — ${esc(p.style)}</p>`).join("")}</div></details>`); }
+function thumbRows(d) { const t = d.design.thumbnail; return row(t, "text", "文字", `<b>${t.text.lines.map(esc).join(" / ")}</b>`) + row(t, "direction", "絵の指示", val(t.direction)) + row(t, "composition", "構図", val(t.composition)) + row(t, "provider", "生成", `${esc(t.provider)} / ${esc(t.model)}（${esc(t.text_render.mode)}）`) + row(t, "ab_test", "A/B テスト", t.ab_test.enabled ? "あり" : "なし"); }
+function videoRows(d) { const v = d.design.video; return row(v, "background", "背景", `${v.background.kind === "loop" ? "ループ動画" : "静止画"} / ${esc(ENGINE_JA[v.background.engine] || v.background.engine)} ${esc(v.background.model)} / ${v.background.duration_sec} 秒`) + row(v, "direction", "動き", val(v.direction)) + row(v, "overlay", "オーバーレイ", v.overlay.enabled ? esc(v.overlay.kind) : "なし") + row(v, "resolution", "解像度 / fps", `${esc(v.resolution)} / ${v.fps}`); }
+function shortsRows(d) { const s = d.design.shorts; return row(s, "enabled", "ショート", s.enabled ? `あり ${s.count} 本` : "なし") + (s.enabled ? row(s, "source", "切り出し", val(s.source)) + row(s, "publish_time", "投稿時刻", val(s.publish_time)) : ""); }
+function publishRows(d) { const p = d.design.publish; return row(p, "publish_at", "公開日時", p.publish_at ? `<b>${esc(p.publish_at.replace("T", " ").slice(0, 16))}</b>` : "完成次第") + row(p, "privacy_status", "公開範囲", val(p.privacy_status)) + row(p, "playlists", "プレイリスト", p.playlists.map(x => `${esc(x.title)}${x.auto_create ? '<span class="src src-recommended">新規作成</span>' : ""}`).join("<br>")) + row(p, "description", "概要欄", `<div class="copyable-content">${esc(p.description.sections.ja)}</div><p class="hint">タグ: ${val(p.description.tags)}／英語版は折りたたみ</p>`) + row(p, "pinned_comment", "固定コメント", p.pinned_comment.enabled ? `<div class="copyable-content">${esc(p.pinned_comment.body.ja)}</div>` : "なし") + row(p, "community_post", "コミュニティ投稿", p.community_post.enabled ? "あり" : "なし"); }
+
+function costBlock(d, { compact = false } = {}) {
+  const c = d.design.cost; const raised = d.state.cost.raised || {}; const actual = d.state.cost.actual || {};
+  const rows = Object.keys(c.cap).map(k => {
+    const est = c.estimate[k] ?? 0, cap = c.cap[k] + (raised[k] ?? 0), act = actual[k]; const over = est > cap; const pr = c.pricing?.[k];
+    const usd = pr ? `<span class="muted">概算 $${(est * pr.usd_per_unit).toFixed(2)}（${pr.as_of} 時点）</span>` : "";
+    return `<span><b>${esc(ENGINE_JA[k] || k)}</b></span><span class="cost-bar${over ? " over" : ""}"><i style="width:${Math.min(100, est / cap * 100)}%"></i></span><span class="mono">${over ? '<span class="status-chip status-fail">上限超過</span> ' : ""}${est} / ${cap} ${UNIT[k]}${act !== undefined ? `（実績 ${act}）` : ""} ${usd}</span>`;
+  }).join("");
+  const extra = compact ? "" : `<p class="hint">承認 = 上限までの生成を許可すること。上限は <span class="mono">cost.json</span> の設定値です。見積は 1 回分で、失敗時の作り直しは上限までの余地で行います。${c.pre_approval.gemini_image ? `<br>承認前に使った分（案のプレビュー画像）: ${c.pre_approval.gemini_image} 枚（上限外）。` : ""}</p>`;
+  return `<div class="cost-grid">${rows}</div>${extra}`;
+}
+
+function approveForm(d, { label = "この設計書で進める（承認）", note = "" } = {}) {
+  if (d.state.design.status === "approved") return `<p><span class="status-chip status-pass">承認済み</span> <span class="muted">${esc(d.state.design.approved_at.replace("T", " ").slice(0, 16))}</span></p>`;
+  const disabled = d.overCap;
+  return `<div class="action-row"><form method="post" action="/api/commit"><input type="hidden" name="op" value="design_approved"><input type="hidden" name="design_digest" value="${esc(d.state.design.digest)}"><button type="submit" ${disabled ? "disabled" : ""}>${esc(label)}</button></form>${disabled ? `<span class="status-chip status-fail">見積が上限を超えているため承認できません</span>` : ""}</div>${note}`;
+}
+function reviseForm(placeholder = "例: サムネの文字は『雨の夜に』にしたい。曲数は 10 でいい。") {
+  return `<form method="post" action="/api/state" class="clause"><label for="rev">修正を依頼する（自由記述 1 欄。書いた内容から再度質問が来ます）</label><textarea id="rev" name="revision_request" placeholder="${esc(placeholder)}"></textarea><div class="action-row"><button type="submit" class="secondary" name="op" value="revision_requested">修正を依頼</button></div></form>`;
+}
+function proposalPicker(d, cls) {
+  if (!d.showProposals) return "";
+  return `<div class="${cls}">${d.proposals.map((p, i) => `<article class="proposal${i === 0 ? " recommended" : ""}"><p class="eyebrow">${i === 0 ? "推奨案" : `代替案 ${i}（${esc(p.differ)} を変えた案）`}</p><img class="preview-img" src="${p.img}" alt=""><h3>${esc(p.label)}</h3><p class="muted" style="margin:0">${esc(p.title)}</p><p style="margin:0;font-size:.875rem">${esc(p.why)}</p><form method="post" action="/api/state"><input type="hidden" name="op" value="proposal_selected"><button type="submit" name="proposal_id" value="${p.id}" class="${i === 0 ? "" : "secondary"}">${i === 0 ? "この案で設計書を見る" : "こちらに切り替える"}</button></form></article>`).join("")}</div>`;
+}
+function progressLine(d) {
+  const JA = { music: "音源", thumbnail: "サムネ", loop_video: "ループ", master_video: "動画", shorts: "ショート", upload: "公開" };
+  const S = { done: "status-pass", running: "status-warning", escalated: "status-fail", waiting: "status-neutral" };
+  const SJ = { done: "完了", running: "生成中", escalated: "確認待ち", waiting: "未着手" };
+  return `<div class="progress-line">${Object.entries(d.state.assets).map(([k, v]) => `<span><span class="status-chip ${S[v]}">${SJ[v]}</span> ${JA[k]}</span>`).join("")}</div>`;
+}
+function escalationBlock(d, v) {
+  const sec = d.design[v.design_section]; const fails = v.checks.filter(c => c.status === "fail"); const others = v.checks.filter(c => c.status !== "fail");
+  const capK = Object.keys(v.cost)[0];
+  return `<section class="escalation" id="esc-${v.id}">
+    <div><p class="eyebrow">照合で食い違いが見つかりました</p><h2 style="margin:0">サムネイル候補 1: ${fails.map(c => esc(c.message)).join("。")}</h2><p class="hint">${v.attempt} 回目 / 上限 ${v.attempt} 回 → 自動の作り直しは打ち切り。あなたの判断が必要です。</p></div>
+    <div class="escalation-grid">
+      <div><div class="review-images"><figure><figcaption>できた画像</figcaption><img class="preview-img" src="${svgThumb("#274060", "#f5c26b", "雨の夜の", "Lofi Jazz")}" alt=""></figure><figure><figcaption>320px（一覧での見え方）</figcaption><img class="preview-img preview-320" src="${svgThumb("#274060", "#f5c26b", "雨の夜の", "Lofi Jazz")}" alt=""></figure></div></div>
+      <div><h3>設計書に書いてあること</h3><dl>${thumbRows(d)}</dl></div>
+      <div class="full"><h3>チェック結果</h3><div class="table-scroll"><table class="view-table checks"><thead><tr><th>項目</th><th>結果</th><th>内容</th></tr></thead><tbody>${fails.map(c => `<tr><td>${esc(c.id)}</td><td><span class="status-chip status-fail">NG</span></td><td>${esc(c.message)}</td></tr>`).join("")}</tbody></table></div>
+        <details class="fold"><summary>通った項目 ${others.length} 件を見る</summary><div class="fold-body table-scroll"><table class="view-table checks"><tbody>${others.map(c => `<tr><td>${esc(c.id)}</td><td><span class="status-chip ${c.status === "pass" ? "status-pass" : "status-warning"}">${c.status === "pass" ? "OK" : "注意"}</span></td><td>${esc(c.message)}</td></tr>`).join("")}</tbody></table></div></details>
+        <details class="fold"><summary>作り直しの履歴</summary><div class="fold-body table-scroll"><table class="view-table"><thead><tr><th>回</th><th>渡したヒント</th><th>判定</th><th>消費</th></tr></thead><tbody><tr><td>1</td><td class="empty">なし</td><td>NG（文字不一致）</td><td>画像 1 枚</td></tr></tbody></table></div></details></div>
+      <form class="full" method="post" action="/api/commit"><input type="hidden" name="op" value="deviation_resolved"><input type="hidden" name="ref" value="${v.id}">
+        <label for="hint-${v.id}">ひとこと（任意。作り直すときのヒント、または受け入れる理由）</label><textarea id="hint-${v.id}" name="note" placeholder="例: ハイフンは必ず入れて。文字はもう少し大きく。"></textarea>
+        <div class="action-row" style="margin-block-start:var(--space-sm)"><button type="submit" name="resolution" value="accept_as_is" class="secondary">このままで進める</button><button type="submit" name="resolution" value="regenerate">作り直す（残り ${d.design.cost.cap[capK] - d.state.cost.actual[capK]} ${UNIT[capK]}）</button><button type="submit" name="resolution" value="regenerate_cap_raised" class="secondary">上限を +4 ${UNIT[capK]} して作り直す</button><button type="submit" name="resolution" value="revise_design" class="danger">設計書を直す（再承認）</button></div>
+      </form>
+    </div></section>`;
+}
+function header(d, variantName) {
+  const st = d.state.design.status === "approved" ? `<span class="status-chip status-pass">承認済み</span>` : `<span class="status-chip status-warning">承認待ち</span>`;
+  document.getElementById("hdr").innerHTML = `<p class="eyebrow">制作設計書 · ${esc(d.collection_id)} · ${variantName}</p><h1>${esc(d.design.plan.collection_name)}</h1><p class="document-description">${st} <span class="mono muted">設計書 ID ${esc(d.state.design.digest)}</span><br>${d.state.design.status === "approved" ? "承認後は設計書を変えません。工程の食い違いだけここで確認します。" : "これを 1 回承認すると、公開まで自動で進みます。変えたい所があれば修正を依頼してください。"}</p>`;
+}
+
+// =====================================================================
+// Variant A: 一枚の契約書（縦読み → 末尾で承認）
+// =====================================================================
+function VariantA(d) {
+  header(d, "案 A: 契約書");
+  document.body.className = "va";
+  const esc_ = d.escalations.map(v => escalationBlock(d, v)).join("");
+  const sec = (title, rows) => `<section class="clause"><h3>${title}</h3><dl>${rows}</dl></section>`;
+  return `${d.state.design.status === "approved" ? `<section class="view-card view-summary"><h2>進み具合</h2>${progressLine(d)}</section>` : ""}${esc_}
+  ${d.showProposals ? `<section class="view-card view-summary"><h2>まず案を選んでください</h2><p class="hint">推奨案を選ぶと下の設計書がそのまま本設計になります。代替案は推奨案と 1 点だけ変えてあります。</p>${proposalPicker(d, "proposal-row")}</section>` : ""}
+  <section class="view-card"><h2>設計書</h2><p class="legend">値の出どころ: <span class="src src-interview">自分で決めた</span><span class="src src-recommended">推奨で埋めた</span><span class="src src-config">チャンネル設定</span><span class="src src-analytics">分析結果</span></p>
+    ${sec("第 1 条 企画", planRows(d))}${sec("第 2 条 音楽", musicRows(d))}${sec("第 3 条 サムネイル", thumbRows(d))}${sec("第 4 条 動画", videoRows(d))}${sec("第 5 条 ショート", shortsRows(d))}${sec("第 6 条 公開", publishRows(d))}
+    <section class="clause"><h3>第 7 条 コストと上限</h3>${costBlock(d)}</section>
+    <section class="clause"><h3>付記 チャンネル共通設定の束縛</h3><p class="hint mono">${Object.entries(d.design.config_digest).map(([f, h]) => `${f}: ${h}`).join(" · ")}</p></section>
+  </section>
+  ${d.state.design.status !== "approved" ? `<div class="sign-footer"><h2 style="margin:0 0 var(--space-xs)">上記の内容で制作を開始します</h2>${approveForm(d)}<details class="fold" style="margin-block-start:var(--space-sm)"><summary>修正を依頼する</summary><div class="fold-body">${reviseForm()}</div></details></div>` : ""}`;
+}
+
+// =====================================================================
+// Variant B: 要約先行（hero に要点と承認、詳細は折りたたみ、左に目次）
+// =====================================================================
+function VariantB(d) {
+  header(d, "案 B: 要約先行");
+  document.body.className = "vb";
+  const p = d.design.plan, c = d.design.cost;
+  const costOne = Object.keys(c.cap).map(k => `${ENGINE_JA[k].split("（")[0]} ${c.estimate[k] ?? 0}/${c.cap[k]}${UNIT[k]}`).join(" · ");
+  const hero = `<section class="hero" id="top">
+    <div class="hero-facts">
+      <div class="fact"><b>タイトル</b><span class="big">${esc(p.title.ja)}</span></div>
+      <div class="fact"><b>何を作る</b><span>${esc(d.design.music.track_count)} 曲の ${esc(p.genre)}（歌なし）→ 3 時間動画 + ショート ${d.design.shorts.count} 本</span></div>
+      <div class="fact"><b>いつ公開</b><span>${esc(d.design.publish.publish_at.replace("T", " ").slice(0, 16))} / ${esc(d.design.publish.privacy_status)}</span></div>
+      <div class="fact"><b>使う上限</b><span>${d.overCap ? '<span class="status-chip status-fail">上限超過</span> ' : ""}${esc(costOne)}</span></div>
+      <div class="fact"><b>自分で決めた</b><span>${d.decisions.map(x => esc(x.decision)).join(" / ")}<span class="muted">（残りは推奨とチャンネル設定）</span></span></div>
+    </div>
+    <div><img class="preview-img" src="${d.proposals[0]?.img || svgThumb("#274060", "#f5c26b", "雨の夜の", "Lo-fi Jazz")}" alt=""><p class="hint" style="margin-block-start:var(--space-2xs)">サムネイルの目安（承認前のプレビュー）</p></div>
+    <div class="hero-actions">${d.state.design.status === "approved" ? progressLine(d) : `${approveForm(d, { label: "承認して制作を始める" })}<details class="fold"><summary>気になる所がある → 修正を依頼</summary><div class="fold-body">${reviseForm()}</div></details>`}</div>
+  </section>`;
+  const sect = (id, title, sub, body, open = false) => `<details class="sect" id="${id}" ${open ? "open" : ""}><summary><span>${title}</span><span class="sub">${sub}</span></summary>${body}</details>`;
+  const toc = `<nav class="toc" aria-label="目次"><p class="eyebrow">目次</p><ol><li><a href="#top">要点と承認</a></li>${d.escalations.length ? `<li><a href="#esc">⚠ 確認待ち ${d.escalations.length} 件</a></li>` : ""}${d.showProposals ? `<li><a href="#props">案を比べる</a></li>` : ""}${Object.entries(SECTION_JA).map(([k, v]) => `<li><a href="#s-${k}">${v}</a></li>`).join("")}</ol></nav>`;
+  return `<div class="layout">${toc}<div style="display:grid;gap:var(--space-md)">
+    ${d.escalations.length ? `<div id="esc">${d.escalations.map(v => escalationBlock(d, v)).join("")}</div>` : ""}
+    ${hero}
+    ${d.showProposals ? `<section class="view-card" id="props"><h2>別の案も見る</h2><p class="hint">上の要点は推奨案のものです。切り替えると要点も差し替わります。</p>${proposalPicker(d, "proposals")}</section>` : ""}
+    <p class="legend">詳細の値の出どころ: <span class="src src-interview">自分で決めた</span><span class="src src-recommended">推奨で埋めた</span><span class="src src-config">チャンネル設定</span><span class="src src-analytics">分析結果</span></p>
+    ${sect("s-plan", "企画", esc(p.theme + " / " + p.genre), `<dl>${planRows(d)}</dl>`)}
+    ${sect("s-music", "音楽", `${d.design.music.track_count} 曲 · ${esc(ENGINE_JA[d.design.music.engine])}`, `<dl>${musicRows(d)}</dl>`)}
+    ${sect("s-thumbnail", "サムネイル", esc(d.design.thumbnail.text.lines.join(" / ")), `<dl>${thumbRows(d)}</dl>`)}
+    ${sect("s-video", "動画", `ループ ${d.design.video.background.duration_sec} 秒 · ${esc(d.design.video.resolution)}`, `<dl>${videoRows(d)}</dl>`)}
+    ${sect("s-shorts", "ショート", `${d.design.shorts.count} 本`, `<dl>${shortsRows(d)}</dl>`)}
+    ${sect("s-publish", "公開", esc(d.design.publish.publish_at.slice(0, 10)), `<dl>${publishRows(d)}</dl>`)}
+    ${sect("s-cost", "コストと上限", d.overCap ? "上限超過" : "上限内", costBlock(d), d.overCap)}
+  </div></div>`;
+}
+
+// =====================================================================
+// Variant C: 工程タイムライン（工程ごとに確認 → 全チェックで承認）
+// =====================================================================
+const C_STEPS = [["plan", "企画"], ["music", "音楽"], ["thumbnail", "サムネイル"], ["video", "動画"], ["shorts", "ショート"], ["publish", "公開"], ["cost", "コスト"]];
+let cActive = "plan"; const cAck = new Set();
+function VariantC(d) {
+  header(d, "案 C: 工程タイムライン");
+  document.body.className = "vc";
+  const approved = d.state.design.status === "approved";
+  const assetOf = { music: d.state.assets.music, thumbnail: d.state.assets.thumbnail, video: d.state.assets.loop_video, shorts: d.state.assets.shorts, publish: d.state.assets.upload };
+  const escFor = k => d.escalations.filter(v => v.design_section === k);
+  const steps = `<ol class="steps">${C_STEPS.map(([k, ja], i) => `<li><button data-step="${k}" class="${k === cActive ? "active" : ""} ${approved ? (assetOf[k] === "done" ? "done" : escFor(k).length ? "dev" : "") : (cAck.has(k) ? "done" : "")}"><span class="n">STEP ${i + 1}</span><span>${ja}</span><span class="s">${approved ? ({ done: "完了", running: "生成中", escalated: "確認待ち", waiting: "未着手" }[assetOf[k]] || "") : (cAck.has(k) ? "確認済み" : "未確認")}</span></button></li>`).join("")}</ol>`;
+  const bodies = { plan: planRows(d), music: musicRows(d), thumbnail: thumbRows(d), video: videoRows(d), shorts: shortsRows(d), publish: publishRows(d) };
+  const previews = { plan: `<img class="preview-img" src="${d.proposals[0]?.img || svgThumb("#274060", "#f5c26b", "雨の夜の", "Lo-fi Jazz")}" alt=""><p class="hint">案のイメージ画像（承認前プレビュー）</p>`, thumbnail: `<img class="preview-img" src="${svgThumb("#274060", "#f5c26b", "雨の夜の", "Lo-fi Jazz")}" alt=""><p class="hint">${approved ? "生成された候補" : "まだ作っていません。文字と構図は左のとおりに作ります"}</p>`, music: `<div class="copyable-content">${esc(d.design.music.prompts[0].style)}</div><p class="hint">1 曲目の指示文の例。音源は承認後に作ります</p>`, video: `<div class="preview-img" style="display:grid;place-items:center;color:var(--color-ink-muted)">ループ動画 ${d.design.video.background.duration_sec} 秒（承認後に生成）</div>`, shorts: `<p class="hint">サビ相当の 30 秒を ${d.design.shorts.count} 本切り出します。区間は自動で選びます</p>`, publish: `<p class="hint">承認後、公開日時になったら自動で公開・プレイリスト追加・固定コメント投稿まで行います（人の確認はありません）</p>` };
+  const idx = C_STEPS.findIndex(([k]) => k === cActive);
+  const stage = cActive === "cost" ? `<div class="stage"><div class="full"><h2>コストと上限</h2>${costBlock(d)}</div></div>` : `<div class="stage"><div><h2>${SECTION_JA[cActive]}</h2><p class="legend"><span class="src src-interview">自分で決めた</span><span class="src src-recommended">推奨で埋めた</span><span class="src src-config">チャンネル設定</span></p><dl>${bodies[cActive]}</dl></div><div>${previews[cActive]}</div>${escFor(cActive).map(v => `<div class="full">${escalationBlock(d, v)}</div>`).join("")}${!approved ? `<label class="ack full"><input type="checkbox" data-ack="${cActive}" ${cAck.has(cActive) ? "checked" : ""}> この工程の内容を確認した</label>` : ""}</div>`;
+  const nav = `<div class="stage-nav"><button class="secondary" data-go="${idx - 1}" ${idx === 0 ? "disabled" : ""}>← 前の工程</button><span class="muted">${idx + 1} / ${C_STEPS.length}</span><button data-go="${idx + 1}" ${idx === C_STEPS.length - 1 ? "disabled" : ""}>次の工程 →</button></div>`;
+  const allAck = C_STEPS.filter(([k]) => k !== "cost").every(([k]) => cAck.has(k));
+  const final = approved ? `<section class="final"><h2 style="margin:0">進み具合</h2>${progressLine(d)}${d.escalations.length ? `<p class="hint">確認待ちの工程は上のタブに「!」が付いています。</p>` : ""}</section>` : `<section class="final"><h2 style="margin:0">承認</h2><p class="hint">${allAck ? "すべての工程を確認しました。" : `未確認の工程: ${C_STEPS.filter(([k]) => k !== "cost" && !cAck.has(k)).map(([, ja]) => ja).join("、")}`}</p>${allAck ? approveForm(d) : `<div class="action-row"><button disabled>承認（全工程を確認すると押せます）</button></div>`}<details class="fold"><summary>修正を依頼する</summary><div class="fold-body">${reviseForm()}</div></details></section>`;
+  return `${d.showProposals ? `<section class="view-card view-summary"><h2>まず案を選ぶ</h2>${proposalPicker(d, "proposals")}</section>` : ""}${d.escalations.length && cActive !== "thumbnail" ? `<section class="approval-summary approval-fail"><b>確認待ちが ${d.escalations.length} 件</b> — <a href="#" data-step="thumbnail" style="color:var(--color-link)">サムネイルの工程で確認する</a>${progressLine(d)}</section>` : ""}${steps}${stage}${nav}${final}`;
+}
+
+// =====================================================================
+// 切替（試作専用）
+// =====================================================================
+const VARIANTS = { A: ["契約書", VariantA], B: ["要約先行", VariantB], C: ["工程タイムライン", VariantC] };
+const keys = Object.keys(VARIANTS);
+let mem = null; // data: / file: で history が使えない環境用のフォールバック
+function current() { if (mem) return mem; const u = new URL(location.href); return { v: keys.includes(u.searchParams.get("variant")) ? u.searchParams.get("variant") : "A", s: u.searchParams.get("state") || "review" }; }
+function setParams(v, s) { mem = { v, s }; try { const u = new URL(location.href); u.searchParams.set("variant", v); u.searchParams.set("state", s); history.replaceState(null, "", u); } catch (_) {} render(); }
+function render() {
+  const { v, s } = current(); const d = dataFor(s);
+  document.getElementById("app").innerHTML = VARIANTS[v][1](d);
+  document.getElementById("vlabel").textContent = `${v} (${VARIANTS[v][0]})`;
+  document.getElementById("state").value = s;
+  document.querySelectorAll("[data-step]").forEach(b => b.addEventListener("click", e => { e.preventDefault(); cActive = b.dataset.step; render(); }));
+  document.querySelectorAll("[data-go]").forEach(b => b.addEventListener("click", () => { cActive = C_STEPS[+b.dataset.go][0]; render(); window.scrollTo({ top: 0 }); }));
+  document.querySelectorAll("[data-ack]").forEach(i => i.addEventListener("change", () => { i.checked ? cAck.add(i.dataset.ack) : cAck.delete(i.dataset.ack); render(); }));
+  document.querySelectorAll("form").forEach(f => f.addEventListener("submit", e => { e.preventDefault(); const fd = new FormData(f); const btn = e.submitter; if (btn?.name) fd.set(btn.name, btn.value); alert(`PROTOTYPE: ${f.method.toUpperCase()} ${f.getAttribute("action")}\n` + [...fd.entries()].map(([k, v]) => `${k} = ${v}`).join("\n")); }));
+}
+document.getElementById("prev").onclick = () => { const { v, s } = current(); setParams(keys[(keys.indexOf(v) + keys.length - 1) % keys.length], s); };
+document.getElementById("next").onclick = () => { const { v, s } = current(); setParams(keys[(keys.indexOf(v) + 1) % keys.length], s); };
+document.getElementById("state").onchange = e => { const { v } = current(); setParams(v, e.target.value); };
+document.addEventListener("keydown", e => { if (["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable) return; if (e.key === "ArrowLeft") document.getElementById("prev").click(); if (e.key === "ArrowRight") document.getElementById("next").click(); });
+render();
+</script>
+</body>
+</html>
