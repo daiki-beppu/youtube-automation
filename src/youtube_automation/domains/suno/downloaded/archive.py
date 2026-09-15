@@ -34,8 +34,11 @@ _ZIP_MAX_ENTRIES = 1000
 
 @dataclass(frozen=True, slots=True)
 class DownloadedArchiveResult:
+    """Placement result; ``studio_ordered_tracks[n]`` is Studio input clip ``n``'s output file."""
+
     audio_count: int
     placed_count: int
+    studio_ordered_tracks: tuple[str, ...] = ()
 
 
 @dataclass(slots=True)
@@ -346,10 +349,20 @@ def _extract_and_rename_music_to_dir(
 
         _assign_studio_variants(extracted_audio)
 
+        # Studio prefixes are assigned from the same sequential track slots used by
+        # requestStudioMultitrackExport(collectionId, clipIds). Preserve that order here;
+        # canonical filenames themselves are prompt/album ordered and must not be sorted.
+        studio_ordered_tracks = tuple(
+            _canonical_extracted_name(item)
+            for item in sorted(extracted_audio, key=_studio_track_sort_key)
+            if item.path.is_file()
+        )
         moved_count = _place_extracted_audio(extracted_audio, target_dir)
 
         print(f"[yt-collection-serve] 展開完了: {moved_count} files → {target_dir}")
-        return DownloadedArchiveResult(audio_count=len(audio_infos), placed_count=moved_count)
+        return DownloadedArchiveResult(
+            audio_count=len(audio_infos), placed_count=moved_count, studio_ordered_tracks=studio_ordered_tracks
+        )
     except zipfile.BadZipFile as exc:
         print(f"[yt-collection-serve] ZIP 展開エラー（skip）: {exc}")
         return DownloadedArchiveResult(audio_count=0, placed_count=0)
@@ -369,7 +382,7 @@ def _place_extracted_audio(extracted_audio: list[_ExtractedAudio], target_dir: P
         ext = item.path.suffix.lower()
         if ext not in _AUDIO_EXTENSIONS:
             continue
-        new_name = f"{item.track_num:02d}{item.variant}-{_sanitize_output_stem(item.lookup)}{ext}"
+        new_name = _canonical_extracted_name(item)
         dest = target_dir / new_name
         if dest.exists():
             raise ValueError(f"ZIP extraction output name collision: {dest.name}")
@@ -377,6 +390,10 @@ def _place_extracted_audio(extracted_audio: list[_ExtractedAudio], target_dir: P
         moved_count += 1
 
     return moved_count
+
+
+def _canonical_extracted_name(item: _ExtractedAudio) -> str:
+    return f"{item.track_num:02d}{item.variant}-{_sanitize_output_stem(item.lookup)}{item.path.suffix.lower()}"
 
 
 def _zip_within_size_limits(infos: list[zipfile.ZipInfo]) -> bool:

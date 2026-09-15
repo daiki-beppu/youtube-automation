@@ -49,7 +49,7 @@ def test_detailed_extraction_reports_archive_audio_and_placed_counts(tmp_path: P
         prompt_entries_reader=read_entries,
     )
 
-    assert result == DownloadedArchiveResult(audio_count=2, placed_count=1)
+    assert result == DownloadedArchiveResult(audio_count=2, placed_count=1, studio_ordered_tracks=("01a-Known.mp3",))
     assert [path.name for path in (tmp_path / "02-Individual-music").iterdir()] == ["01a-Known.mp3"]
 
 
@@ -90,7 +90,7 @@ def test_detailed_extraction_keeps_zip_slip_validation(tmp_path: Path) -> None:
         prompt_entries_reader=read_entries,
     )
 
-    assert result == DownloadedArchiveResult(audio_count=2, placed_count=1)
+    assert result == DownloadedArchiveResult(audio_count=2, placed_count=1, studio_ordered_tracks=("01a-Known.mp3",))
     assert not (tmp_path.parent / "Known_1.mp3").exists()
 
 

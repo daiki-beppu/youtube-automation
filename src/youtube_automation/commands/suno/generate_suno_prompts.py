@@ -170,6 +170,7 @@ class _GeneratedPrompts:
     weirdness: int
     exclude_styles: str
     genre_line: str
+    model: str
     banned_artists: tuple[str, ...]
     auto_lyrics_structure: bool
     duration_filter: Mapping[str, int | float]
@@ -277,6 +278,7 @@ def _resolve_prompts(patterns_path: Path) -> _GeneratedPrompts:
         weirdness=resolution.weirdness,
         exclude_styles=resolution.exclude_styles,
         genre_line=resolution.genre_line,
+        model=resolution.model,
         banned_artists=resolution.banned_artists,
         auto_lyrics_structure=resolution.auto_lyrics_structure,
         duration_filter=resolution.duration_filter,
@@ -448,6 +450,7 @@ def main():
     entries = build_prompt_entries(patterns_path, resolved=resolved)
     markdown = generate(patterns_path, resolved=resolved)
     payload = {
+        "model": resolved.model,
         "entries": entries,
         "duration_filter": dict(resolved.duration_filter),
     }

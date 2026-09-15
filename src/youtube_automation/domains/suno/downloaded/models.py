@@ -60,6 +60,8 @@ class DownloadedPayload:
     suno_playlist_url: str | None = None
     expected_file_count: int | None = None
     download_path: str | None = None
+    clip_ids: tuple[str, ...] = ()
+    generated_at: str | None = None
 
 
 def _nonnegative_file_count(value: object, field: str) -> int:
@@ -78,6 +80,8 @@ def parse_downloaded_payload(payload: object) -> DownloadedPayload:
     suno_playlist_url = payload.get("suno_playlist_url")
     expected_file_count = payload.get("expected_file_count")
     download_path = payload.get("download_path")
+    clip_ids = payload.get("clip_ids", [])
+    generated_at = payload.get("generated_at")
 
     if file_count is None or not fmt:
         raise DownloadedPayloadError("file_count and format are required")
@@ -95,6 +99,10 @@ def parse_downloaded_payload(payload: object) -> DownloadedPayload:
             raise DownloadedPayloadError("download_path must be absolute")
     if suno_playlist_url is not None and not isinstance(suno_playlist_url, str):
         raise DownloadedPayloadError("suno_playlist_url must be a string")
+    if not isinstance(clip_ids, list) or not all(isinstance(value, str) and value for value in clip_ids):
+        raise DownloadedPayloadError("clip_ids must be an array of non-empty strings")
+    if clip_ids and not isinstance(generated_at, str):
+        raise DownloadedPayloadError("generated_at is required with clip_ids")
 
     return DownloadedPayload(
         file_count=file_count,
@@ -102,4 +110,6 @@ def parse_downloaded_payload(payload: object) -> DownloadedPayload:
         suno_playlist_url=suno_playlist_url,
         expected_file_count=expected_file_count,
         download_path=download_path,
+        clip_ids=tuple(clip_ids),
+        generated_at=generated_at if isinstance(generated_at, str) else None,
     )

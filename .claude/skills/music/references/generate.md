@@ -611,3 +611,7 @@ bash "$(git rev-parse --show-toplevel)/.claude/skills/music/references/worktree_
 ## Next Step
 
 - `/video --generate` で動画生成を実行（WAV → MP4 変換は既存の generate_videos.sh を使用）
+
+### Content ID 生成証跡
+
+Studio export の配置成功時、suno-helper は clip ID・生成日時を `/downloaded` へ渡す。server は `suno-prompts.json` に固定された実効モデルと、Premier 専用の Studio Multitrack export を完了した事実を合わせ、`20-documentation/suno-content-id-evidence.json` を自動生成する。Content ID の異議申し立てが必要な場合は `uv run yt-suno-content-id-evidence <collection-path> draft --track <filename>` で、動画内の開始位置を含む下書きを表示する。

@@ -26,6 +26,7 @@ import hashlib
 import http.client
 import io
 import json
+import logging
 import math
 import mimetypes
 import os
@@ -57,9 +58,10 @@ from youtube_automation.commands.collections.collection_serve_discovery import (
     create_discovery_lifecycle,
     handle_registry_request,
 )
+from youtube_automation.commands.suno.content_id_evidence import record_downloaded_evidence
 from youtube_automation.configuration import Distrokid, load_config
 from youtube_automation.core.channel_context import channel_dir
-from youtube_automation.core.errors import ConfigError, MediaStoreError, WorkflowStateError
+from youtube_automation.core.errors import ConfigError, MediaStoreError, ValidationError, WorkflowStateError
 from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.distrokid.metadata import parse_album_metadata
@@ -166,6 +168,8 @@ from youtube_automation.infrastructure.localserver.lifecycle import (
 )
 from youtube_automation.infrastructure.media_store import R2MediaStore, R2MediaStoreConfig
 from youtube_automation.infrastructure.notifications.discord import create_discord_notification_sink
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_PORT = 7873
 # suno-helper の「安全モード」（1 件ずつ完了を待つ逐次生成）は collection-serve への
@@ -1337,6 +1341,16 @@ def create_server(
                 prompt_entries_reader=read_suno_prompt_entries,
                 defer_archive_cleanup=True,
             )
+            if parsed.clip_ids and parsed.generated_at is not None:
+                try:
+                    record_downloaded_evidence(
+                        coll_dir,
+                        clip_ids=parsed.clip_ids,
+                        generated_at=parsed.generated_at,
+                        studio_ordered_tracks=apply_result.studio_ordered_tracks,
+                    )
+                except (OSError, json.JSONDecodeError, ValidationError) as exc:
+                    logger.warning("Suno Content ID evidence could not be recorded: %s", exc)
         except DownloadedPayloadError:
             return _bad_request()
         except DownloadedArtifactError as exc:
