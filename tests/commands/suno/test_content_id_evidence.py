@@ -80,6 +80,17 @@ def test_mismatched_download_does_not_guess_clip_to_track_mapping(
     assert not (docs_dir / "suno-content-id-evidence.json").exists()
 
 
+def test_download_placement_without_clips_fails_before_reading_the_collection(tmp_path: Path) -> None:
+    """clip が無い呼び出しは prompts 読込・duration probe の前に fail する（無駄な I/O を打たない）。"""
+    with pytest.raises(ValidationError, match="記録する配置済み音源がありません"):
+        record_downloaded_evidence(
+            tmp_path,
+            clip_ids=(),
+            studio_ordered_tracks=(),
+            generated_at="2026-09-15T12:00:00Z",
+        )
+
+
 @pytest.mark.parametrize(
     "url",
     ["http://suno.com/song/clip-1", "https://example.com/song/clip-1", "https://suno.com/clip-1"],

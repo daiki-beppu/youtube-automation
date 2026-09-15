@@ -97,28 +97,32 @@ def record_downloaded_evidence(
     studio_ordered_tracks: tuple[str, ...],
 ) -> Path:
     """Record provenance automatically at the successful archive-placement boundary."""
-    prompts_path = CollectionPaths(collection).docs_dir / _PROMPTS_FILENAME
+    if not clip_ids or not studio_ordered_tracks:
+        raise ValidationError("Content ID 証跡へ記録する配置済み音源がありません")
+    paths = CollectionPaths(collection)
+    prompts_path = paths.docs_dir / _PROMPTS_FILENAME
     prompts = json.loads(prompts_path.read_text(encoding="utf-8"))
     model = prompts.get("model") if isinstance(prompts, dict) else None
     if not isinstance(model, str) or not model:
         raise ValidationError(f"Suno の使用モデルが生成 prompt に記録されていません: {prompts_path}")
     # Studio Multitrack export 自体が Premier 専用であり、成功した配置境界が plan の一次証跡になる。
     plan = "Premier"
-    music_dir = CollectionPaths(collection).music_dir
-    tracks_by_name = {path.name: path for path in list_audio_files(music_dir)}
+    # archive apply replaces the entire music directory transactionally, so one scan of it is the
+    # current Studio export: album order for cumulative start times, name lookup for the mapping.
+    album_ordered = list_audio_files(paths.music_dir)
+    tracks_by_name = {path.name: path for path in album_ordered}
     # The archive boundary returns canonical filenames in Studio slot order, the exact
     # order in which suno-helper passed clip_ids to requestStudioMultitrackExport.
     tracks = tuple(tracks_by_name[name] for name in studio_ordered_tracks if name in tracks_by_name)
-    # archive apply replaces the entire music directory transactionally, so this list is the
-    # current Studio export. Never guess a mapping when placement skipped a member: an incorrect
-    # Content ID provenance URL is worse than an explicit missing-evidence warning.
+    # Never guess a mapping when placement skipped a member: an incorrect Content ID provenance
+    # URL is worse than an explicit missing-evidence warning. Check before probing any duration.
     if len(tracks) != len(clip_ids):
         raise ValidationError(
             f"Content ID 証跡の clip 数と配置済み音源数が一致しません: clips={len(clip_ids)}, tracks={len(tracks)}"
         )
     start_seconds = 0.0
     start_times: dict[str, str] = {}
-    for track_path in list_audio_files(music_dir):
+    for track_path in album_ordered:
         start_times[track_path.name] = _format_start_time(start_seconds)
         duration = probe_duration(track_path)
         if duration is None:
@@ -138,8 +142,6 @@ def record_downloaded_evidence(
                 "start_time": start_times[track_path.name],
             }
         )
-    if not tracks or not clip_ids:
-        raise ValidationError("Content ID 証跡へ記録する配置済み音源がありません")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(entries, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path
