@@ -3529,6 +3529,85 @@ def test_post_downloaded_with_download_path_extracts_zip(serve_dir, tmp_path):
     assert names == ["01a-Song A.mp3", "01b-Song A.mp3", "02a-Song B.mp3", "02b-Song B.mp3"]
 
 
+def test_post_downloaded_records_content_id_evidence(serve_dir, tmp_path, monkeypatch):
+    """Given clip_ids/generated_at 付きの Studio export 通知（提出順 = アルバム順の逆）
+    When POST /collections/<id>/downloaded を送る
+    Then Studio トラック順で clip URL が対応付き、アルバム順の累積開始位置付きで証跡が残る（#5129）。
+    """
+    monkeypatch.setattr(
+        "youtube_automation.commands.suno.content_id_evidence.probe_duration",
+        lambda _path: 75.0,
+    )
+    planning = tmp_path / "planning"
+    coll = _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries={
+            "model": "V5.5",
+            "entries": [
+                {"name": "曲A — Song A", "style": "s", "lyrics": ""},
+                {"name": "曲B — Song B", "style": "s", "lyrics": ""},
+            ],
+        },
+    )
+    # Studio スロット 1 = Song B、2 = Song A。clip_ids も同じ提出順で送られる。
+    zip_path = _make_zip(tmp_path / "studio.zip", {"1 Song B.mp3": b"b1", "2 Song A.mp3": b"a1"})
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {
+        "file_count": 2,
+        "expected_file_count": 2,
+        "format": "mp3",
+        "download_path": str(zip_path),
+        "clip_ids": ["clip-b", "clip-a"],
+        "generated_at": "2026-09-15T21:00:00+09:00",
+    }
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+
+    evidence_path = coll / "20-documentation" / "suno-content-id-evidence.json"
+    entries = {entry["track"]: entry for entry in json.loads(evidence_path.read_text(encoding="utf-8"))}
+    assert entries["02a-Song B.mp3"]["clip_url"] == "https://suno.com/song/clip-b"
+    assert entries["01a-Song A.mp3"]["clip_url"] == "https://suno.com/song/clip-a"
+    assert entries["01a-Song A.mp3"]["start_time"] == "00:00"
+    assert entries["02a-Song B.mp3"]["start_time"] == "01:15"
+    assert entries["01a-Song A.mp3"]["generated_at"] == "2026-09-15T12:00:00Z"
+    assert entries["01a-Song A.mp3"]["model"] == "V5.5"
+    assert entries["01a-Song A.mp3"]["plan"] == "Premier"
+
+
+def test_post_downloaded_without_clip_ids_records_no_evidence(serve_dir, tmp_path):
+    """Given clip_ids を持たない旧 payload
+    When POST /collections/<id>/downloaded を送る
+    Then 配置は成功しつつ証跡ファイルは作られない（証跡記録は download フローを止めない）。
+    """
+    planning = tmp_path / "planning"
+    coll = _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
+    )
+    zip_path = _make_zip(tmp_path / "legacy.zip", {"Song A.mp3": b"a1"})
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {"file_count": 1, "expected_file_count": 1, "format": "mp3", "download_path": str(zip_path)}
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+
+    assert (coll / "02-Individual-music" / "01a-Song A.mp3").is_file()
+    assert not (coll / "20-documentation" / "suno-content-id-evidence.json").exists()
+
+
 def test_post_downloaded_success_removes_download_archive(serve_dir, tmp_path):
     """POST /downloaded が成功すると元 ZIP を削除する。"""
     planning = tmp_path / "planning"
