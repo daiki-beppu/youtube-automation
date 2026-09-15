@@ -129,7 +129,10 @@ import {
 import { applyProgress, initSnapshot } from "../lib/snapshot";
 import { serverUrlItem } from "../lib/storage";
 import { performStudioMultitrackExport } from "../lib/studio-export";
-import { requireVisibleSunoTab } from "../lib/tab-visibility";
+import {
+  currentTabVisibility,
+  requireVisibleSunoTab,
+} from "../lib/tab-visibility";
 import {
   assertUnattendedRunRequest,
   createUnattendedManualState,
@@ -2752,18 +2755,6 @@ export default defineContentScript({
       // 手動 run では過去の定期実行 state を更新しない。定期実行だけが明示的に
       // active context を設定し、以降の progress を checkpoint へ反映する。
       activeUnattended = unattended;
-      const visibilityError = requireVisibleSunoTab(
-        typeof document === "undefined" ? "visible" : document.visibilityState
-      );
-      if (visibilityError) {
-        emitProgress({
-          phase: PHASE.ERROR,
-          total: entries.length,
-          message: visibilityError,
-        });
-        activeUnattended = undefined;
-        return { ok: false, error: visibilityError } as const;
-      }
       const durationOutlierPolicy: DurationOutlierPolicy =
         regenerateDurationOutliers
           ? { kind: "regenerate" }
@@ -2787,6 +2778,29 @@ export default defineContentScript({
       // 新 run 開始で直近完了 run の退避 snapshot を消去する（前 run の完了表示が復元されるのを防ぐ）。
       // in-memory の currentSnapshot が queryProgress で優先されるため fire-and-forget でよい。
       void clearFinishedSnapshot();
+      // 背面タブでは playlist の clip row / Add to Playlist dialog を検出できず途中で落ちるため、
+      // 手動 run だけ開始前に案内して止める (#5133)。emitProgress は snapshot / timing receipt の
+      // 初期化後しか呼べないため、他の preflight と同じくこの位置で判定する。定期実行は scheduler が
+      // 開いた URL のタブが前面である保証を契約に含めず、背面でも進行する既存要件 (#1944) を
+      // 壊すため対象外にする。
+      const visibilityError = unattended
+        ? null
+        : requireVisibleSunoTab(currentTabVisibility());
+      if (visibilityError) {
+        emitProgress({
+          phase: PHASE.ERROR,
+          total: entries.length,
+          message: visibilityError,
+        });
+        // 他の exit path と同じ後始末に揃える。lease は unattended run だけが持つため
+        // releaseExecutionLease はこの分岐では no-op だが、解放順を崩さないよう同じ形で並べる。
+        return (async () => {
+          await Promise.all([resumeStateWrite, unattendedStateWrite]);
+          await releaseExecutionLease(unattended);
+          activeUnattended = undefined;
+          return { ok: false, error: visibilityError } as const;
+        })();
+      }
       if (detectSunoViewMode() === "unknown") {
         const message =
           "Suno の表示ビューを検出できません。List / Waveform / Grid のいずれかに切り替えてから再実行してください。";
