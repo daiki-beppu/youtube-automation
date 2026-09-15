@@ -121,6 +121,9 @@ $ARGUMENTS
 
 0. **公開タイミング確定（必須）** — ユーザーに公開方法を案内・確認する前に必ず `uv run yt-upload-collection --plan [-c NAME]` を実行し、実際の公開挙動を確定する。`config/schedule_config.json` の予約設定や `config/channel/youtube.json` の既定時刻により、予約公開または非公開アップロードになるため、plan 結果をそのまま案内する
    - この turn でユーザーが即時公開を指定しても、アップローダーは即時公開しない。予約設定を追加して再 plan するか、非公開でアップロード後に YouTube Studio で手動公開するかを人間に選んでもらう。会話を黙って durable config で上書きしない
+1. **公開前リスクチェック（必須）** — upload 完了後、一般公開前に YouTube Studio の動画詳細を開き、「チェック」処理の完了を待つ。「制限」欄で著作権の申し立て有無・申立人・対象区間を確認してユーザーへ一覧で示す。Data API では Content ID の詳細を取得できないため、この確認は Studio で人間が行う。申し立てがある場合は、**そのまま公開 / 異議申し立て / 動画を差し替える** のいずれかを選ぶまで公開工程を進めない。
+   - 予約公開では、処理時間と対応時間を確保できるよう公開予定時刻より十分前にアップロードし、遅くとも公開前日までに確認する。チェックが未完了のまま公開時刻が迫った場合は、予約を延期する。
+   - 対象 URL: `https://studio.youtube.com/video/<VIDEO_ID>/edit`（`<VIDEO_ID>` は upload 結果の video ID）。
 1. **Complete Collection アップロード** — マスター動画、メタデータ（検証済み descriptions.json から読み込み）、サムネイル設定
 2. **live 移動** — `collections/planning/` → `collections/live/`
 3. **公開後処理** — フラグなし chain では upload 完了後も manifest 順の `community → pinned` を続行する。各段の承認と成果物ベースの再開契約に委ね、ここで個別処理を再実装しない。`/publish --upload` の単独 mode では後段を暗黙実行せず、`/publish --community`、`/publish --pinned`、`/audit --metadata` は必要に応じて独立実行する
