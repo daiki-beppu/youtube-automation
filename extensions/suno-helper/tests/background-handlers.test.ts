@@ -921,7 +921,7 @@ describe('background onMessage("startDownload"): タイムアウトで listener 
     vi.unstubAllGlobals();
   });
 
-  it("Given 10 分経過 When タイムアウト Then listener を解除する", async () => {
+  it("Given 30 分経過 When タイムアウト Then listener を解除する", async () => {
     const {
       handlers,
       sentMessages,
@@ -937,8 +937,8 @@ describe('background onMessage("startDownload"): タイムアウトで listener 
     expect(downloadListeners).toHaveLength(1);
     expect(removedDownloadListeners).toHaveLength(0);
 
-    // 10 分 (600000ms) を advance
-    vi.advanceTimersByTime(600000);
+    // 30 分 (1800000ms) を advance
+    vi.advanceTimersByTime(1800000);
     await flushPromises();
 
     expect(removedDownloadListeners).toHaveLength(0);
@@ -966,7 +966,7 @@ describe('background onMessage("startDownload"): 成功時にタイムアウト�
     vi.unstubAllGlobals();
   });
 
-  it("Given .zip 完了後 When 10 分経過 Then タイムアウト warn は出ない", async () => {
+  it("Given .zip 完了後 When 30 分経過 Then タイムアウト warn は出ない", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const {
       handlers,
@@ -988,7 +988,7 @@ describe('background onMessage("startDownload"): 成功時にタイムアウト�
     expect(removedDownloadListeners).toHaveLength(0);
 
     // 10 分を advance — timeout は clearTimeout 済みなので発火しない
-    vi.advanceTimersByTime(600000);
+    vi.advanceTimersByTime(1800000);
 
     // タイムアウト warn が出ていないことを確認
     const timeoutWarns = warnSpy.mock.calls.filter(
@@ -1083,8 +1083,8 @@ describe('background onMessage("startDownload"): interrupted 状態でクリー�
       tabId: 42,
     });
 
-    // タイムアウトが clearTimeout されたか: 10 分経過しても warn が出ない
-    vi.advanceTimersByTime(600000);
+    // タイムアウトが clearTimeout されたか: 30 分経過しても warn が出ない
+    vi.advanceTimersByTime(1800000);
     const timeoutWarns = warnSpy.mock.calls.filter(
       (args) => typeof args[0] === "string" && args[0].includes("タイムアウト")
     );
@@ -1529,7 +1529,7 @@ describe('background onMessage("startDownload"): timeout fallback で完了済�
       })
     );
     await flushPromises();
-    vi.advanceTimersByTime(600000);
+    vi.advanceTimersByTime(1800000);
     await flushPromises();
 
     expect(sentMessages).toContainEqual({

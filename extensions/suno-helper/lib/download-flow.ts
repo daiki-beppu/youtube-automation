@@ -70,7 +70,8 @@ export interface DownloadContext {
   baseUrl: string;
 }
 
-const DOWNLOAD_COMPLETE_TIMEOUT_MS = 660000;
+// Studio Multitrack の長尺 WAV 20 曲は実測で約 13 分かかるため、余裕を持って 30 分待つ。
+const DOWNLOAD_COMPLETE_TIMEOUT_MS = 1_800_000;
 const DOWNLOADING_PHASE_SUFFIX = "(phase=downloading)";
 
 function withDownloadingPhase(error: unknown): Error {
@@ -160,7 +161,9 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
       const downloadResult = await downloadPromise;
       if (deps.isAborted()) return null;
       if (!downloadResult) {
-        throw new Error("Studio Multitrack export がタイムアウトしました");
+        throw new Error(
+          "Studio Multitrack export がタイムアウトしました。Download から export を再実行できます"
+        );
       }
       watcherActive = false;
       if (!downloadResult.ok) {
