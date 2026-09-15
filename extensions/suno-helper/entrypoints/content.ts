@@ -129,6 +129,7 @@ import {
 import { applyProgress, initSnapshot } from "../lib/snapshot";
 import { serverUrlItem } from "../lib/storage";
 import { performStudioMultitrackExport } from "../lib/studio-export";
+import { requireVisibleSunoTab } from "../lib/tab-visibility";
 import {
   assertUnattendedRunRequest,
   createUnattendedManualState,
@@ -2751,6 +2752,18 @@ export default defineContentScript({
       // 手動 run では過去の定期実行 state を更新しない。定期実行だけが明示的に
       // active context を設定し、以降の progress を checkpoint へ反映する。
       activeUnattended = unattended;
+      const visibilityError = requireVisibleSunoTab(
+        typeof document === "undefined" ? "visible" : document.visibilityState
+      );
+      if (visibilityError) {
+        emitProgress({
+          phase: PHASE.ERROR,
+          total: entries.length,
+          message: visibilityError,
+        });
+        activeUnattended = undefined;
+        return { ok: false, error: visibilityError } as const;
+      }
       const durationOutlierPolicy: DurationOutlierPolicy =
         regenerateDurationOutliers
           ? { kind: "regenerate" }
