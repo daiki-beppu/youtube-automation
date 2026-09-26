@@ -127,7 +127,7 @@ grep -E "#[0-9]+" CHANGELOG.md | head -20
 
 ```python
 Edit(
-  file_path="/Users/mba/02-yt/00-automation/CHANGELOG.md",
+  file_path="/Users/mba/ghq/github.com/daiki-beppu/youtube-automation/CHANGELOG.md",
   old_string="""## [Unreleased]
 
 ### Changed
@@ -147,7 +147,7 @@ Edit(
 
 ```python
 Edit(
-  file_path="/Users/mba/02-yt/00-automation/CHANGELOG.md",
+  file_path="/Users/mba/ghq/github.com/daiki-beppu/youtube-automation/CHANGELOG.md",
   old_string="<旧 Migration セクション全文>",
   new_string="<新 Migration セクション全文>",
 )
@@ -157,7 +157,7 @@ Edit(
 
 ```python
 Edit(
-  file_path="/Users/mba/02-yt/00-automation/CHANGELOG.md",
+  file_path="/Users/mba/ghq/github.com/daiki-beppu/youtube-automation/CHANGELOG.md",
   old_string="[5.0.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.0.0\n[2.0.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v2.0.0",
   new_string="[<VER>]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v<VER>\n[<PREV>]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v<PREV>\n[5.0.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v5.0.0\n[2.0.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v2.0.0",
 )

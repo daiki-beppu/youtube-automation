@@ -58,7 +58,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 
 ## Instructions
 
-**実行場所**: youtube-automation リポジトリのルート（`/Users/mba/02-yt/00-automation`）
+**実行場所**: youtube-automation リポジトリのルート（`/Users/mba/ghq/github.com/daiki-beppu/youtube-automation`）
 
 ### Phase R: リリース種別判定
 
