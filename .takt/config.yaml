@@ -3,7 +3,8 @@
 draft_pr: false
 base_branch: main
 auto_requeue_max_attempts: 0
-provider: codex
+# provider はグローバルの ~/.takt/runtime.yaml が持つ。ここに書くと runtime.yaml と混在して
+# "Mixed provider configuration" で takt が止まる
 
 runtime:
   prepare:
