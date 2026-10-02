@@ -4,6 +4,10 @@
 // 構造（.clip-row / .multi-select-button / role / data-testid）はロケール非依存なので、
 // ここに置くのはロケールで変わる文字列だけにする。
 //
+// ここが提供するのは完全一致セレクタ（attributeEqualsSelector）と照合関数だけ。
+// 部分一致で拾うラベル（Exclude / 奇抜さ / 長さ 等）は要素・属性・一致の強さの組み合わせが
+// セレクタごとに異なるため、セレクタ文字列のまま dom.ts の SELECTORS に置く（同所がセレクタの SSOT）。
+//
 // 値の正本は Suno が配信する翻訳リソース `https://suno.com/locales/{en,ja}/<namespace>.json`。
 // 壊れたら chrome-devtools-mcp で同じキーを en / ja 両方から引き直す（キー名を各行に併記する）。
 
@@ -49,17 +53,6 @@ export function attributeEqualsSelector(
   const flag = ignoreCase ? " i" : "";
   return labels
     .map((label) => `${prefix}[${attribute}="${label}"${flag}]`)
-    .join(", ");
-}
-
-/** `<prefix>[<attribute>*="<label>" i]` をラベルごとに並べたセレクタリストを返す。 */
-export function attributeContainsSelector(
-  prefix: string,
-  attribute: string,
-  labels: readonly string[]
-): string {
-  return labels
-    .map((label) => `${prefix}[${attribute}*="${label}" i]`)
     .join(", ");
 }
 
