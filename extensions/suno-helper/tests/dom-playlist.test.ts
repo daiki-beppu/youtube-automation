@@ -361,23 +361,42 @@ describe("playlist-dom セレクタ定数: 実機 DOM 検証で確定した安�
     expect(CLIP_LIST_SCROLLER_SELECTOR).toBe(".clip-browser-list-scroller");
   });
 
-  it("Given SELECT_CLIP_BUTTON_SELECTOR When 読む Then 未選択の Select clip ボタンセレクタである", () => {
-    expect(SELECT_CLIP_BUTTON_SELECTOR).toBe(
-      '.multi-select-button > button[aria-label="Select clip"]'
-    );
+  it.each([
+    ["Select clip", true, false],
+    ["クリップを選択", true, false],
+    ["Deselect clip", false, true],
+    ["クリップの選択を解除", false, true],
+  ] as const)(
+    "Given multi-select 配下の aria-label=%s When 照合する Then SELECT=%s / DESELECT=%s",
+    (label, isSelect, isDeselect) => {
+      const wrapper = document.createElement("div");
+      wrapper.className = "multi-select-button";
+      const button = document.createElement("button");
+      button.setAttribute("aria-label", label);
+      wrapper.appendChild(button);
+
+      expect(button.matches(SELECT_CLIP_BUTTON_SELECTOR)).toBe(isSelect);
+      expect(button.matches(DESELECT_CLIP_BUTTON_SELECTOR)).toBe(isDeselect);
+    }
+  );
+
+  it("Given multi-select 外の Select clip ボタン When 照合する Then 一致しない（親条件は全ラベルに掛かる）", () => {
+    const button = document.createElement("button");
+    button.setAttribute("aria-label", "クリップを選択");
+    document.body.appendChild(button);
+
+    expect(button.matches(SELECT_CLIP_BUTTON_SELECTOR)).toBe(false);
   });
 
-  it("Given DESELECT_CLIP_BUTTON_SELECTOR When 読む Then 選択済みを示す Deselect clip ボタンセレクタである（Select と対称）", () => {
-    expect(DESELECT_CLIP_BUTTON_SELECTOR).toBe(
-      '.multi-select-button > button[aria-label="Deselect clip"]'
-    );
-  });
+  it.each(["Playlist Name", "Playlist name", "プレイリスト名"])(
+    "Given placeholder=%s の input When 照合する Then playlist 名入力欄として一致する",
+    (placeholder) => {
+      const input = document.createElement("input");
+      input.setAttribute("placeholder", placeholder);
 
-  it("Given PLAYLIST_NAME_INPUT_SELECTOR When 読む Then Playlist Name input セレクタである", () => {
-    expect(PLAYLIST_NAME_INPUT_SELECTOR).toBe(
-      'input[placeholder="Playlist Name"]'
-    );
-  });
+      expect(input.matches(PLAYLIST_NAME_INPUT_SELECTOR)).toBe(true);
+    }
+  );
 
   it("Given PLAYLIST_ROW_LABEL_SELECTOR When 読む Then dialog 内 row の label を識別する Tailwind class セレクタである", () => {
     expect(PLAYLIST_ROW_LABEL_SELECTOR).toBe("div.ml-4.font-sans");
@@ -2798,5 +2817,96 @@ describe("adoption safety regressions", () => {
     }).catch((error) => error);
     await vi.runAllTimersAsync();
     expect(String(await result)).toContain("missing clip ID: b");
+  });
+});
+
+// 2026-10 の Suno 改装で UI が日本語化され、aria-label / placeholder / 見出しまで翻訳された
+// （chrome-devtools-mcp 実 DOM 検証）。英語 UI 側も "Add to playlist" / "Playlist name" と
+// 大文字小文字が変わったため、両言語で playlist 追加フローが動くことを担保する。
+describe("日本語 UI (2026-10): playlist 追加フローのロケール耐性", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each(["プレイリストに追加", "Add to playlist"])(
+    "Given 見出し %s の dialog When Cmd+P で開く Then その dialog を返す",
+    async (heading) => {
+      const dialog = addPlaylistDialog({ text: heading });
+
+      const pending = openAddToPlaylistDialogViaCmdP();
+      await vi.runAllTimersAsync();
+
+      await expect(pending).resolves.toBe(dialog);
+    }
+  );
+
+  it("Given 日本語 dialog When fillPlaylistNameAndCreate Then プレイリスト名へ注入しプレイリストを作成を click する", async () => {
+    const dialog = addPlaylistDialog({ text: "プレイリストに追加" });
+    const input = document.createElement("input");
+    input.placeholder = "プレイリスト名";
+    const create = document.createElement("button");
+    create.textContent = "プレイリストを作成";
+    const onClick = vi.fn();
+    create.addEventListener("click", onClick);
+    dialog.append(input, create);
+
+    await fillPlaylistNameAndCreate(dialog, "abyss | window-desk");
+
+    expect(input.value).toBe("abyss | window-desk");
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("Given 再生ボタンが「<曲名>を再生」 When collectClipRowTitle Then 曲名を抽出する", () => {
+    const { row } = addCreateUiClipRow(
+      "ffffffff-1111-2222-3333-444444444444",
+      "row-label"
+    );
+    row
+      .querySelector(".clip-image-container")
+      ?.setAttribute("aria-label", "オール リベ ニッポンを再生");
+
+    expect(collectClipRowTitle(row)).toBe("オール リベ ニッポン");
+  });
+
+  it("Given 日本語ラベルの未選択・選択済み row が混在 When ensureClipRowsLoaded Then 文書順で返す", async () => {
+    const a = addClipRow({ selectLabel: "クリップを選択" }).row;
+    const b = addClipRow({ selectLabel: "クリップの選択を解除" }).row;
+    const c = addClipRow({ selectLabel: "クリップを選択" }).row;
+
+    const pending = ensureClipRowsLoaded(3, { isAborted: () => false });
+    await vi.runAllTimersAsync();
+
+    expect(await pending).toEqual([a, b, c]);
+  });
+
+  it("Given 日本語ラベルの新 UI row When scrollAndMultiSelectByIds Then 選択して選択解除ラベルへの遷移を verify する", async () => {
+    const id = "abababab-1111-2222-3333-444444444444";
+    const { btn } = addCreateUiClipRow(id, "オール リベ ニッポン", {
+      selectLabel: "クリップを選択",
+    });
+    btn.addEventListener("click", () => {
+      btn.setAttribute("aria-label", "クリップの選択を解除");
+    });
+    const scroller = getOrCreateScroller();
+    for (const [key, value] of [
+      ["scrollHeight", 200],
+      ["clientHeight", 200],
+    ] as const) {
+      Object.defineProperty(scroller, key, { configurable: true, value });
+    }
+
+    const pending = scrollAndMultiSelectByIds([id], {
+      isAborted: () => false,
+      renderWaitMs: 10,
+      hydrationWaitMs: 100,
+    });
+    await vi.runAllTimersAsync();
+
+    expect(await pending).toBe(1);
+    expect(btn.getAttribute("aria-label")).toBe("クリップの選択を解除");
   });
 });

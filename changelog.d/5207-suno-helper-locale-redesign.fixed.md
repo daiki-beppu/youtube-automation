@@ -1,0 +1,2 @@
+- suno-helper が Suno の日本語 UI と 2026-10 の Create UI 改装でも Style / Lyrics 注入・生成中判定・playlist 追加を行えるようにした（#5207）。
+- suno-helper の Duration 注入が Auto / カスタムのどちらの状態からでも動くようにした（#5207）。

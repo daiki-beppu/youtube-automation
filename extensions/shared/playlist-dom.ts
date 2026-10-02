@@ -3,6 +3,14 @@
 // （Suno の DOM は変わりうるため、壊れたら README / order.md を参照して更新する）。
 // Style/Lyrics 注入系 (shared/dom.ts) とは責務が異なるため別モジュールに分ける。
 import { setNativeValue, sleep } from "./dom";
+import {
+  attributeEqualsSelector,
+  includesLabel,
+  matchesLabel,
+  PLAY_BUTTON_SELECTOR,
+  SUNO_LABELS,
+  titleFromPlayLabel,
+} from "./suno-labels";
 import { isVisible } from "./visibility";
 
 /**
@@ -16,12 +24,28 @@ import { isVisible } from "./visibility";
 export const CLIP_LIST_SCROLLER_SELECTOR = ".clip-browser-list-scroller";
 /** 各 clip が 1 つ内包する multi-select ボタンのラッパ。clip row の構造シグナル兼 row 導出の基点 (#881)。 */
 const MULTI_SELECT_BUTTON_SELECTOR = ".multi-select-button";
-const SELECT_CLIP_BUTTON_ANY_SELECTOR = 'button[aria-label="Select clip"]';
-const DESELECT_CLIP_BUTTON_ANY_SELECTOR = 'button[aria-label="Deselect clip"]';
+const SELECT_CLIP_BUTTON_ANY_SELECTOR = attributeEqualsSelector(
+  "button",
+  "aria-label",
+  SUNO_LABELS.selectClip
+);
+const DESELECT_CLIP_BUTTON_ANY_SELECTOR = attributeEqualsSelector(
+  "button",
+  "aria-label",
+  SUNO_LABELS.deselectClip
+);
 /** 未選択の clip 選択ボタン。click すると aria-label が "Deselect clip" に切り替わる（= 冪等）。 */
-export const SELECT_CLIP_BUTTON_SELECTOR = `${MULTI_SELECT_BUTTON_SELECTOR} > button[aria-label="Select clip"]`;
+export const SELECT_CLIP_BUTTON_SELECTOR = attributeEqualsSelector(
+  `${MULTI_SELECT_BUTTON_SELECTOR} > button`,
+  "aria-label",
+  SUNO_LABELS.selectClip
+);
 /** 選択済みの clip ボタン。click 後にこの aria-label へ遷移したことを verify するシグナル（SELECT_CLIP_BUTTON_SELECTOR と対称）。 */
-export const DESELECT_CLIP_BUTTON_SELECTOR = `${MULTI_SELECT_BUTTON_SELECTOR} > button[aria-label="Deselect clip"]`;
+export const DESELECT_CLIP_BUTTON_SELECTOR = attributeEqualsSelector(
+  `${MULTI_SELECT_BUTTON_SELECTOR} > button`,
+  "aria-label",
+  SUNO_LABELS.deselectClip
+);
 /**
  * 新 Create UI (2026-07, #2043) の per-clip row コンテナ。実 DOM 検証で確認:
  *   `div.clip-row[data-testid="clip-row"][role="group"][aria-label=<曲名>][data-clip-status]`
@@ -43,14 +67,13 @@ const CLIP_IMAGE_UUID_RE =
   /image_(?:large_)?([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
 const GRID_CARD_MAX_ANCESTOR_DEPTH = 10;
 const GRID_CARD_MIN_SIBLINGS = 2;
-/** Add to Playlist dialog 内の playlist 名入力欄。 */
-export const PLAYLIST_NAME_INPUT_SELECTOR =
-  'input[placeholder="Playlist Name"]';
-
-/** Add to Playlist dialog の見出しテキスト（React Aria auto-generated ID には依らず text content で判定）。 */
-const PLAYLIST_DIALOG_HEADING = "Add to Playlist";
-/** 新規 playlist 作成ボタンのラベル（case-insensitive substring match）。 */
-const CREATE_PLAYLIST_BUTTON_TEXT = "create playlist";
+/** Add to Playlist dialog 内の playlist 名入力欄（英語 placeholder は版で大文字小文字が揺れる）。 */
+export const PLAYLIST_NAME_INPUT_SELECTOR = attributeEqualsSelector(
+  "input",
+  "placeholder",
+  SUNO_LABELS.playlistNamePlaceholder,
+  { ignoreCase: true }
+);
 /** Cmd+P 発火後に dialog 出現を待つ poll 間隔と上限 (ms)。 */
 const DIALOG_OPEN_POLL_MS = 100;
 const DIALOG_OPEN_TIMEOUT_MS = 5000;
@@ -68,11 +91,10 @@ const CMD_P_MAX_RETRIES = 3;
 const CLIP_ROW_TITLE_SELECTOR = 'span[role="button"][aria-label^="Play "]';
 /**
  * 新 Create UI (#2043) の再生ボタン。`span` ではなく
- * `div.clip-image-container[role="button"][aria-label="Play <曲名>"]` に変わったため、
+ * `div.clip-image-container[role="button"][aria-label="Play <曲名>"]`（日本語 UI は "<曲名>を再生"）に変わったため、
  * タグ非依存で aria-label から曲名を取り出す（textContent は画像コンテナのため空）。
  */
-const CLIP_ROW_PLAY_LABEL_SELECTOR = '[role="button"][aria-label^="Play "]';
-const CLIP_ROW_PLAY_LABEL_PREFIX = "Play ";
+const CLIP_ROW_PLAY_LABEL_SELECTOR = PLAY_BUTTON_SELECTOR;
 /** clip list の遅延ロードを bottom jump に依存させないための段階スクロール量。 */
 const CLIP_LIST_LOAD_SCROLL_STEP_PX = 600;
 /** scrollAndMultiSelectByIds: 各スクロールステップ後に仮想 DOM が描画されるのを待つ猶予 (ms)。 */
@@ -113,7 +135,11 @@ function findPlaylistDialog(): HTMLElement | null {
       if (/privacy/i.test(dialog.getAttribute("aria-label") ?? "")) {
         return false;
       }
-      return (dialog.textContent ?? "").includes(PLAYLIST_DIALOG_HEADING);
+      // 見出しは React Aria auto-generated ID に依らず text content で判定する。
+      return includesLabel(
+        dialog.textContent,
+        SUNO_LABELS.playlistDialogHeading
+      );
     }) ?? null
   );
 }
@@ -234,9 +260,7 @@ function resolveClipListScroller(): HTMLElement | null {
     return explicit;
   }
 
-  const buttons = document.querySelectorAll<HTMLElement>(
-    `${SELECT_CLIP_BUTTON_ANY_SELECTOR}, ${DESELECT_CLIP_BUTTON_ANY_SELECTOR}`
-  );
+  const buttons = queryClipSelectButtons(document);
   for (const button of buttons) {
     const row = resolveClipRowFromSelectButton(button);
     if (!row || !isVisible(row)) {
@@ -250,10 +274,25 @@ function resolveClipListScroller(): HTMLElement | null {
   return explicit;
 }
 
-function collectClipRowsFromSelectButtons(root: ParentNode): HTMLElement[] {
-  const buttons = root.querySelectorAll<HTMLElement>(
-    `${SELECT_CLIP_BUTTON_ANY_SELECTOR}, ${DESELECT_CLIP_BUTTON_ANY_SELECTOR}`
+/**
+ * root 配下の Select / Deselect clip ボタンを文書順で返す。
+ * 日英ラベルを並べたセレクタリストは非 ASCII を含み、jsdom（nwsapi）の要素スコープ
+ * querySelectorAll はこの形で文書順を崩すため、ASCII だけのセレクタで文書順に取得してから
+ * ラベルで絞る（row 順は「直近生成が先頭」の意味を持つ）。
+ */
+function queryClipSelectButtons(root: ParentNode): HTMLElement[] {
+  return Array.from(
+    root.querySelectorAll<HTMLElement>("button[aria-label]")
+  ).filter((button) =>
+    matchesLabel(button.getAttribute("aria-label"), [
+      ...SUNO_LABELS.selectClip,
+      ...SUNO_LABELS.deselectClip,
+    ])
   );
+}
+
+function collectClipRowsFromSelectButtons(root: ParentNode): HTMLElement[] {
+  const buttons = queryClipSelectButtons(root);
   const seen = new Set<HTMLElement>();
   const rows: HTMLElement[] = [];
   for (const button of buttons) {
@@ -345,14 +384,13 @@ export function collectClipRowTitle(row: HTMLElement): string | null {
     return legacyTitle;
   }
   // 新 Create UI (#2043): 再生ボタンが div 化し textContent を持たないため aria-label から取る。
-  const playLabel = row
-    .querySelector(CLIP_ROW_PLAY_LABEL_SELECTOR)
-    ?.getAttribute("aria-label");
-  if (playLabel && playLabel.startsWith(CLIP_ROW_PLAY_LABEL_PREFIX)) {
-    const title = playLabel.slice(CLIP_ROW_PLAY_LABEL_PREFIX.length).trim();
-    if (title) {
-      return title;
-    }
+  const playTitle = titleFromPlayLabel(
+    row
+      .querySelector(CLIP_ROW_PLAY_LABEL_SELECTOR)
+      ?.getAttribute("aria-label") ?? null
+  );
+  if (playTitle) {
+    return playTitle;
   }
   // 新 Create UI の row コンテナは aria-label に曲名を持つ（closest は self を含む）。
   const rowLabel = row
@@ -879,9 +917,7 @@ export async function scrollAndMultiSelectByIds(
   const titleMatchedRowIds = new Set<string>();
 
   async function selectMatchingRows(): Promise<void> {
-    const buttons = scroller!.querySelectorAll<HTMLElement>(
-      `${SELECT_CLIP_BUTTON_ANY_SELECTOR}, ${DESELECT_CLIP_BUTTON_ANY_SELECTOR}`
-    );
+    const buttons = queryClipSelectButtons(scroller!);
     const seen = new Set<HTMLElement>();
     for (const button of buttons) {
       if (isAborted()) return;
@@ -1185,7 +1221,7 @@ export async function fillPlaylistNameAndCreate(
   const create = Array.from(
     dialog.querySelectorAll<HTMLButtonElement>("button")
   ).find((btn) =>
-    (btn.textContent ?? "").toLowerCase().includes(CREATE_PLAYLIST_BUTTON_TEXT)
+    includesLabel(btn.textContent, SUNO_LABELS.createPlaylistButton)
   );
   if (!create) {
     throw new Error("Create Playlist ボタンが dialog 内に見つかりません。");

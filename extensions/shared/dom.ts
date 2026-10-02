@@ -2,6 +2,12 @@
 // 旧 `content.js` の振る舞いを 1:1 で保持しつつ純関数化する。
 // Suno の DOM は変わりうるため、セレクタはこの 1 箇所に集約する（壊れたら README 参照で更新）。
 
+import {
+  attributeEqualsSelector,
+  includesLabel,
+  matchesLabel,
+  SUNO_LABELS,
+} from "./suno-labels";
 import { isVisible } from "./visibility";
 
 // Suno の DOM セレクタ SSOT。#807 で判明したとおり placeholder は UI ロケールで変わるため、
@@ -26,15 +32,19 @@ const SELECTORS = {
   //   - Exclude styles: native text input/textarea (placeholder / aria-label の表記ゆれを許容)
   //   - Weirdness / Style Influence: radix slider ([role="slider"] + aria-label で区別)
   // data-testid は Suno UI で Lyrics 以外に存在しないため placeholder / aria-label を SSOT にする。
+  // 日本語 UI（2026-10 実 DOM）の placeholder は「スタイルを除外」。
   excludeStyles:
-    'input[placeholder*="Exclude" i], textarea[placeholder*="Exclude" i], input[aria-label*="Exclude" i], textarea[aria-label*="Exclude" i]',
+    'input[placeholder*="Exclude" i], textarea[placeholder*="Exclude" i], input[aria-label*="Exclude" i], textarea[aria-label*="Exclude" i], input[placeholder*="除外"], textarea[placeholder*="除外"]',
   // 2026-07 の Suno 新 Create UI で slider がリネームされた（Weirdness → Bizarreness /
   // Style Influence → Style influence〈小文字 i〉、#1720）。完全一致だと表記ゆれのたびに run が
   // 中断するため、旧新両ラベルにマッチする case-insensitive substring match（tolerant match）にする。
+  // 日本語 UI（2026-10 実 DOM）は 奇抜さ / スタイルの影響 / 長さ。
   weirdness:
-    '[role="slider"][aria-label*="weirdness" i], [role="slider"][aria-label*="bizarre" i]',
-  styleInfluence: '[role="slider"][aria-label*="influence" i]',
-  duration: '[role="slider"][aria-label*="duration" i]',
+    '[role="slider"][aria-label*="weirdness" i], [role="slider"][aria-label*="bizarre" i], [role="slider"][aria-label*="奇抜"]',
+  styleInfluence:
+    '[role="slider"][aria-label*="influence" i], [role="slider"][aria-label*="スタイルの影響"]',
+  duration:
+    '[role="slider"][aria-label*="duration" i], [role="slider"][aria-label="長さ"]',
   durationButtons: 'button[type="button"]',
   // Voice section の Male / Female ボタン (chrome-devtools-mcp 実機検証で確認)。
   // aria-label / data-testid を持たないため、`data-selected` 属性 (Suno が排他トグル用に意図して
@@ -58,11 +68,27 @@ const SLIDER_MAX_STEPS = 150;
  * `svg.animate-spin` を撤去したため、音源が揃わない限り押せない Remix btn の `disabled` を軸にする。
  * UI 装飾（spinner/testid）と違い「音源未完成なら Remix 不可」という Suno のドメインルール由来で変更されにくい。
  */
-export const REMIX_BTN_SELECTOR = 'button[aria-label="Remix clip"]';
+export const REMIX_BTN_SELECTOR = attributeEqualsSelector(
+  "button",
+  "aria-label",
+  SUNO_LABELS.remixClip
+);
 /** clip card root を構造的に解決するための同伴ボタン（#866）。Remix btn と合わせ 3 種が各 1 つ揃う祖先が card。 */
-const SELECT_CLIP_BTN_SELECTOR = 'button[aria-label="Select clip"]';
-const DESELECT_CLIP_BTN_SELECTOR = 'button[aria-label="Deselect clip"]';
-const EDIT_TITLE_BTN_SELECTOR = 'button[aria-label="Edit title"]';
+const SELECT_CLIP_BTN_SELECTOR = attributeEqualsSelector(
+  "button",
+  "aria-label",
+  SUNO_LABELS.selectClip
+);
+const DESELECT_CLIP_BTN_SELECTOR = attributeEqualsSelector(
+  "button",
+  "aria-label",
+  SUNO_LABELS.deselectClip
+);
+const EDIT_TITLE_BTN_SELECTOR = attributeEqualsSelector(
+  "button",
+  "aria-label",
+  SUNO_LABELS.editTitle
+);
 export type SunoViewMode = "list" | "waveform" | "grid" | "unknown";
 const SUNO_VIEW_LABELS: Record<
   Exclude<SunoViewMode, "unknown">,
@@ -74,11 +100,9 @@ const SUNO_VIEW_LABELS: Record<
 };
 /**
  * queue 上限エラー toast の安定識別子（#847、実 DOM 検証）。testid/aria-label を持たないため
- * `[role="dialog"]` + 英語見出しテキストの substring match で識別する（多言語耐性）。
+ * `[role="dialog"]` + 見出しテキスト（SUNO_LABELS.generationInProgress）の substring match で識別する。
  */
 export const QUEUE_LIMIT_ERROR_SELECTOR = '[role="dialog"]';
-/** queue 上限エラー toast の英語見出し（case-insensitive substring match。日本語並列テキストには依存しない）。 */
-const QUEUE_LIMIT_ERROR_TEXT = "generation in progress";
 
 /** 1 曲の生成完了待ち上限 (ms)。 */
 export const GENERATE_TIMEOUT_MS = 180000;
@@ -136,38 +160,61 @@ export interface ResolvedFields {
   title?: HTMLInputElement;
 }
 
-const LYRICS_MODE_NAMES = ["Write", "Prompt", "Instrumental"] as const;
-const CREATE_FORM_MODE_NAMES = ["Simple", "Advanced", "Sounds"] as const;
+// 各モードの表示名（英語 → 日本語）。キーが診断メッセージで使う正規名。
+// 正本は Suno の翻訳リソース create:createForm.* / create:modalityDropdown.*（suno-labels.ts 冒頭参照）。
+const LYRICS_MODES = {
+  Write: ["Write"],
+  Prompt: ["Prompt"],
+  Instrumental: ["Instrumental"],
+} as const;
+// 2026-10 の Suno 改装で Sounds は Create form mode から上段の「作成する内容」タブへ移った。
+// 旧 UI（Simple / Advanced / Sounds の 3 択）も拾えるよう Sounds は任意メンバーとして扱う。
+const CREATE_FORM_MODES = {
+  Simple: ["Simple", "シンプル"],
+  Advanced: ["Advanced", "アドバンスド"],
+  Sounds: ["Sounds", "サウンド"],
+} as const;
+const CREATE_FORM_REQUIRED_MODES = ["Simple", "Advanced"] as const;
+const CREATE_MEDIUMS = {
+  Song: ["Song", "曲"],
+  Speech: ["Speech", "スピーチ"],
+  Sounds: ["Sounds", "サウンド"],
+} as const;
 const LYRICS_WRITE_LOCATION =
-  "Advanced → More options → Lyrics mode → Write の順に切り替えてください。";
+  "「曲」タブ → アドバンスド → 歌詞（Lyrics）欄の順に開いてください。";
 const LYRICS_WRITE_REASON =
-  "suno-helper は非空の lyrics（[Instrumental] を含む）を Lyrics 欄へ注入するため、Write が必要です。";
+  "suno-helper は非空の lyrics（[Instrumental] を含む）を Lyrics 欄へ注入するため、Lyrics 欄が必要です。";
 
 function controlName(el: Element): string {
   return (el.getAttribute("aria-label") ?? el.textContent ?? "").trim();
 }
 
-function selectedModeName(
+/**
+ * role 構造（group > control）と選択属性から、選択中のモードの正規名を返す。
+ * group は required の全モードを control として持つものに限る。特定できなければ null。
+ */
+function selectedModeName<Mode extends string>(
   groupRole: "radiogroup" | "tablist",
   controlRole: "radio" | "tab",
   selectedAttribute: "aria-checked" | "aria-selected",
-  modeNames: readonly string[]
-): string | null {
-  const expectedNames = new Map(
-    modeNames.map((name) => [name.toLowerCase(), name])
-  );
+  modes: Record<Mode, readonly string[]>,
+  required: readonly Mode[]
+): Mode | null {
+  const canonicalOf = (name: string): Mode | null =>
+    (Object.keys(modes) as Mode[]).find((mode) =>
+      matchesLabel(name, modes[mode])
+    ) ?? null;
   const candidates = Array.from(
     document.querySelectorAll(`[role="${groupRole}"]`)
   ).flatMap((group) => {
+    // 入れ子の group（上段タブ内のモード tablist 等）の control は数えない。
     const controls = Array.from(
       group.querySelectorAll(`[role="${controlRole}"]`)
+    ).filter((control) => control.closest(`[role="${groupRole}"]`) === group);
+    const present = new Set(
+      controls.map((control) => canonicalOf(controlName(control)))
     );
-    const names = controls.map(controlName);
-    if (
-      !modeNames.every((modeName) =>
-        names.some((name) => name.toLowerCase() === modeName.toLowerCase())
-      )
-    ) {
+    if (!required.every((mode) => present.has(mode))) {
       return [];
     }
     const selected = controls.filter(
@@ -176,9 +223,7 @@ function selectedModeName(
     if (selected.length !== 1) {
       return [];
     }
-    const canonicalName = expectedNames.get(
-      controlName(selected[0]).toLowerCase()
-    );
+    const canonicalName = canonicalOf(controlName(selected[0]));
     return canonicalName ? [canonicalName] : [];
   });
   return candidates.length === 1 ? candidates[0] : null;
@@ -186,25 +231,43 @@ function selectedModeName(
 
 /** Lyrics 欄を表示するためにユーザーが確認すべき、現在の Suno UI 状態を返す。DOM は変更しない。 */
 export function diagnoseLyricsInputState(): string {
+  // 旧 UI の Lyrics mode radiogroup（新 UI には無いので null になり素通りする）。
   const lyricsMode = selectedModeName(
     "radiogroup",
     "radio",
     "aria-checked",
-    LYRICS_MODE_NAMES
+    LYRICS_MODES,
+    ["Write", "Prompt", "Instrumental"]
   );
   if (lyricsMode === "Prompt" || lyricsMode === "Instrumental") {
     return [
       `Lyrics mode が ${lyricsMode} になっています。Write に切り替えてください。`,
+      "Advanced → More options → Lyrics mode → Write の順に切り替えてください。",
+      LYRICS_WRITE_REASON,
+    ].join("\n");
+  }
+
+  const medium = selectedModeName(
+    "tablist",
+    "tab",
+    "aria-selected",
+    CREATE_MEDIUMS,
+    ["Song", "Speech", "Sounds"]
+  );
+  if (medium === "Speech" || medium === "Sounds") {
+    return [
+      `作成する内容が ${medium} になっています。「曲」（Song）タブを選択してください。`,
       LYRICS_WRITE_LOCATION,
       LYRICS_WRITE_REASON,
     ].join("\n");
   }
 
-  const createFormMode = selectedModeName(
+  const createFormMode = selectedModeName<keyof typeof CREATE_FORM_MODES>(
     "tablist",
     "tab",
     "aria-selected",
-    CREATE_FORM_MODE_NAMES
+    CREATE_FORM_MODES,
+    CREATE_FORM_REQUIRED_MODES
   );
   if (createFormMode === "Simple" || createFormMode === "Sounds") {
     return [
@@ -216,10 +279,10 @@ export function diagnoseLyricsInputState(): string {
 
   return [
     "Lyrics 欄を表示できる状態か確認してください:",
-    "- Advanced タブが選択されているか",
-    "- More options を開き、Lyrics mode が Write になっているか",
+    "- 作成する内容が「曲」（Song）タブになっているか",
+    "- アドバンスド（Advanced）タブが選択されているか",
+    "- 歌詞（Lyrics）欄が表示されているか",
     `- ${LYRICS_WRITE_REASON}`,
-    "- Suno の UI 言語が日本語になっていないか（英語推奨）",
   ].join("\n");
 }
 
@@ -543,9 +606,13 @@ export interface ResolvedAdvancedFields {
     male: HTMLButtonElement | null;
     female: HTMLButtonElement | null;
   };
+  /**
+   * 2026-10 の Suno UI の Duration は排他 2 状態: Auto 時は Custom / Auto ボタンのみ（slider 未描画）、
+   * Custom 時は slider のみ（ボタンは消える）。片方だけでも解決し、両方不在のときだけ null。
+   */
   duration: {
-    customButton: HTMLButtonElement;
-    slider: HTMLElement;
+    customButton: HTMLButtonElement | null;
+    slider: HTMLElement | null;
   } | null;
 }
 
@@ -620,30 +687,52 @@ export function resolveAdvancedFields(): ResolvedAdvancedFields {
   const styleInfluence = pickPreferVisible(
     Array.from(document.querySelectorAll<HTMLElement>(SELECTORS.styleInfluence))
   );
-  const durationSlider = pickPreferVisible(
-    Array.from(document.querySelectorAll<HTMLElement>(SELECTORS.duration))
-  );
+  const durationSlider = resolveDurationSlider();
   const durationCustomButtons = Array.from(
     document.querySelectorAll<HTMLButtonElement>(SELECTORS.durationButtons)
-  ).filter((button) => button.textContent?.trim().toLowerCase() === "custom");
+  ).filter((button) =>
+    matchesLabel(button.textContent, SUNO_LABELS.durationCustom)
+  );
   const durationCustomButton = durationSlider
     ? pickClosestPreferVisible(durationSlider, durationCustomButtons)
-    : null;
+    : pickPreferVisible(durationCustomButtons);
   return {
     excludeStyles,
     weirdness,
     styleInfluence,
     vocalGender: resolveVocalGenderButtons(),
     duration:
-      durationSlider && durationCustomButton
+      durationCustomButton || durationSlider
         ? { customButton: durationCustomButton, slider: durationSlider }
         : null,
   };
 }
 
+function resolveDurationSlider(): HTMLElement | null {
+  return pickPreferVisible(
+    Array.from(document.querySelectorAll<HTMLElement>(SELECTORS.duration))
+  );
+}
+
+/** Custom click 後に Duration slider が描画されるのを待つ poll 間隔と上限 (ms)。 */
+const DURATION_SLIDER_APPEAR_POLL_MS = 100;
+const DURATION_SLIDER_APPEAR_TIMEOUT_MS = 3000;
+
+async function waitForDurationSlider(): Promise<HTMLElement | null> {
+  const deadline = Date.now() + DURATION_SLIDER_APPEAR_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    const slider = resolveDurationSlider();
+    if (slider) {
+      return slider;
+    }
+    await sleep(DURATION_SLIDER_APPEAR_POLL_MS);
+  }
+  return null;
+}
+
 /**
  * Voice section の Male / Female ボタンを解決する。
- * data-selected 属性で候補を全 query → textContent 完全一致 ("Male" / "Female") で絞り込み。
+ * data-selected 属性で候補を全 query → textContent 完全一致 ("Male" / "Female"、日本語 UI は "男性" / "女性") で絞り込み。
  * pickPreferVisible で visible 優先（collapsed 時の fallback として hidden も拾う）。
  * 不在は null（fail-soft）。判定は case-sensitive（"male" lowercase 等は拾わない）。
  */
@@ -654,11 +743,15 @@ function resolveVocalGenderButtons(): {
   const candidates = Array.from(
     document.querySelectorAll<HTMLButtonElement>(SELECTORS.vocalGenderButtons)
   );
-  const findByLabel = (label: "Male" | "Female"): HTMLButtonElement | null =>
+  // 英語は case-sensitive の完全一致を維持する（"male" lowercase 等は拾わない）。
+  const findByLabel = (labels: readonly string[]): HTMLButtonElement | null =>
     pickPreferVisible(
-      candidates.filter((b) => b.textContent?.trim() === label)
+      candidates.filter((b) => labels.includes(b.textContent?.trim() ?? ""))
     );
-  return { male: findByLabel("Male"), female: findByLabel("Female") };
+  return {
+    male: findByLabel(SUNO_LABELS.vocalMale),
+    female: findByLabel(SUNO_LABELS.vocalFemale),
+  };
 }
 
 /**
@@ -787,15 +880,29 @@ async function injectDuration(
   if (value === undefined) {
     return;
   }
-  if (!fields) {
+  if (!fields || (!fields.slider && !fields.customButton)) {
     throw new FatalRunError(
       "Duration の Custom button または slider が見つかりません。Suno の「書く」モードでその他のオプションを開いてから再実行してください。"
     );
   }
-  validateDurationTarget(fields.slider, value);
-  fields.customButton.click();
-  await injectSliderValue(fields.slider, value, bridgeSetSlider);
-  const actual = readDurationSliderAttribute(fields.slider, "aria-valuenow");
+  let slider = fields.slider;
+  if (slider) {
+    // slider が既に描画済みなら範囲検証を先に行い、範囲外で Custom を押さない。
+    validateDurationTarget(slider, value);
+    fields.customButton?.click();
+  } else {
+    // 範囲は slider の aria 属性からしか読めないため、Custom で描画させてから検証する。
+    fields.customButton?.click();
+    slider = await waitForDurationSlider();
+    if (!slider) {
+      throw new FatalRunError(
+        "Duration の Custom を押しても slider が表示されませんでした。Suno の UI 変更の可能性があります。"
+      );
+    }
+    validateDurationTarget(slider, value);
+  }
+  await injectSliderValue(slider, value, bridgeSetSlider);
+  const actual = readDurationSliderAttribute(slider, "aria-valuenow");
   if (actual !== value) {
     throw new FatalRunError(
       `Duration slider の読戻し値 ${actual} 秒が指定値 ${value} 秒と一致しません。生成を停止します。`
@@ -920,7 +1027,7 @@ export function detectRecaptcha(): boolean {
 
 /**
  * queue 上限エラー toast が表示中かを検知する（#847）。
- * 可視な `[role="dialog"]` のうち英語見出し "generation in progress" を case-insensitive
+ * 可視な `[role="dialog"]` のうち見出し（"Generation in progress" / "生成中"）を case-insensitive
  * substring match で含むものがあれば true。detectRecaptcha (#810) と同じ strict isVisible で
  * 非表示の toast 残骸を弾く。Create→clip card DOM 反映ラグで Suno が投入を reject した時に出る toast を
  * 検知し、空きスロットがあっても投入を止めるために使う。
@@ -932,7 +1039,7 @@ export function isQueueLimitErrorVisible(): boolean {
   return Array.from(dialogs).some(
     (el) =>
       isVisible(el) &&
-      (el.textContent ?? "").toLowerCase().includes(QUEUE_LIMIT_ERROR_TEXT)
+      includesLabel(el.textContent, SUNO_LABELS.generationInProgress)
   );
 }
 
