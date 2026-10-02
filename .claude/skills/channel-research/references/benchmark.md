@@ -151,7 +151,7 @@ subagent へは次を具体値で渡す:
 | `min_views` | 10000 | ベンチマーク対象の視聴数しきい値 |
 | `freshness_days` | 3 | レポート更新間隔（日） |
 | `gemini_thumbnail_analysis` | false | Gemini API によるサムネイル分析（Vertex AI 課金あり、通常は不要） |
-| `thumbnail_analysis.model` | gemini-2.5-flash | Gemini 分析モデル（`gemini_thumbnail_analysis: true` 時のみ） |
+| `thumbnail_analysis.model` | gemini-3.5-flash | Gemini 分析モデル（`gemini_thumbnail_analysis: true` 時のみ） |
 | `thumbnail_analysis.delay_sec` | 5 | API レート制限対策の待機秒数 |
 | `thumbnail_analysis.prompt` | 汎用プロンプト | ジャンル/世界観に合わせて上書き推奨 |
 

@@ -45,7 +45,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 2. `config/skills/masterup.json`（存在する場合）
 3. `config/skills/masterup.yaml`（JSON が存在しない場合の fallback）
 
-合成規則は `youtube_automation.configuration.skills.load_skill_config("masterup")` と同じで、チャンネル上書きが優先される。TS CLI `uv run yt-generate-master` は `config/skills/masterup.json` を優先し、存在しない場合のみ `config/skills/masterup.yaml` を fallback として読む。存在しない override は未設定として扱い、勝手に作成しない。
+合成規則は `youtube_automation.configuration.skills.load_skill_config("masterup")` と同じで、チャンネル上書きが優先される。CLI `uv run yt-generate-master` は `config/skills/masterup.json` を優先し、存在しない場合のみ `config/skills/masterup.yaml` を fallback として読む。存在しない override は未設定として扱い、勝手に作成しない。
 
 ## 前提
 
@@ -59,7 +59,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 ## 設定
 
 Python の `/music --master` 経路は skill-config (`.claude/skills/music/config.default.yaml::master`) とチャンネル上書きを deep-merge して読む。
-TS CLI `uv run yt-generate-master` は `audio` の実行時既定値を組み込み default として持ち、同梱 `config.default.yaml` の `audio.bitrate` / `audio.crossfade_duration` と同期テストで固定する。チャンネル側で上書きする場合は `config/skills/masterup.json` を優先する。既存チャンネル互換として `config/skills/masterup.yaml` もサポートするが、両方ある場合は JSON が優先される。TS CLI が読む `audio` section は optional で、`post_processing` / `pair_selection` だけの override は有効。`audio` が存在する場合は object でなければならず、未対応 YAML 行や空 scalar は config error として停止する。
+CLI `uv run yt-generate-master` は `audio` の実行時既定値を組み込み default として持ち、同梱 `config.default.yaml` の `audio.bitrate` / `audio.crossfade_duration` と同期テストで固定する。チャンネル側で上書きする場合は `config/skills/masterup.json` を優先する。既存チャンネル互換として `config/skills/masterup.yaml` もサポートするが、両方ある場合は JSON が優先される。CLI が読む `audio` section は optional で、`post_processing` / `pair_selection` だけの override は有効。`audio` が存在する場合は object でなければならず、未対応 YAML 行や空 scalar は config error として停止する。
 
 | 項目 | 既定 | 説明 |
 |---|---|---|

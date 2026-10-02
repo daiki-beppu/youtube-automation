@@ -1,6 +1,6 @@
 # imagegen Shared prompt schema bridge（試験導入）
 
-> 試験導入レイヤ。実本番のプロンプト構築フロー（`composition.py` / `scripts/generate_image.py`）
+> 試験導入レイヤ。実本番のプロンプト構築フロー（`composition.py` / `src/youtube_automation/commands/media/generate_image.py`）
 > からは **未接続**。issue #654 で導入した Shared prompt schema の bridge と、
 > 実本番接続を再評価する gate を本書だけで確認できるようにする。
 
@@ -83,7 +83,7 @@ text = prompt_schema.render(schema)
 ## 段階移行パスと並存設計
 
 本 bridge は実本番フロー（`composition.py::apply_composition_rules` /
-`scripts/generate_image.py` の prompt 組み立て）から **未接続**。既存の
+`src/youtube_automation/commands/media/generate_image.py` の prompt 組み立て）から **未接続**。既存の
 `diff_prompt_template` ベースの手順型プロンプト構築は完全に温存される。
 
 将来の段階移行は以下の順序を想定する（本 issue のスコープ外、別 epic で着手）:

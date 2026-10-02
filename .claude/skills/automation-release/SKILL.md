@@ -42,7 +42,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 - 本スキル = リリース実施（prepare + publish、Python 本体 / 拡張の両系列）
 - 下流追従 = 各チャンネルリポジトリで `/automation --update` スキル（本リポジトリで配布）が CHANGELOG.md / GitHub Release 本文を読み取って実施
 - 拡張の配布・インストール側は `/extension`（Release asset を読む消費側。tag `ext-v*` / asset `<name>-<version>-chrome.zip` の命名契約を本スキルから変えない）
-- グローバル `/release` スキルは廃止済みで存在しない。本リポジトリのリリースは常に本スキルを使う
+- 本リポジトリのリリースは常に本スキルを使う
 
 ## 前提
 
@@ -50,7 +50,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 
 - 実行場所が youtube-automation リポジトリ本体（`pyproject.toml::[project].name` が `youtube-channels-automation`）であること。下流チャンネルリポジトリでの追従は `/automation --update` を使う
 - `gh` CLI がインストール済みで認証済み（`gh auth status` が green）であること。未認証なら `gh auth login` を依頼して停止する
-- prepare（Python 本体）の場合、`CHANGELOG.md` の `[Unreleased]` セクションに内容が書き溜められていること。空の場合は prepare を中止する（各 PR 時点で書き溜める運用が前提）
+- prepare（Python 本体）の場合、1-1 で `changelog.d/` の fragment を `[Unreleased]` へ集約した後に内容があること。空の場合は prepare を中止する
 - Python 本体のバージョン管理は `pyproject.toml::version` を **唯一のソース** とする（`src/youtube_automation/__init__.py` は `importlib.metadata` 経由で自動追従）。配布は git+https + tag pin（PyPI 公開しない）
 - extension release のバージョン管理は `extensions/<name>/package.json::version` を **唯一のソース** とし、Python 本体とは完全独立（契約: `references/release-contracts.md`）。extension release では `pyproject.toml` / `uv.lock` / `CHANGELOG.md` 昇格に一切触らない
 - extension release の場合、`references/verify-extensions.sh <name>` がexit 0を返すこと。non-zeroなら出力された原因を解消するまで停止する
@@ -100,7 +100,7 @@ open_release_branch=$(git ls-remote --heads origin "release/v*" | head -1)
 
 #### 1-1. バージョン判定
 
-`CHANGELOG.md::[Unreleased]` の内容を読み、semver bump 種別を提案する:
+判定の前に `uv run yt-changelog-compile` で `changelog.d/` の fragment を `[Unreleased]` へ集約し（fragment が無ければ no-op）、集約後の `CHANGELOG.md::[Unreleased]` の内容を読んで semver bump 種別を提案する:
 
 - `### Removed` 有り、または本文中に `BREAKING` / `破壊的変更` 記述 → **major**（検索は **大小文字を問わない**。`**Breaking:**` / `breaking(scope):` 表記を取りこぼさないこと）
 - `### Added` 有り → **minor**
@@ -608,7 +608,6 @@ merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/relea
 
 ## Rules
 
-- このスキル自体の編集は **takt 経由 NG**（CLAUDE.md 規約: skill 編集は通常の Claude Code 対話セッションで）
 - `src/youtube_automation/__init__.py` は **直接編集禁止**（`importlib.metadata` 経由の動的読み込みのため、版数は `pyproject.toml` を bump するだけで追従する）
 - リリース PR の commit メッセージは `chore(release): v<VER> リリース PR` 固定（日本語 Conventional Commits 準拠 + 検索容易性）
 - `release/v<VER>` ブランチ命名は固定（state detection と publish クリーンアップが依存）

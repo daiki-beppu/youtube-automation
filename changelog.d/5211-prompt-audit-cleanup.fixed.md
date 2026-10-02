@@ -1,0 +1,2 @@
+- `/automation-release` の prepare が `changelog.d/` の fragment を集約する前に `[Unreleased]` の空判定と semver 判定を行い、誤って中止される問題を修正した（#5211）。
+- `wf-new` の自己参照・委譲先の重複と、skill / AGENTS.md に残っていた実在しない参照や旧版差分の言い回しを現行の記述に直した（#5211）。

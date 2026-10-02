@@ -6,7 +6,7 @@ description: "Use when 既存コレクション（collections/planning/）を一
 
 ## 前後工程
 
-- `前工程`: `/wf-new`, `/wf-new`
+- `前工程`: `/wf-new`
 - `後工程`: `/analytics`, `/analytics --flop`
 - `委譲先`: `/music --master`, `/music --generate`, `/video --generate`, `/video --describe`, `/publish --playlist`, `/publish --upload`
 
@@ -83,7 +83,7 @@ uv run yt-workflow-state --collection "$COLLECTION_DIR" touch
 
 - `skip_audio_approval` (default `true`): `false` にすると `prepared` フェーズ 2-B（音源承認ゲート）で、最終マスター候補を検出した時点で承認を取る
 - `skip_upload_approval` (default `true`): `false` にすると `mastered` フェーズ 3-B（アップロード承認ゲート）で、`/publish --upload` 実行直前に承認を取る
-- 既定値は両方 `true` で、`workflow.json` に何も書かれていない既存チャンネルは従来通り全自動進行（後方互換）
+- 既定値は両方 `true` で、`workflow.json` に未設定なら全自動で進行する
 - 旧キー `approval_gates.audio` / `approval_gates.upload` は廃止済みで、設定に残っている場合は `ConfigError` で停止する。`skip_audio_approval` / `skip_upload_approval` へ移行する
 - 値の解決は `youtube_automation.configuration.load_config().workflow.wf_next` 経由（`skip_audio_approval` / `skip_upload_approval` / `skip_manual_mastering`。コード側で参照可能）
 
@@ -94,7 +94,7 @@ uv run yt-workflow-state --collection "$COLLECTION_DIR" touch
 `workflow.wf_next.skip_manual_mastering`（default `false`）は、`prepared` フェーズ 2-B（マスター音源検出）で raw master と別の最終マスター候補が `01-master/` に見つからないときの挙動を切り替える。
 
 - `true`: `assets.raw_master` のファイル名をそのまま `assets.master_audio` として採用し、`phase: "mastered"` へ進む。「raw（自動クロスフェード結合出力）を外部 DAW でマスタリングせずそのまま公開する」運用（raw=final）をチャンネル単位で宣言するためのオプション
-- `false`（未設定含む）: 従来通り、ユーザーが最終マスターを `01-master/` に配置するまで停止する
+- `false`（未設定含む）: ユーザーが最終マスターを `01-master/` に配置するまで停止する
 
 `skip_audio_approval` とは独立した設定であることに注意。`skip_audio_approval` は「候補を採用する前に確認プロンプトを出すかどうか」だけを制御し、候補そのものの自動採用／スキップ判断には関与しない。`skip_manual_mastering: true` かつ `skip_audio_approval: false` の場合は、raw master を採用する前に承認を取る。
 
@@ -183,7 +183,7 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
      - URL 再入力は要求せず、「ダウンロードが完了していない可能性があります。`/music --generate` を再開するか手動でダウンロードしてから `/wf-next` を再実行してください」を表示
      - **ここでフロー停止**（`/music --master` は自動実行しない）
    - **URL 未記録（キー自体が無い、または `null`）かつ `02-Individual-music/` に音声ファイルも無い**:
-     - 従来通りユーザーにプレイリスト URL を AskUserQuestion で取得
+     - ユーザーにプレイリスト URL を AskUserQuestion で取得
      - URL 取得後、上記と同じくメインが `/music --master` の承認分岐を解決し、Agent ツールで Subagent Contract を委譲する
      - メインが `01-master/master.*`、`01-master/.selection.log`、`01-master/.loudness-receipt.json` を検証し、上記と同じ receipt 付き `yt-raw-master-check --apply` を実行する。この CLI が owner 経由で state を更新するため重ねて変更しない
      - ガイダンス: 「raw master をミキシング+マスタリングし、最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」
@@ -221,7 +221,7 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
      - `assets.master_audio` にファイル名のみ記録 → `phase: "mastered"` → 自動的に公開フローへ進む（`skip_audio_approval = true` のときは確認なし）
    - 検出できない場合:
      - `workflow.wf_next.skip_manual_mastering = true` のとき（raw=final 運用）: `assets.raw_master` のファイル名をそのまま最終マスターとして採用する。**承認ゲート（`skip_audio_approval = false`）が有効なら**、raw master 直採用であることを明示して AskUserQuestion で確認してから進む。`assets.master_audio` に `assets.raw_master` と同じファイル名を記録 → `phase: "mastered"` → 自動的に公開フローへ進む
-     - `skip_manual_mastering = false`（未設定含む、デフォルト）: ガイダンス「最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」を表示して停止（従来動作）
+     - `skip_manual_mastering = false`（未設定含む、デフォルト）: ガイダンス「最終マスターを 01-master/ に配置後、`/wf-next` を再実行してください」を表示して停止
 
 #### `mastered` → 公開フロー（アップロード承認ゲートあり）
 
@@ -253,7 +253,7 @@ status を記録した後は、成功時だけでなく blocked / failed の停�
    - plan 結果が `📅 公開設定: 非公開でアップロード（即時公開は行いません）` の場合は、予約設定または YouTube Studio での手動公開を案内する。`📅 公開設定: 限定公開 (unlisted)` / `📅 公開設定: 非公開 (private)` が出た場合は、その公開範囲でアップロードされることを AskUserQuestion の文面に含める。`📅 公開予定: <日時>` が出た場合は「今アップロード → `<日時>` に自動で一般公開」と、実際の予約時刻を AskUserQuestion の文面に含める
    - `/publish --upload` を呼ぶ前に AskUserQuestion で「YouTube にアップロード + live 移行してよいか」を確認する。このとき、plan 結果に基づく公開タイミングまたは公開範囲（非公開アップロード / 限定公開 / 非公開 / 予約公開日時）を必ず明示する
    - 承認されたら次ステップへ進む。却下されたら `phase` を `mastered` のままにして停止し、ガイダンス「準備が整ったら `/wf-next` を再実行してください」を表示
-   - `skip_upload_approval = true` のときは確認なしでそのまま進む（従来の全自動挙動）
+   - `skip_upload_approval = true` のときは確認なしでそのまま進む
 4. **初投稿プレイリスト初期化**:
    - `config/channel/playlists.json` が存在する場合、Skill `/publish --playlist` で `uv run yt-playlist-status` を実行する
    - `playlist_id` 未設定の `(未作成)` がある場合は、`uv run yt-playlist-manager --init --dry-run` を表示し、ユーザー確認後に `uv run yt-playlist-manager --init` を実行してから `/publish --upload` へ進む

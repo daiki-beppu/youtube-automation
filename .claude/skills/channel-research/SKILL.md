@@ -47,7 +47,7 @@ description: "Use when チャンネル調査を状態判定付きで一括実行
 | `--benchmark` | `.claude/skills/channel-research/config.default.yaml::benchmark` | `config/skills/benchmark.yaml`（存在する場合） | `load_skill_config("benchmark")` |
 | `--discover` | `.claude/skills/channel-research/config.default.yaml::discover` | `config/skills/discover-competitors.yaml`（存在する場合） | `load_skill_config("discover-competitors")` |
 
-各行の default とチャンネル上書きを deep-merge し、上書きを優先する。`config/skills/channel-research.yaml` は先行作成しない。名前空間キーへの実移行が提供された段階で `uv run yt-skills migrate-config --channel-dir . --dry-run` で計画を確認し、明示 apply する。現段では旧キーを改名せず、下流 override を勝手に作成しない・変更しない。
+各行の default とチャンネル上書きを deep-merge し、上書きを優先する。`config/skills/channel-research.yaml` は先行作成しない。`benchmark` の override は `uv run yt-skills migrate-config --channel-dir . --dry-run` で移行計画を確認し、ユーザーが明示 apply した場合だけ移行する。`discover-competitors` は移行対象外のため旧キーのまま読む。どちらも下流 override を勝手に作成しない・変更しない。
 
 `--market` の旧 2 owner、`--voice` と `--thumbnail` の旧 owner は `config.default.yaml` / `config/skills/*.yaml` を持たなかったため、新しい設定キーや override を先行作成しない。
 
