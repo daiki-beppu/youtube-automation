@@ -254,11 +254,10 @@ def test_suno_helper_documents_browser_use_primary_flow() -> None:
 def test_suno_helper_documents_lyrics_mode_setup_contract() -> None:
     """Given suno-helper の operator 向け手順
     When 非空 lyrics を自動投入する前提を読む
-    Then Write の所在、Instrumental tag の注入理由、空 entry の例外が分かる。
+    Then Lyrics 欄の所在、Instrumental tag の注入理由、空 entry の例外が分かる。
     """
     for document in (_read_suno_helper(), _read_suno_helper_readme()):
-        assert "Advanced → More options" in document
-        assert "Lyrics mode → Write" in document
+        assert "「曲」（Song）タブ → アドバンスド（Advanced）→ 歌詞（Lyrics）欄" in document
         assert "`[Instrumental]`" in document
         assert "Lyrics 欄へ" in document
         assert "`lyrics` が真に空" in document

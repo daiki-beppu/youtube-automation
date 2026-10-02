@@ -20,6 +20,7 @@ import {
   abortableSleep,
   detectRecaptcha,
   diagnoseLyricsInputState,
+  injectAdvancedFields,
   isQueueLimitErrorVisible,
   QUEUE_LIMIT_ERROR_SELECTOR,
   resolveAdvancedFields,
@@ -200,7 +201,7 @@ describe("diagnoseLyricsInputState: 現行 Suno UI の ARIA 状態診断 (#1899)
         `Create form mode が ${selectedName} になっています。`
       );
       expect(diagnoseLyricsInputState()).toContain(
-        "Advanced → More options → Lyrics mode → Write"
+        "「曲」タブ → アドバンスド → 歌詞（Lyrics）欄"
       );
       expect(diagnoseLyricsInputState()).toContain(
         "非空の lyrics（[Instrumental] を含む）を Lyrics 欄へ注入"
@@ -244,20 +245,104 @@ describe("diagnoseLyricsInputState: 現行 Suno UI の ARIA 状態診断 (#1899)
       },
     ],
   ] as const)(
-    "Given %s When 診断する Then 3 項目の fallback チェックリストを返す",
+    "Given %s When 診断する Then fallback チェックリストを返す",
     (_label, arrange) => {
       arrange();
 
       const message = diagnoseLyricsInputState();
-      expect(message).toContain("Advanced タブが選択されているか");
-      expect(message).toContain("More options");
-      expect(message).toContain("Lyrics mode が Write になっているか");
+      expect(message).toContain(
+        "作成する内容が「曲」（Song）タブになっているか"
+      );
+      expect(message).toContain(
+        "アドバンスド（Advanced）タブが選択されているか"
+      );
+      expect(message).toContain("歌詞（Lyrics）欄が表示されているか");
       expect(message).toContain(
         "非空の lyrics（[Instrumental] を含む）を Lyrics 欄へ注入"
       );
-      expect(message).toContain("UI 言語が日本語になっていないか（英語推奨）");
+      expect(message).not.toContain("英語推奨");
     }
   );
+
+  // 2026-10 の Suno 改装: Create form mode は Simple / Advanced の 2 択になり、Sounds は
+  // 上段の「作成する内容」タブ（Song / Speech / Sounds）へ移った。UI は日本語化される。
+  it.each([
+    ["シンプル", "Simple"],
+    ["Simple", "Simple"],
+  ] as const)(
+    "Given 新 UI の 2 択 tablist で %s を選択 When 診断する Then Advanced タブを案内する",
+    (selectedName, canonical) => {
+      addModeGroup(
+        "tablist",
+        "tab",
+        "aria-selected",
+        selectedName === "シンプル"
+          ? ["シンプル", "アドバンスド"]
+          : ["Simple", "Advanced"],
+        selectedName,
+        "Create formモード"
+      );
+
+      expect(diagnoseLyricsInputState()).toContain(
+        `Create form mode が ${canonical} になっています。`
+      );
+    }
+  );
+
+  it.each([
+    ["スピーチ", "Speech"],
+    ["サウンド", "Sounds"],
+    ["Speech", "Speech"],
+  ] as const)(
+    "Given 作成する内容タブで %s を選択 When 診断する Then 「曲」タブを案内する",
+    (selectedName, canonical) => {
+      addModeGroup(
+        "tablist",
+        "tab",
+        "aria-selected",
+        /^[A-Z]/.test(selectedName)
+          ? ["Song", "Speech", "Sounds"]
+          : ["曲", "スピーチ", "サウンド"],
+        selectedName,
+        "作成する内容"
+      );
+      addModeGroup(
+        "tablist",
+        "tab",
+        "aria-selected",
+        ["シンプル", "アドバンスド"],
+        "アドバンスド",
+        "Create formモード"
+      );
+
+      expect(diagnoseLyricsInputState()).toMatch(
+        new RegExp(`^作成する内容が ${canonical} になっています。`)
+      );
+    }
+  );
+
+  it("Given 新 UI の 曲 + アドバンスド When 診断する Then fallback チェックリストを返す", () => {
+    addModeGroup(
+      "tablist",
+      "tab",
+      "aria-selected",
+      ["曲", "スピーチ", "サウンド"],
+      "曲",
+      "作成する内容"
+    );
+    addModeGroup(
+      "tablist",
+      "tab",
+      "aria-selected",
+      ["シンプル", "アドバンスド"],
+      "アドバンスド",
+      "Create formモード"
+    );
+
+    expect(diagnoseLyricsInputState()).toMatch(
+      /^Lyrics 欄を表示できる状態か確認してください:/
+    );
+  });
 
   it("Given ARIA 状態を持つ DOM When 診断する Then DOM を変更しない", () => {
     addLyricsMode("Prompt");
@@ -1244,7 +1329,7 @@ describe("isQueueLimitErrorVisible: queue 上限エラー toast の検知 (#847)
   // 契約 (draft が実装する public API, shared/dom.ts):
   //   - QUEUE_LIMIT_ERROR_SELECTOR: string = '[role="dialog"]'
   //   - isQueueLimitErrorVisible(): boolean
-  //     = 可視な `[role="dialog"]` のうち英語見出し "generation in progress" を
+  //     = 可視な `[role="dialog"]` のうち見出し "Generation in progress" / "生成中" を
   //       case-insensitive substring match で含むものがあれば true。
   //     detectRecaptcha (#810) と同じ strict isVisible で非表示 toast 残骸を弾く。
 
@@ -1270,6 +1355,11 @@ describe("isQueueLimitErrorVisible: queue 上限エラー toast の検知 (#847)
         japanese:
           "他の曲の生成が完了するまでお待ちいただき、その後もう一度お試しください。",
       });
+      expect(isQueueLimitErrorVisible()).toBe(true);
+    });
+
+    it("Given 日本語 UI の見出し '生成中' When 検知する Then true (2026-10 日本語化)", () => {
+      addQueueErrorDialog({ text: "生成中" });
       expect(isQueueLimitErrorVisible()).toBe(true);
     });
 
@@ -1892,5 +1982,91 @@ describe("resolveAdvancedFields: vocal gender (Male / Female) ボタン解決", 
     const fields = resolveAdvancedFields();
 
     expect(fields.vocalGender.male).toBeNull();
+  });
+});
+
+// 2026-10 の Suno 改装で UI が日本語化された（chrome-devtools-mcp 実 DOM 検証）。
+// More Options の各フィールドが日本語ラベルでも解決できること、Duration が排他 2 状態
+// （Auto: Custom / Auto ボタンのみ、Custom: slider のみ）のどちらからでも注入できることを担保する。
+describe("resolveAdvancedFields / injectAdvancedFields: 日本語 UI (2026-10)", () => {
+  function addDataSelectedButton(label: string): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.setAttribute("data-selected", "false");
+    button.textContent = label;
+    document.body.appendChild(button);
+    setRect(button, VISIBLE_RECT);
+    return button;
+  }
+
+  it("Given 日本語ラベルの More Options When 解決する Then 全フィールドを解決する", () => {
+    const exclude = document.createElement("input");
+    exclude.placeholder = "スタイルを除外";
+    document.body.appendChild(exclude);
+    setRect(exclude, VISIBLE_RECT);
+    const male = addDataSelectedButton("男性");
+    const female = addDataSelectedButton("女性");
+    const custom = addDataSelectedButton("カスタム");
+    const weirdness = addSlider({ ariaLabel: "奇抜さ", value: 50 });
+    const styleInfluence = addSlider({
+      ariaLabel: "スタイルの影響",
+      value: 50,
+    });
+    addSlider({ ariaLabel: "バリエーション", value: 1 });
+
+    const fields = resolveAdvancedFields();
+
+    expect(fields.excludeStyles).toBe(exclude);
+    expect(fields.vocalGender).toEqual({ male, female });
+    expect(fields.weirdness).toBe(weirdness);
+    expect(fields.styleInfluence).toBe(styleInfluence);
+    expect(fields.duration).toEqual({ customButton: custom, slider: null });
+  });
+
+  it("Given Duration slider 未描画 When duration_sec を注入する Then Custom を押して描画された slider へ注入する", async () => {
+    const custom = addDataSelectedButton("カスタム");
+    custom.addEventListener("click", () => {
+      const slider = addSlider({ ariaLabel: "長さ", value: 180 });
+      slider.setAttribute("aria-valuemin", "10");
+      slider.setAttribute("aria-valuemax", "360");
+    });
+
+    await injectAdvancedFields({ duration_sec: 185 }, resolveAdvancedFields());
+
+    expect(
+      document
+        .querySelector('[role="slider"][aria-label="長さ"]')
+        ?.getAttribute("aria-valuenow")
+    ).toBe("185");
+  });
+
+  it("Given Custom 適用済み（slider のみ・ボタン無し） When 解決して注入する Then slider へ直接注入する", async () => {
+    const slider = addSlider({ ariaLabel: "長さ", value: 180 });
+    slider.setAttribute("aria-valuemin", "10");
+    slider.setAttribute("aria-valuemax", "360");
+
+    const fields = resolveAdvancedFields();
+    expect(fields.duration).toEqual({ customButton: null, slider });
+
+    await injectAdvancedFields({ duration_sec: 178 }, fields);
+
+    expect(slider.getAttribute("aria-valuenow")).toBe("178");
+  });
+
+  it("Given Custom を押しても slider が描画されない When duration_sec を注入する Then fail-loud に停止する", async () => {
+    vi.useFakeTimers();
+    try {
+      addDataSelectedButton("カスタム");
+
+      const result = injectAdvancedFields(
+        { duration_sec: 185 },
+        resolveAdvancedFields()
+      ).catch((error: unknown) => error);
+      await vi.runAllTimersAsync();
+
+      expect(String(await result)).toMatch(/Custom を押しても slider/);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -2033,7 +2033,7 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     }
   );
 
-  it("Given ARIA 状態を特定できず Lyrics 欄がない When run を受ける Then 3 項目 checklist つき ERROR で停止する", async () => {
+  it("Given ARIA 状態を特定できず Lyrics 欄がない When run を受ける Then checklist つき ERROR で停止する", async () => {
     makeViewButton("Newest ▼");
     makeViewButton("Grid");
     makeTextarea(null);
@@ -2063,11 +2063,10 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
           "phase" in payload &&
           payload.phase === PHASE.ERROR
       )?.message;
-      expect(errorMessage).toContain("Advanced タブが選択されているか");
-      expect(errorMessage).toContain("Lyrics mode が Write になっているか");
       expect(errorMessage).toContain(
-        "UI 言語が日本語になっていないか（英語推奨）"
+        "アドバンスド（Advanced）タブが選択されているか"
       );
+      expect(errorMessage).toContain("歌詞（Lyrics）欄が表示されているか");
     });
     expect(harness.feedPollerStop).toHaveBeenCalledOnce();
   });
@@ -2333,11 +2332,10 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
           payload.phase === PHASE.ERROR
       ) as { message: string }
     ).message;
-    expect(errorMessage).toContain("Advanced タブが選択されているか");
-    expect(errorMessage).toContain("Lyrics mode が Write になっているか");
     expect(errorMessage).toContain(
-      "UI 言語が日本語になっていないか（英語推奨）"
+      "アドバンスド（Advanced）タブが選択されているか"
     );
+    expect(errorMessage).toContain("歌詞（Lyrics）欄が表示されているか");
     expect(consoleError).toHaveBeenCalledWith(
       "[suno-helper] Lyrics 欄への全注入方式が失敗しました",
       expect.objectContaining({

@@ -167,8 +167,21 @@ beforeEach(() => {
 });
 
 describe("REMIX_BTN_SELECTOR: 実 DOM 検証で確定した in-flight マーカー", () => {
-  it('Given 定数 When 読む Then `button[aria-label="Remix clip"]` である', () => {
-    expect(REMIX_BTN_SELECTOR).toBe('button[aria-label="Remix clip"]');
+  it.each(["Remix clip", "Remix", "リミックス"])(
+    "Given aria-label=%s の button When 照合する Then Remix btn として一致する",
+    (label) => {
+      const button = document.createElement("button");
+      button.setAttribute("aria-label", label);
+
+      expect(button.matches(REMIX_BTN_SELECTOR)).toBe(true);
+    }
+  );
+
+  it("Given Remix 以外の aria-label When 照合する Then 一致しない", () => {
+    const button = document.createElement("button");
+    button.setAttribute("aria-label", "Remix settings");
+
+    expect(button.matches(REMIX_BTN_SELECTOR)).toBe(false);
   });
 });
 
