@@ -195,7 +195,7 @@ GitHub Actions では独立した `evals.yml` を nightly / `workflow_dispatch` 
 
 - 実体は常に `.claude/skills/<name>/` を編集する（`.agents/skills` は Codex CLI 探索パス用の symlink）。付属スクリプトは `.claude/skills/<name>/references/` に置く（ルート直下 `scripts/` は設けない）
 - skill も通常コードと同じ issue 専用 linked worktree で編集する。利用中の agent が `.claude/skills/**` を protected path として扱い書き込みを拒否する場合は、権限を迂回せず Codex または許可済みの対話セッションへ同じ issue worktree を引き継ぐ
-- 書き方の規約: frontmatter の記法は `CLAUDE.md`「### skill frontmatter」、SKILL.md 本文の書き方は `docs/skill-design/skill-authoring-guidelines.md` に従う
+- 書き方の規約: frontmatter の記法は `CLAUDE.md`「非自明な規約・落とし穴」の skill frontmatter の項、SKILL.md 本文の書き方は `docs/skill-design/skill-authoring-guidelines.md` に従う
 
 ### 2. 検証（編集後に実行するもの）
 
@@ -265,7 +265,7 @@ bash .claude/skills/automation/references/pytest-quiet.sh tests/repo/test_skills
 
 ### 新規 skill 追加チェックリスト
 
-- [ ] `.claude/skills/<name>/SKILL.md` を作成（`docs/skill-design/skill-authoring-guidelines.md` 準拠。frontmatter 記法は `CLAUDE.md`「### skill frontmatter」）
+- [ ] `.claude/skills/<name>/SKILL.md` を作成（`docs/skill-design/skill-authoring-guidelines.md` 準拠。frontmatter 記法は `CLAUDE.md`「非自明な規約・落とし穴」の skill frontmatter の項）
 - [ ] 付属スクリプト・参照資料は `.claude/skills/<name>/references/` に配置
 - [ ] 契約テスト `tests/repo/test_<name>_skill_contract.py` を追加（雛形は既存の `tests/repo/test_video_description_skill_contract.py` / `tests/repo/test_flop_analysis_skill_contract.py` を参照。SKILL.md の必須節・参照ファイルの存在・frontmatter 記述を機械担保する）
 - [ ] `docs/features.md` のカタログに 1 行追加し、冒頭の「全 **N** 個」を更新

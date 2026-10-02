@@ -227,7 +227,7 @@ tmp/ 残骸クリーンアップ完了
 | `<CHANNEL_DIR>/tmp/veo-operations/` の resume state | /thumbnail --loop（不要時の手動削除手順は同 skill 参照） |
 | `<CHANNEL_DIR>/tmp/lyria-recovered/` の退避音源 | /music --generate |
 
-tmp/ 掃除は「スキャン → ドライラン → 明示承認 → 削除 → レポート」という本 skill の既存安全フローと完全に同型であり、削除 CLI（yt-clean 等）を新設すると承認ゲートを CLI 側に再実装する重複が生じるため、本 skill への統合とした（#1671）。通常モードの `clean-scan.py` は pull 後の安全条件分類だけを担う read-only preflight で、削除・承認は行わない。
+tmp/ 掃除も「スキャン → ドライラン → 明示承認 → 削除 → レポート」の安全フローで行う。通常モードの `clean-scan.py` は pull 後の安全条件分類だけを担う read-only preflight で、削除・承認は行わない。
 
 ## 障害時ガイダンス
 

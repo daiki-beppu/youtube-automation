@@ -3,7 +3,7 @@
 
 - `前工程`: `/wf-new`
 - `後工程`: `/publish`, `/analytics`
-- `委譲先`: `/wf-new`, `/music --generate`, `/music --generate`, `/music --master`, `/wf-next`, `/publish`
+- `委譲先`: `/wf-new`, `/music --generate`, `/music --master`, `/wf-next`, `/publish`
 
 ## 成果物
 

@@ -161,7 +161,7 @@ healthcheck は systemd 状態を 4 通りに分類し、**真の異常のみ通
 
 さらに `NRestarts` を `/var/lib/youtube-stream/last_n_restarts` と比較する。増加を観測した cron では restart 通知を 1 通だけ送り、同じ観測の状態遷移通知とは重複させない。baseline 不在・非数値への破損・counter 減少（service 再作成など）は異常扱いせず、現在値へ無音で再基準化する。
 
-24/7 の実機 SIGKILL 確認は配信を切断する破壊的操作であり、VPS への接続と実行には利用者の明示的承認が必要。本 issue の文書更新では実行していない。承認後は healthcheck を一度実行して `NRestarts` baseline を作り、対象を限定した SIGKILL 後の次回 cron で `restart detected` が 1 通だけ届くことを確認する。11h+1h は有限 `RuntimeMaxUSec` の計画休止をまたいで通知が 0 通であることを確認する。
+24/7 の実機 SIGKILL 確認は配信を切断する破壊的操作であり、VPS への接続と実行には利用者の明示的承認が必要。承認後は healthcheck を一度実行して `NRestarts` baseline を作り、対象を限定した SIGKILL 後の次回 cron で `restart detected` が 1 通だけ届くことを確認する。11h+1h は有限 `RuntimeMaxUSec` の計画休止をまたいで通知が 0 通であることを確認する。
 
 帯域モニタリング cron 例（ローカル or CI）:
 

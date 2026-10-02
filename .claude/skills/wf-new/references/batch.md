@@ -2,7 +2,7 @@
 
 - `前工程`: `/setup --channel`, `/setup`
 - `後工程`: `/wf-next`, `/music --generate`
-- `委譲先`: `/wf-new`, `/wf-new`
+- `委譲先`: `/wf-new`
 
 ## 成果物
 

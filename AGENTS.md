@@ -2,7 +2,7 @@
 
 This file provides guidance to Codex CLI (developers.openai.com/codex) when working with code in this repository.
 
-**プロジェクト概要・アーキテクチャ・開発規約（設定アクセス / エラーハンドリング / Import / 依存ポリシー / スクリプト配置 / テスト / パッケージング / セキュリティ / CHANGELOG ゲート / 開発ワークフロー）は `CLAUDE.md` に一元化している。実装・レビューに着手する前に必ず `CLAUDE.md` を読むこと。**
+共通の規約と落とし穴は `CLAUDE.md` に、詳細は同ファイルが参照する docs にある。実装・レビューに着手する前に `CLAUDE.md` を読む。
 
 詳細ドキュメント: `docs/architecture.md`（責務境界・依存方向・公開/内部境界・新規ファイル配置規則・変更時の参照対応表を含むモジュール構成）/ `docs/development.md`（パッケージング・extensions・品質ゲート）/ `docs/takt-operations.md`（issue / worktree 運用。worktree 上のエージェントセッションで直接実装する）。
 
@@ -15,7 +15,7 @@ This file provides guidance to Codex CLI (developers.openai.com/codex) when work
 
 ### SKILL.md frontmatter 規約
 
-- 記法規約は `CLAUDE.md`「### skill frontmatter」を正とする。検証は `uv run yt-skills lint`
+- 記法規約は `CLAUDE.md`「非自明な規約・落とし穴」の skill frontmatter の項を正とする。検証は `uv run yt-skills lint`
 
 ### Claude Code 固有表現の読み替え
 

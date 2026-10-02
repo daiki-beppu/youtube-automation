@@ -819,7 +819,7 @@ def test_thumbnail_skill_documents_full_auto_selection_gate_contract() -> None:
     for gate in ("テーマ確認", "生成可否", "textless 背景承認", "テキスト付き候補承認"):
         assert gate in opening_gate
     assert "mode: full" in opening_gate
-    assert "残り 3 ゲートは従来どおり実行" in opening_gate
+    assert "残り 3 ゲートは実行する" in opening_gate
 
     assert "config のテーマ設定" in auto_selection
     assert "collection metadata" in auto_selection

@@ -22,8 +22,6 @@ description: "Use when 音楽制作を状態判定付きで一括実行または
 - 2 個以上なら排他違反として停止し、1 つだけ指定するよう促す
 - 1 個なら対応する reference を読み、その一段だけを実行する。残りの引数はその mode の引数として扱う
 - 0 個なら chain manifest に従い状態判定付きで進める
-- 現段で実装済みの mode は `--prompt` / `--lyric` / `--generate` / `--master`
-- mode は最大 5 件とし、判定規則を複製しない
 
 | mode | 読む reference |
 |---|---|

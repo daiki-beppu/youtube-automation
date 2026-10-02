@@ -32,7 +32,7 @@ description: "Use when コレクションの YouTube サムネイル（thumbnail
 - `20-documentation/thumbnail-prompts.md` に textless 背景用プロンプトとテキスト付きサムネの生成記録を保存済み。`textless.enabled: false` では textless プロンプトの代わりに共用設定、コピー元、コピー先、検証済み SHA-256 を保存済み
 - `uv run yt-workflow-state --collection <collection-path> set-thumbnail-approved true` が成功済み
 - `archive.enabled: true` の場合は `assets/thumbnail-gallery/<collection-dir-name>.<ext>` に確定サムネを保存済み
-**全自動 Hard Gate**: deep-merge 後の `image_generation.auto_selection.enabled: true` かつ `mode: full` のときだけ、テーマ確認・生成可否（`confirm_cost()`）・textless 背景承認・テキスト付き候補承認の 4 ゲートをすべて省略する。`enabled: true` でも `mode` が未設定または `selection_only` なら候補承認だけを省略し、残り 3 ゲートは従来どおり実行する。`enabled: false` / 未設定なら全ゲートを維持する。`full` でテーマを一意に解決できない、生成コマンドが非 0、期待成果物がない、または自動選択に失敗した場合は silent fallback せず、後述の「full モード失敗時の手動切替」に従って停止する。
+**全自動 Hard Gate**: deep-merge 後の `image_generation.auto_selection.enabled: true` かつ `mode: full` のときだけ、テーマ確認・生成可否（`confirm_cost()`）・textless 背景承認・テキスト付き候補承認の 4 ゲートをすべて省略する。`enabled: true` でも `mode` が未設定または `selection_only` なら候補承認だけを省略し、残り 3 ゲートは実行する。`enabled: false` / 未設定なら全ゲートを維持する。`full` でテーマを一意に解決できない、生成コマンドが非 0、期待成果物がない、または自動選択に失敗した場合は silent fallback せず、後述の「full モード失敗時の手動切替」に従って停止する。
 ## Subagent Contract
 - **入力**: 対象コレクション、生成対象（`thumbnail` / `main`）
 - **成果物**: `10-assets/thumbnail-vN.jpg/png` または `10-assets/main-vN.png/jpg`、`20-documentation/thumbnail-prompts.md`
@@ -46,7 +46,7 @@ subagent は `workflow-state.json` へ書き込まず `AskUserQuestion` を実�
 | 引数 | 説明 | 例 |
 |------|------|-----|
 | `$ARGUMENTS` | テーマ・活動指定（省略可） | `/thumbnail fiddle playing` |
-| 未指定 | `mode: full` は config → collection metadata の順で自動決定。それ以外は従来のテーマ確認 | `/thumbnail` |
+| 未指定 | `mode: full` は config → collection metadata の順で自動決定。それ以外はテーマを確認する | `/thumbnail` |
 ## 想定 API call 数
 | API | call 数 / 実行 | 変動要因 |
 |---|---|---|
@@ -122,7 +122,7 @@ uv run yt-generate-image --ttp-strict-references --prompt "<prompt_prefix を含
 - `reference_images.default` には同じベンチマークチャンネル内の別サムネイル画像を並べる
 - `--max-attempts N` のときは N 枚以上のユニーク参照画像が必要。不足・重複・同一参照の再利用はエラー
 - `--reference-index N` を指定した場合のみ単一参照固定になり、attempt 数は 1 に固定される
-- `--reference` 使用時は `composition_prefix` が自動スキップされる（generate_image.py 修正済み）
+- `--reference` 使用時は `composition_prefix` が自動スキップされる
 パス解決と collection 間ローテーションの詳細は [generation workflow 詳細](references/generation-workflows.md) に従う。
 ## プロンプト構築
 生成時は `image_generation.gemini.diff_prompt_template` のプレースホルダを置換し、TTP では `${ip_safety_clause}` を必ず展開する。textless 再生成では承認済み `thumbnail.jpg` を参照し、テキスト除去指示だけを足す。Two-Phase のテキスト付き候補は `thumbnail_text.text_overlay_prompt` を入口とする。 参照画像主導の原則、opt-in clause の選び方、完成プロンプト例、モード別差分は [generation workflow 詳細](references/generation-workflows.md) を読む。
@@ -246,7 +246,7 @@ textless 再生成プロンプトでは、承認済みサムネの構図・主�
 - **テキスト除去**: textless 再生成では、承認済みサムネ内のタイトル・字幕・チャンネル名・ロゴ・タイポグラフィが残りやすい。`text_strip_clause` / `Remove all text` を明示し、文字情報は `thumbnail.jpg` だけで扱う
 - **コスト**: 事前見積もりは `config/skills/thumbnail.yaml` の `image_generation.<provider>.cost_per_image_usd` を指定したときのみ CLI 表示に出る。未指定なら「不明」と表示され、実コストは GCP Cloud Console > Billing で確認する（`max_attempts × 1 リクエスト` ＋ 各 attempt で内蔵リトライ最大 2 回）
 #### 失敗時の対処
-雰囲気が出ない場合、ChatGPT 等の外部ツールで手動生成して `main.png` にコピーする運用は廃止。ツール内で完結する代替策:
+雰囲気が出ない場合、外部ツールで手動生成した画像を `main.png` にコピーしない。ツール内で完結する代替策:
 1. `--reference-index N` で特定のベンチマーク参照に固定して試す
 2. `reference_images.default` の list を見直し、別のベンチマーク候補を追加
 3. `diff_prompt_template` の差分指示を見直し（特に `variation_clause` / `style_lock_clause` のオン/オフ）
@@ -295,7 +295,7 @@ TTP 参照画像が固定されているチャンネルでは、候補生成後�
 | 実効設定 | テーマ確認 | 生成可否 | textless 背景承認 | 候補承認 |
 |---|---|---|---|---|
 | `enabled: false` / 未設定 | 実行 | 実行 | 実行 | 実行 |
-| `enabled: true`, `mode: selection_only` または mode 未設定 | 実行 | 実行 | 実行 | **省略**（#1370 の従来挙動） |
+| `enabled: true`, `mode: selection_only` または mode 未設定 | 実行 | 実行 | 実行 | **省略** |
 | `enabled: true`, `mode: full` | **省略** | **省略**（生成 CLI に `-y`） | **省略** | **省略** |
 `selection_only` の既存手順は変更しない。参照プールに `max_reference_distance`（既定 0.40）超過があれば参照ごとの構造化診断を出して警告継続し、`full` は strict 参照生成の API 呼び出し前と自動選択前に停止する。prompt の色・背景指定は参照プール外れ値の代替対策にしない。`auto_selection.enabled` が false / 未設定のチャンネルも従来の手動承認フローを使う。 有効化キーと採点パラメータは [quality / operations 詳細](references/quality-and-operations.md) を読む。
 ### `mode: full` のテーマ自動決定
@@ -373,7 +373,7 @@ uv run yt-stock-archive \
 }
 JSON
 ```
-`config/skills/thumbnail.yaml` の `image_generation.stock.enabled: false` に設定するとこの CLI は退避せず単純削除（従来挙動）に戻る。
+`config/skills/thumbnail.yaml` の `image_generation.stock.enabled: false` に設定するとこの CLI は退避せず単純削除する。
 ### `workflow-state.json` 更新
 画像確認・承認後、`uv run yt-workflow-state --collection <collection-path> set-thumbnail-approved true` を実行する。`textless.enabled: false` では `share_thumbnail_as_main.py` の成功と `thumbnail.jpg` / `main.jpg` の SHA-256 一致、`main.png` 不在を確認した後だけ実行する。`mode: full` では目視確認と AskUserQuestion を省略し、既存の自動確定成功を承認完了として扱う。`ab_test.enabled: true` の場合は、設定された全 pattern の `thumbnail-<name>.jpg` が存在し、各 pattern の承認（`full` では自動確定）が完了し、`thumbnail.jpg` が先頭 pattern と同一内容であることを確認してからだけ実行する。一部 pattern の承認・確定に失敗した状態では `false` のままにする。 `yt-thumbnail-auto-select --apply` で確定した場合は、選択候補・distance・ランキング・参照画像ごとの centroid distance / outlier 判定・実行時刻が `thumbnail_auto_selection` キーに監査ログとして自動記録される（#1370、#2952）。
 ## stock 退避と再利用

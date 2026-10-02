@@ -43,7 +43,7 @@ description: "Use when collection 型（BGM テイスター）または release 
 ## 完了条件
 
 - collection 型: 生成した全番号をプレビューし、番号指定の実投稿結果と `workflow-state.json::post_upload.shorts` の `short_num`・`video_id` が一致する。blocked・失敗を含む場合は未完了として番号別に報告する（[投稿手順](references/collection.md#プレビュー投稿state-を確認する)）
-- release 型: `shorts.release.languages` の対象言語ぶん `video/short-<lang>.mp4` が生成され、プレビュー確認済み。アップロードは現時点ではスコープ外
+- release 型: `shorts.release.languages` の対象言語ぶん `video/short-<lang>.mp4` が生成され、プレビュー確認済み。アップロードは行わない
 - `--thumbnail`: `10-assets/short.png` が生成・承認され、ループ動画化する場合は `short-loop.mp4` も確認済み
 
 ## Subagent Contract

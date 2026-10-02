@@ -47,9 +47,9 @@ guardが成功した後、uv未導入なら選択modeの成果物操作より先
 Google Auth Platform の Branding / Audience / Clients 設定と `client_secrets.json`、運用設定の `workflow.post_publish.skip_approvals` は `references/tool.md` で扱う。`--tool` では `config/channel/*.json` を生成しない。
 OAuth client の Console 操作が必要なら [OAuth client wizard](references/oauth-client-wizard.sh) を対話 session で起動する。
 
-`--channel` は `references/channel-mode.md` を唯一の正として読み、移設前の新規開設 Step 1〜10 と同じ契約を実行する。TTP hearing、seed confirmation、config、duration、persona、branding、readiness、initial save の順序、success / failure / blocked / resume / idempotency、不可逆操作前の承認 gate と成果物契約を変えない。
+`--channel` は `references/channel-mode.md` を唯一の正として読み、その Step 1〜10 と完了条件を実行する。TTP hearing、seed confirmation、config、duration、persona、branding、readiness、initial save の順序、success / failure / blocked / resume / idempotency、不可逆操作前の承認 gate と成果物契約を変えない。
 
-`--import` / `--regenerate` / `--push` はそれぞれ対応 reference を唯一の正として読み、移設前の取り込み Step 1 前段〜Step 8、Step R1〜R8、設定同期の dry-run・承認・反映・失敗停止契約を変えずに実行する。市場・収集済みデータ分析は `/channel-research --market`、方向性検討は `/channel-strategy --direction` が所有し、ここへ吸収しない。
+`--import` / `--regenerate` / `--push` はそれぞれ対応 reference を唯一の正として読み、取り込み Step 1 前段〜Step 8、Step R1〜R8、設定同期の dry-run・承認・反映・失敗停止契約を実行する。市場・収集済みデータ分析は `/channel-research --market`、方向性検討は `/channel-strategy --direction` が所有し、ここへ吸収しない。
 
 ## 一括実行
 

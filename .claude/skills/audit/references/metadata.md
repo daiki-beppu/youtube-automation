@@ -120,7 +120,7 @@ GitHub Actions や cron で常時監視する場合は `--strict` を付ける�
 - `/publish --upload` — 前工程。YouTube へのアップロード + live 移行（本スキルはその後の反映確認に使う）
 - `/publish` — 前工程。公開後に本 mode で反映状態を監査する
 - `/video --describe` — descriptions JSON+HTML pair の生成・更新（修正の入口）
-- `yt-bulk-update-synthetic-media` — 公開済み動画の `status.containsSyntheticMedia` が `false` のまま残っている場合に `True` へ一括是正する（#606、#603 是正前のアップロード分の遡及）
+- `yt-bulk-update-synthetic-media` — 公開済み動画の `status.containsSyntheticMedia` が `false` のまま残っている場合に `True` へ一括是正する（`containsSyntheticMedia` 導入前にアップロードした分の遡及是正）
 - `pyproject.toml` の `yt-metadata-audit` entry point
 - `src/youtube_automation/commands/metadata/metadata_audit.py` — 実装本体
 - `src/youtube_automation/domains/uploads/preflight.py` — `extract_descriptions_md_tags` / `check_tags_count` / `check_tags_yt_chars` を共有
