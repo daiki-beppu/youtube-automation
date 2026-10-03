@@ -1001,9 +1001,18 @@ def _server_metadata(
     return resolved
 
 
-def _downloaded_response_payload(cid: str, apply_result: DownloadedApplyResult, *, include_summary: bool) -> dict:
+def _downloaded_response_payload(
+    cid: str,
+    apply_result: DownloadedApplyResult,
+    *,
+    include_summary: bool,
+    evidence_warning: str | None = None,
+) -> dict:
     """Build the legacy acknowledgement and optional applied-download summary."""
     resp: dict = {"ok": True, "collection_id": cid, "placed_count": apply_result.placed_count}
+    # 証跡記録の失敗は配置を止めないが、異議申し立て時に初めて気づかないよう拡張へ返す（#5129）
+    if evidence_warning is not None:
+        resp["evidence_warning"] = evidence_warning
     # playlist URL だけを記録する先行 POST は legacy 応答を維持し、実 ZIP 適用後だけ summary を返す。
     if include_summary:
         missing_file_count = max(apply_result.expected_count - apply_result.placed_count, 0)
@@ -1334,6 +1343,7 @@ def create_server(
             return _bad_request()
 
         coll_dir = collections_root / cid
+        evidence_warning: str | None = None
         try:
             apply_result = apply_downloaded_artifacts_detailed(
                 coll_dir,
@@ -1351,6 +1361,7 @@ def create_server(
                     )
                 except (OSError, json.JSONDecodeError, ValidationError) as exc:
                     logger.warning("Suno Content ID evidence could not be recorded: %s", exc)
+                    evidence_warning = f"Content ID 証跡を記録できませんでした: {exc}"
         except DownloadedPayloadError:
             return _bad_request()
         except DownloadedArtifactError as exc:
@@ -1361,7 +1372,14 @@ def create_server(
             except (MediaStoreError, WorkflowStateError) as exc:
                 return _server_error(exc)
         cleanup_downloaded_archive(parsed)
-        return _json_body(_downloaded_response_payload(cid, apply_result, include_summary=bool(parsed.download_path)))
+        return _json_body(
+            _downloaded_response_payload(
+                cid,
+                apply_result,
+                include_summary=bool(parsed.download_path),
+                evidence_warning=evidence_warning,
+            )
+        )
 
     # --- protocol-level routes ---
 

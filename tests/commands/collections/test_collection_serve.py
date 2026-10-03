@@ -3569,7 +3569,9 @@ def test_post_downloaded_records_content_id_evidence(serve_dir, tmp_path, monkey
         headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
     ) as resp:
         assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
 
+    assert "evidence_warning" not in body
     evidence_path = coll / "20-documentation" / "suno-content-id-evidence.json"
     entries = {entry["track"]: entry for entry in json.loads(evidence_path.read_text(encoding="utf-8"))}
     assert entries["02a-Song B.mp3"]["clip_url"] == "https://suno.com/song/clip-b"
@@ -3579,6 +3581,49 @@ def test_post_downloaded_records_content_id_evidence(serve_dir, tmp_path, monkey
     assert entries["01a-Song A.mp3"]["generated_at"] == "2026-09-15T12:00:00Z"
     assert entries["01a-Song A.mp3"]["model"] == "V5.5"
     assert entries["01a-Song A.mp3"]["plan"] == "Premier"
+
+
+def test_post_downloaded_reports_evidence_failure_without_failing_placement(serve_dir, tmp_path):
+    """Given clip_ids の件数が配置トラック数と一致しない Studio export 通知
+    When POST /collections/<id>/downloaded を送る
+    Then 配置は 200 で成功し、証跡を残せなかった理由を evidence_warning で返す（#5129）。
+    """
+    planning = tmp_path / "planning"
+    coll = _make_collection(
+        planning,
+        "20260601-clm-aaa-collection",
+        entries={
+            "model": "V5.5",
+            "entries": [
+                {"name": "曲A — Song A", "style": "s", "lyrics": ""},
+                {"name": "曲B — Song B", "style": "s", "lyrics": ""},
+            ],
+        },
+    )
+    zip_path = _make_zip(tmp_path / "studio.zip", {"1 Song A.mp3": b"a1", "2 Song B.mp3": b"b1"})
+    base = serve_dir(planning, allow_origin=_EXTENSION_ORIGIN)
+    token = _fetch_token(base)
+    payload = {
+        "file_count": 2,
+        "expected_file_count": 2,
+        "format": "mp3",
+        "download_path": str(zip_path),
+        "clip_ids": ["clip-a", "clip-b", "clip-c"],
+        "generated_at": "2026-09-15T21:00:00+09:00",
+    }
+
+    with _post(
+        f"{base}{_COLLECTIONS_ROUTE}/20260601-clm-aaa-collection/downloaded",
+        payload,
+        headers={"Origin": _EXTENSION_ORIGIN, "X-Serve-Token": token},
+    ) as resp:
+        assert resp.status == 200
+        body = json.loads(resp.read().decode("utf-8"))
+
+    assert body["placed_count"] == 2
+    assert "warning" not in body
+    assert body["evidence_warning"].startswith("Content ID 証跡を記録できませんでした: ")
+    assert not (coll / "20-documentation" / "suno-content-id-evidence.json").exists()
 
 
 def test_post_downloaded_without_clip_ids_records_no_evidence(serve_dir, tmp_path):

@@ -214,6 +214,15 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
         message: `部分ダウンロード（不足あり）: ${postResult.warning}`,
       });
     }
+    // 証跡の記録失敗は配置を止めないが、Content ID 異議申し立て時に初めて気づかないよう通知する (#5129)
+    if (postResult?.evidenceWarning) {
+      console.warn(`[suno-helper] ${postResult.evidenceWarning}`);
+      deps.emitProgress({
+        phase: PHASE.PLACING_ARCHIVE,
+        total: progressTotal,
+        message: postResult.evidenceWarning,
+      });
+    }
     return postResult?.summary;
   }
 

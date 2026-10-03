@@ -1000,6 +1000,8 @@ export interface DownloadSummary {
 export interface PostDownloadedResult {
   summary?: DownloadSummary;
   warning: string | null;
+  /** Content ID 証跡を記録できなかった理由。配置自体は成功している (#5129)。 */
+  evidenceWarning?: string;
 }
 
 function assertNonnegativeSafeInteger(value: unknown, field: string): number {
@@ -1009,15 +1011,24 @@ function assertNonnegativeSafeInteger(value: unknown, field: string): number {
   return value;
 }
 
+function parseEvidenceWarning(
+  record: Record<string, unknown>
+): Pick<PostDownloadedResult, "evidenceWarning"> {
+  return typeof record.evidence_warning === "string"
+    ? { evidenceWarning: record.evidence_warning }
+    : {};
+}
+
 function parseDownloadedResult(data: unknown): PostDownloadedResult {
   const record = assertObject(data, "downloaded response");
   const warning = typeof record.warning === "string" ? record.warning : null;
+  const evidence = parseEvidenceWarning(record);
   const hasStructuredSummary =
     "expected_file_count" in record ||
     "missing_file_count" in record ||
     "missing_reasons" in record;
   if (!hasStructuredSummary) {
-    return { warning };
+    return { warning, ...evidence };
   }
 
   const expected = assertNonnegativeSafeInteger(
@@ -1058,7 +1069,11 @@ function parseDownloadedResult(data: unknown): PostDownloadedResult {
     throw new Error("downloaded response missing_reasons is required");
   }
 
-  return { summary: { expected, placed, missing, reasons }, warning };
+  return {
+    summary: { expected, placed, missing, reasons },
+    warning,
+    ...evidence,
+  };
 }
 
 export async function postDownloaded(

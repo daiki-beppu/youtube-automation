@@ -1238,6 +1238,32 @@ describe("shared/api postDownloaded: 正常系", () => {
     ).resolves.toEqual({ warning: "placed 10 files, expected 12 (2 missing)" });
   });
 
+  it("Given 証跡記録失敗の evidence_warning 付き 200 応答 When postDownloaded Then 部分完了 warning と分けて返す (#5129)", async () => {
+    mockFetchForDownloaded(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        placed_count: 2,
+        evidence_warning:
+          "Content ID 証跡を記録できませんでした: clips=3, tracks=2",
+      }),
+    }));
+
+    await expect(
+      postDownloaded(BASE_URL, "20260601-clm-aaa-collection", {
+        file_count: 2,
+        expected_file_count: 2,
+        format: "wav",
+        download_path: "/Users/test/Downloads/test.zip",
+      })
+    ).resolves.toEqual({
+      warning: null,
+      evidenceWarning:
+        "Content ID 証跡を記録できませんでした: clips=3, tracks=2",
+    });
+  });
+
   it("Given structured 部分完了応答 When postDownloaded Then warning を解析せず summary を保持する", async () => {
     mockFetchForDownloaded(() => ({
       ok: true,
