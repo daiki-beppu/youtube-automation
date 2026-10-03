@@ -32,15 +32,24 @@ class DownloadedApplyResult:
     placed_count: int
     suno_unfulfilled: int
     apply_skipped: int
+    studio_ordered_tracks: tuple[str, ...] = ()
 
     @classmethod
-    def from_counts(cls, *, expected_count: int, audio_count: int, placed_count: int) -> DownloadedApplyResult:
+    def from_counts(
+        cls,
+        *,
+        expected_count: int,
+        audio_count: int,
+        placed_count: int,
+        studio_ordered_tracks: tuple[str, ...] = (),
+    ) -> DownloadedApplyResult:
         return cls(
             expected_count=expected_count,
             audio_count=audio_count,
             placed_count=placed_count,
             suno_unfulfilled=max(expected_count - audio_count, 0),
             apply_skipped=max(audio_count - placed_count, 0),
+            studio_ordered_tracks=studio_ordered_tracks,
         )
 
     @property
@@ -76,6 +85,7 @@ def apply_downloaded_artifacts_detailed(
     expected_count = cast(int, expected_download_count(pattern_count, payload.expected_file_count))
     audio_count = payload.file_count
     placed_count = payload.file_count
+    studio_ordered_tracks: tuple[str, ...] = ()
     paths = CollectionPaths(coll_dir)
     music_dir = paths.music_dir
     music_backup_dir: Path | None = None
@@ -92,11 +102,13 @@ def apply_downloaded_artifacts_detailed(
             )
             audio_count = archive_result.audio_count
             placed_count = archive_result.placed_count
+            studio_ordered_tracks = archive_result.studio_ordered_tracks
 
         result = DownloadedApplyResult.from_counts(
             expected_count=expected_count,
             audio_count=audio_count,
             placed_count=placed_count,
+            studio_ordered_tracks=studio_ordered_tracks,
         )
 
         update_workflow_state_downloaded(

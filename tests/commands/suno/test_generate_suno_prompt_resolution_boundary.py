@@ -73,6 +73,7 @@ def test_main_resolves_once_and_writes_the_existing_markdown_and_json(monkeypatc
         "---\n"
     )
     assert json.loads((tmp_path / "suno-prompts.json").read_text(encoding="utf-8")) == {
+        "model": "V5.5",
         "entries": [
             {
                 "name": "集中 — Focus",

@@ -184,7 +184,8 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number,
-    filename: string
+    filename: string,
+    clipIds: string[]
   ): Promise<DownloadSummary | undefined> {
     deps.emitProgress({
       phase: PHASE.PLACING_ARCHIVE,
@@ -199,6 +200,8 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
         expected_file_count: expectedFileCount,
         format: "wav",
         download_path: filename,
+        clip_ids: clipIds,
+        generated_at: new Date().toISOString(),
       },
     });
     // 部分完了（Suno の生成数不足）はサーバーが warning 付き 200 で受理する (#1913)。
@@ -209,6 +212,15 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
         phase: PHASE.PLACING_ARCHIVE,
         total: progressTotal,
         message: `部分ダウンロード（不足あり）: ${postResult.warning}`,
+      });
+    }
+    // 証跡の記録失敗は配置を止めないが、Content ID 異議申し立て時に初めて気づかないよう通知する (#5129)
+    if (postResult?.evidenceWarning) {
+      console.warn(`[suno-helper] ${postResult.evidenceWarning}`);
+      deps.emitProgress({
+        phase: PHASE.PLACING_ARCHIVE,
+        total: progressTotal,
+        message: postResult.evidenceWarning,
       });
     }
     return postResult?.summary;
@@ -240,7 +252,8 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
       collectionId,
       progressTotal,
       expectedFileCount,
-      filename
+      filename,
+      clipIds
     );
   }
 

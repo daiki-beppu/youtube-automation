@@ -26,6 +26,7 @@ import hashlib
 import http.client
 import io
 import json
+import logging
 import math
 import mimetypes
 import os
@@ -57,9 +58,10 @@ from youtube_automation.commands.collections.collection_serve_discovery import (
     create_discovery_lifecycle,
     handle_registry_request,
 )
+from youtube_automation.commands.suno.content_id_evidence import record_downloaded_evidence
 from youtube_automation.configuration import Distrokid, load_config
 from youtube_automation.core.channel_context import channel_dir
-from youtube_automation.core.errors import ConfigError, MediaStoreError, WorkflowStateError
+from youtube_automation.core.errors import ConfigError, MediaStoreError, ValidationError, WorkflowStateError
 from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.distrokid.metadata import parse_album_metadata
@@ -166,6 +168,8 @@ from youtube_automation.infrastructure.localserver.lifecycle import (
 )
 from youtube_automation.infrastructure.media_store import R2MediaStore, R2MediaStoreConfig
 from youtube_automation.infrastructure.notifications.discord import create_discord_notification_sink
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_PORT = 7873
 # suno-helper の「安全モード」（1 件ずつ完了を待つ逐次生成）は collection-serve への
@@ -997,9 +1001,18 @@ def _server_metadata(
     return resolved
 
 
-def _downloaded_response_payload(cid: str, apply_result: DownloadedApplyResult, *, include_summary: bool) -> dict:
+def _downloaded_response_payload(
+    cid: str,
+    apply_result: DownloadedApplyResult,
+    *,
+    include_summary: bool,
+    evidence_warning: str | None = None,
+) -> dict:
     """Build the legacy acknowledgement and optional applied-download summary."""
     resp: dict = {"ok": True, "collection_id": cid, "placed_count": apply_result.placed_count}
+    # 証跡記録の失敗は配置を止めないが、異議申し立て時に初めて気づかないよう拡張へ返す（#5129）
+    if evidence_warning is not None:
+        resp["evidence_warning"] = evidence_warning
     # playlist URL だけを記録する先行 POST は legacy 応答を維持し、実 ZIP 適用後だけ summary を返す。
     if include_summary:
         missing_file_count = max(apply_result.expected_count - apply_result.placed_count, 0)
@@ -1330,6 +1343,7 @@ def create_server(
             return _bad_request()
 
         coll_dir = collections_root / cid
+        evidence_warning: str | None = None
         try:
             apply_result = apply_downloaded_artifacts_detailed(
                 coll_dir,
@@ -1337,6 +1351,17 @@ def create_server(
                 prompt_entries_reader=read_suno_prompt_entries,
                 defer_archive_cleanup=True,
             )
+            if parsed.clip_ids and parsed.generated_at is not None:
+                try:
+                    record_downloaded_evidence(
+                        coll_dir,
+                        clip_ids=parsed.clip_ids,
+                        generated_at=parsed.generated_at,
+                        studio_ordered_tracks=apply_result.studio_ordered_tracks,
+                    )
+                except (OSError, json.JSONDecodeError, ValidationError) as exc:
+                    logger.warning("Suno Content ID evidence could not be recorded: %s", exc)
+                    evidence_warning = f"Content ID 証跡を記録できませんでした: {exc}"
         except DownloadedPayloadError:
             return _bad_request()
         except DownloadedArtifactError as exc:
@@ -1347,7 +1372,14 @@ def create_server(
             except (MediaStoreError, WorkflowStateError) as exc:
                 return _server_error(exc)
         cleanup_downloaded_archive(parsed)
-        return _json_body(_downloaded_response_payload(cid, apply_result, include_summary=bool(parsed.download_path)))
+        return _json_body(
+            _downloaded_response_payload(
+                cid,
+                apply_result,
+                include_summary=bool(parsed.download_path),
+                evidence_warning=evidence_warning,
+            )
+        )
 
     # --- protocol-level routes ---
 

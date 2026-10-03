@@ -201,8 +201,37 @@ describe("download flow", () => {
         expected_file_count: 56,
         format: "wav",
         download_path: "collection.zip",
+        clip_ids: CLIP_IDS,
+        generated_at: expect.any(String),
       },
     });
+  });
+
+  it("証跡記録の失敗は部分ダウンロードと区別して進捗へ通知する (#5129)", async () => {
+    const evidenceWarning =
+      "Content ID 証跡を記録できませんでした: clips=3, tracks=2";
+    messagingMocks.sendMessage.mockImplementation(async (message: string) => {
+      if (message === "postDownloaded") {
+        return { warning: null, evidenceWarning };
+      }
+      return { ok: true };
+    });
+    studioExportMocks.requestStudioMultitrackExport.mockImplementationOnce(
+      async () => {
+        dispatchDownloadComplete();
+        return STUDIO_TAB_ID;
+      }
+    );
+    const emitProgress = vi.fn();
+    const flow = createSubject(() => false, emitProgress);
+
+    await flow.performDownload(CONTEXT, "collection", 2, 2, CLIP_IDS);
+
+    const messages = emitProgress.mock.calls.map(([event]) => event.message);
+    expect(messages).toContain(evidenceWarning);
+    expect(
+      messages.some((message) => message?.includes("部分ダウンロード"))
+    ).toBe(false);
   });
 
   it("best-effort download の部分成功は error なしで同じ server summary を返す", async () => {

@@ -66,6 +66,7 @@ def test_detailed_apply_calculates_and_persists_missing_reasons(tmp_path: Path) 
         placed_count=2,
         suno_unfulfilled=1,
         apply_skipped=1,
+        studio_ordered_tracks=("01a-Known.mp3", "01b-Known.mp3"),
     )
     state = json.loads((tmp_path / "workflow-state.json").read_text(encoding="utf-8"))
     assert state["planning"]["music"]["missing_reasons"] == result.missing_reasons
