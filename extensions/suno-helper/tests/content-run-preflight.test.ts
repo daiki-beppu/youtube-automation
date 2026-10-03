@@ -542,6 +542,14 @@ function makeRunnableEmptyQueueSunoDom(viewLabel: "Waveform" | "Grid"): void {
   makeGenerateButton();
 }
 
+// jsdom の document.visibilityState は常に "visible" のため、背面タブは own property で差し替える。
+function stubVisibilityState(state: "hidden" | "prerender" | "visible"): void {
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => state,
+  });
+}
+
 function progressPayloads(): unknown[] {
   return harness.sendMessage.mock.calls
     .filter(([type]) => type === "progress")
@@ -644,6 +652,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  Reflect.deleteProperty(document, "visibilityState");
 });
 
 function setUnattendedLaunchHash(
@@ -1798,6 +1807,99 @@ describe('content onMessage("run"): Run 開始前の Suno view preflight', () =>
     );
     expect(harness.feedPollerStart).not.toHaveBeenCalled();
     expect(harness.feedPollerStop).not.toHaveBeenCalled();
+  });
+
+  it.each(["hidden", "prerender"] as const)(
+    "Given 手動 run の Suno タブが %s When run を受ける Then タブ表示を案内し feed poller を開始しない",
+    async (visibilityState) => {
+      stubVisibilityState(visibilityState);
+      makeRunnableSunoDom("Grid");
+      await loadContentScript();
+      const runHandler = getRunHandler();
+      const entries = makePromptEntries(2);
+
+      const result = runHandler({ data: makeRunPayload(entries) });
+
+      await expect(result).resolves.toMatchObject({
+        ok: false,
+        error: expect.stringContaining("タブを表示中"),
+      });
+      expect(harness.sendMessage).toHaveBeenCalledWith(
+        "progress",
+        expect.objectContaining({
+          phase: PHASE.ERROR,
+          total: entries.length,
+          message: expect.stringContaining("タブを表示中"),
+        })
+      );
+      expect(harness.feedPollerStart).not.toHaveBeenCalled();
+      expect(harness.feedPollerStop).not.toHaveBeenCalled();
+      // lease を持たない手動 run なので解放要求も出さない。
+      expect(harness.sendMessage).not.toHaveBeenCalledWith(
+        "releaseUnattendedLease",
+        expect.anything()
+      );
+    }
+  );
+
+  it("Given 定期実行の Suno タブが hidden When run を受ける Then 可視性で止めず実行を開始する", async () => {
+    stubVisibilityState("hidden");
+    makeViewButton("Grid");
+    await loadContentScript();
+    harness.sendMessage.mockImplementation((type: string) => {
+      if (type === "releaseUnattendedLease") {
+        return Promise.resolve({ released: true });
+      }
+      if (type === "fetchCollections") {
+        return Promise.resolve([
+          {
+            id: "20260601-clm-preflight-collection",
+            suno_playlist_url: "https://suno.com/playlist/preflight",
+          },
+        ]);
+      }
+      return undefined;
+    });
+
+    const result = getRunHandler()({
+      data: {
+        ...makeRunPayload(),
+        unattended: {
+          request: {
+            version: 1,
+            requestId: "scheduled-hidden-tab",
+            baseUrl: "http://localhost:8787",
+            collectionId: "20260601-clm-preflight-collection",
+            skipDownload: true,
+            limits: {
+              maxEntries: 1,
+              maxConcurrentGenerations: 1,
+              maxRetries: 1,
+            },
+          },
+          deferredIndices: [],
+          leaseToken: "lease-token",
+        },
+      },
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(harness.feedPollerStart).toHaveBeenCalledOnce();
+    await vi.waitFor(() =>
+      expect(harness.feedPollerStop).toHaveBeenCalledOnce()
+    );
+    expect(progressPayloads()).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          message: expect.stringContaining("タブを表示中"),
+        }),
+      ])
+    );
+    // 定期実行が保持する lease は run 完了時に解放される。
+    expect(harness.sendMessage).toHaveBeenCalledWith(
+      "releaseUnattendedLease",
+      expect.objectContaining({ token: "lease-token" })
+    );
   });
 
   it("Given view mode に一致しない単独 button がある When run を受ける Then ERROR progress を emit し feed poller を開始しない", async () => {

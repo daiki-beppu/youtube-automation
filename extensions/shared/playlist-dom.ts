@@ -145,8 +145,15 @@ function findPlaylistDialog(): HTMLElement | null {
 }
 
 /** clip row が DOM 上に存在しないことが確定したときの fail-loud メッセージ (#881)。 */
-const CLIP_ROW_NOT_FOUND_MESSAGE =
-  "clip row が見つかりません。Suno の UI 変更の可能性があります。";
+function tabVisibilityRecoveryHint(): string {
+  return document.visibilityState === "visible"
+    ? ""
+    : "実行中に Suno タブが背面になりました。タブを表示中にして再実行してください。";
+}
+
+function clipRowNotFoundMessage(): string {
+  return `clip row が見つかりません。${tabVisibilityRecoveryHint()}Suno の UI 変更の可能性があります。`;
+}
 
 /**
  * 要素が clip card のコンテンツ（画像やリンク）を含むか判定する。
@@ -327,7 +334,7 @@ function collectClipRowsFromSelectButtons(root: ParentNode): HTMLElement[] {
 function collectLoadedClipRows(scroller: HTMLElement): HTMLElement[] {
   const rows = collectClipRowsFromSelectButtons(scroller);
   if (rows.length === 0) {
-    throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
+    throw new Error(clipRowNotFoundMessage());
   }
   return rows;
 }
@@ -554,7 +561,7 @@ export async function ensureClipRowsLoadedByIds(
     CLIP_LIST_SCROLLER_SELECTOR
   );
   if (!scroller) {
-    throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
+    throw new Error(clipRowNotFoundMessage());
   }
 
   const allFound = (r: HTMLElement[]) =>
@@ -638,7 +645,7 @@ export async function ensureClipRowsLoaded(
 
   const scroller = resolveClipListScroller();
   if (!scroller) {
-    throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
+    throw new Error(clipRowNotFoundMessage());
   }
 
   // 初回 row 収集: 0 件なら fail-loud throw（#881 維持）
@@ -909,7 +916,7 @@ export async function scrollAndMultiSelectByIds(
     CLIP_LIST_SCROLLER_SELECTOR
   );
   if (!scroller) {
-    throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
+    throw new Error(clipRowNotFoundMessage());
   }
 
   const foundIds = new Set<string>();
@@ -1073,7 +1080,7 @@ export async function readSelectedClipIds(
     CLIP_LIST_SCROLLER_SELECTOR
   );
   if (!scroller) {
-    throw new Error(CLIP_ROW_NOT_FOUND_MESSAGE);
+    throw new Error(clipRowNotFoundMessage());
   }
 
   const selectedIds = new Set<string>();
@@ -1198,7 +1205,7 @@ export async function openAddToPlaylistDialogViaCmdP(
   }
 
   throw new Error(
-    `Add to Playlist dialog を ${CMD_P_MAX_RETRIES} 回試行しても検出できませんでした。clip が selected 状態であることを確認してください。Suno の UI 変更の可能性があります。`
+    `Add to Playlist dialog を ${CMD_P_MAX_RETRIES} 回試行しても検出できませんでした。${tabVisibilityRecoveryHint()}clip が selected 状態であることを確認してください。Suno の UI 変更の可能性があります。`
   );
 }
 
