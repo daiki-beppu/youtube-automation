@@ -517,12 +517,17 @@ def test_setup_channel_gate_does_not_require_doctor_all_green() -> None:
         "adc",
         "adc_quota_project",
         "iam_aiplatform_user",
-        "env_file",
         "client_secrets",
         "oauth_token",
     }
     for check_id in required_check_ids:
         assert f"`{check_id}`" in text
+
+    required_line = next(line for line in text.splitlines() if "必須 check は" in line)
+    listed_check_ids = set(re.findall(r"`([^`]+)`", required_line.split("。", 1)[0]))
+    assert listed_check_ids == required_check_ids
+    registry_check_ids = {definition.id for definition in doctor.CHECK_REGISTRY}
+    assert listed_check_ids <= registry_check_ids
 
 
 def test_setup_skill_handles_ttp_wf_new_readiness_next_check() -> None:
