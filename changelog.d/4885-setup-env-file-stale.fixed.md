@@ -1,0 +1,1 @@
+- `/setup --channel` の必須 check 一覧から `CHECK_REGISTRY` に存在しない `env_file` を削除し、列挙が `CHECK_REGISTRY` の id 集合の subset であることを契約テストで機械担保した（#4885）。

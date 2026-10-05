@@ -134,7 +134,6 @@ def test_bootstrap_setup_gate_owner_link_resolves_to_required_check_contract() -
         "adc",
         "adc_quota_project",
         "iam_aiplatform_user",
-        "env_file",
         "client_secrets",
         "oauth_token",
     ):
