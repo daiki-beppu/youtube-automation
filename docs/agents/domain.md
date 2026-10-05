@@ -4,10 +4,10 @@ How the engineering skills should consume this repo's domain documentation when 
 
 ## Before exploring, read these
 
-- **`docs/architecture.md` の「## プロジェクト用語集」** — 本リポジトリの用語と決定の**正本グロッサリ**。ルート `CONTEXT.md` はここへ統合済みで、ファイルとしては存在しない。skills が `CONTEXT.md` と言ったらこの節に読み替える
+- **`docs/architecture.md` の「## プロジェクト用語集」** — 本リポジトリの用語と決定の**正本グロッサリ**。ルート `CONTEXT.md` はここへ統合済みで、ファイルとしては存在しない。skills が `GLOSSARY.md`（旧 `CONTEXT.md`）と言ったらこの節に読み替える
 - **`docs/adr/`** — read ADRs that touch the area you're about to work in.
 
-If a referenced file doesn't exist, **proceed silently**. Don't flag its absence; don't suggest creating it upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) resolves terms and decisions lazily — in this repo, new entries go into `docs/architecture.md`「プロジェクト用語集」, not a new root `CONTEXT.md`.
+If a referenced file doesn't exist, **proceed silently**. Don't flag its absence; don't suggest creating it upfront. The `/domain-modeling` skill (reached via `/grill-with-docs` and `/improve-codebase-architecture`) resolves terms and decisions lazily — in this repo, new entries go into `docs/architecture.md`「プロジェクト用語集」, not a new root `GLOSSARY.md`.
 
 ## File structure
 
