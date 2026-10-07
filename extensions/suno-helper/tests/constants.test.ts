@@ -34,6 +34,7 @@ import {
   SERVER_HOST_PERMISSIONS,
   STORAGE_KEY,
   STUDIO_EXPORT_RESULT_GRACE_MS,
+  STUDIO_EXPORT_RESUME_END_SLACK_MS,
   STUDIO_EXPORT_WATCH_TIMEOUT_MS,
   UNATTENDED_RUN_STATE_KEY,
   type ObservedClip,
@@ -275,6 +276,12 @@ describe("shared/constants: Studio Multitrack export の待ち時間 (#5131)", (
     // 0 だと完了待ちが監視上限と同値になり、watcher の「完了済み download 拾い上げ」通知が
     // 届く前にフロー側が倒れる。
     expect(STUDIO_EXPORT_RESULT_GRACE_MS).toBeGreaterThan(0);
+  });
+
+  it("Given STUDIO_EXPORT_RESUME_END_SLACK_MS When 読む Then 中断検出直後に保存された ZIP を拾える正の猶予である (#5143)", () => {
+    // resume state の timestamp から再開時の探索窓下端までの余裕。0 だと
+    // 中断処理と同時に完了した ZIP を拾い損ねる。
+    expect(STUDIO_EXPORT_RESUME_END_SLACK_MS).toBeGreaterThan(0);
   });
 });
 

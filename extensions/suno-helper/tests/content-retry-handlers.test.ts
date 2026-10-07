@@ -4,8 +4,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { DownloadSummary, PostDownloadedResult } from "../../shared/api";
-import { PHASE } from "../../shared/constants";
+import {
+  PHASE,
+  STUDIO_EXPORT_RESUME_END_SLACK_MS,
+  STUDIO_EXPORT_WATCH_TIMEOUT_MS,
+} from "../../shared/constants";
 import type { RetryPlaylistPayload } from "../lib/messaging";
+import type { ResumeState } from "../lib/resume-state";
 
 interface ProgressMessage {
   phase: string;
@@ -55,10 +60,13 @@ async function loadContentScript(overrides?: {
     isAborted: () => boolean;
   }) => Promise<string[]>;
   studioExportError?: Error;
-  startDownloadResult?: { ok: true } | { ok: false; message: string };
+  startDownloadResult?:
+    | { ok: true; savedFilename?: string }
+    | { ok: false; message: string };
   postDownloadedError?: Error;
   postDownloadedRejectOnCall?: number;
   postDownloadedResult?: PostDownloadedResult;
+  resumeState?: ResumeState | null;
 }) {
   vi.resetModules();
   vi.stubGlobal(
@@ -108,6 +116,10 @@ async function loadContentScript(overrides?: {
     const actual = await importOriginal<typeof import("../lib/resume-state")>();
     return {
       ...actual,
+      // node 環境では chrome.storage が無いため read を stub する (#5143)
+      readResumeState: vi.fn(() =>
+        Promise.resolve(overrides?.resumeState ?? null)
+      ),
       writeResumeState: vi.fn(() => Promise.resolve()),
       clearResumeStateForCollection: clearResumeStateMock,
     };
@@ -716,6 +728,92 @@ describe('content onMessage("retryDownload"): 正常完了', () => {
       file_count: 4,
       expected_file_count: 4,
       download_path: "/Users/test/Downloads/test-playlist.zip",
+    });
+  });
+
+  it("Given 同 collection の resume state When retryDownload Then startDownload に保存済み探索窓を渡す (#5143)", async () => {
+    const timestamp = 1_700_000_000_000;
+    const { handlers, sentMessages } = await loadContentScript({
+      resumeState: {
+        collectionId: "coll-1",
+        failedIndex: 2,
+        total: 4,
+        timestamp,
+      },
+    });
+
+    handlers.get("retryDownload")!({
+      data: {
+        collectionId: "coll-1",
+        submittedClipIds: ["clip-1"],
+        expectedClipCount: 2,
+      },
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const startDownload = sentMessages.find((m) => m.type === "startDownload");
+    expect(startDownload?.payload).toEqual({
+      savedExportSinceMs: timestamp - STUDIO_EXPORT_WATCH_TIMEOUT_MS,
+      savedExportUntilMs: timestamp + STUDIO_EXPORT_RESUME_END_SLACK_MS,
+    });
+  });
+
+  it("Given 別 collection の resume state When retryDownload Then startDownload は探索窓なしで呼ばれる (#5143)", async () => {
+    const { handlers, sentMessages } = await loadContentScript({
+      resumeState: {
+        collectionId: "other-coll",
+        failedIndex: 0,
+        total: 1,
+        timestamp: Date.now(),
+      },
+    });
+
+    handlers.get("retryDownload")!({
+      data: {
+        collectionId: "coll-1",
+        submittedClipIds: ["clip-1"],
+        expectedClipCount: 2,
+      },
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    const startDownload = sentMessages.find((m) => m.type === "startDownload");
+    expect(startDownload?.payload).toBeUndefined();
+  });
+
+  it("Given background が保存済み ZIP を返す When retryDownload Then 再 export せず postDownloaded で再開する (#5143)", async () => {
+    const { handlers, progressMessages, sentMessages, studioExportMock } =
+      await loadContentScript({
+        startDownloadResult: {
+          ok: true,
+          savedFilename: "/Users/test/Downloads/saved.zip",
+        },
+      });
+
+    handlers.get("retryDownload")!({
+      data: {
+        collectionId: "coll-1",
+        submittedClipIds: ["clip-1", "clip-2"],
+        expectedClipCount: 4,
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
+
+    // Studio export の再実行（project 再作成）は走らない
+    expect(studioExportMock).not.toHaveBeenCalled();
+    const downloadedPosts = sentMessages.filter(
+      (m) => m.type === "postDownloaded"
+    );
+    expect(downloadedPosts).toHaveLength(1);
+    expectPostDownloadedBody(downloadedPosts[0].payload, {
+      file_count: 4,
+      expected_file_count: 4,
+      download_path: "/Users/test/Downloads/saved.zip",
     });
   });
 

@@ -22,6 +22,8 @@ import {
   type RunModeId,
   type RunTimingReceipt,
   type SnapshotPayload,
+  STUDIO_EXPORT_RESUME_END_SLACK_MS,
+  STUDIO_EXPORT_WATCH_TIMEOUT_MS,
   SUNO_MATCHES,
 } from "../../shared/constants";
 import {
@@ -3072,11 +3074,33 @@ export default defineContentScript({
         try {
           const downloadContext = await resolveDownloadContext();
           assertUnattendedUiIsSafe();
+          // 前回 run が download 中断で残した resume state の時刻から探索窓を導き、
+          // 保存済みの Studio export ZIP があれば Studio project を作り直さず
+          // 取り込みを再開する (#5143)。resume state が読めない場合は従来どおり
+          // 新規 export で再開する。
+          const resumeState = await readResumeState().catch((err: unknown) => {
+            console.warn(
+              "[suno-helper] resume state の読み込みに失敗。保存済み ZIP 探索をスキップします:",
+              err
+            );
+            return null;
+          });
+          const savedExport =
+            resumeState?.collectionId === collectionId &&
+            typeof resumeState.timestamp === "number"
+              ? {
+                  sinceMs:
+                    resumeState.timestamp - STUDIO_EXPORT_WATCH_TIMEOUT_MS,
+                  untilMs:
+                    resumeState.timestamp + STUDIO_EXPORT_RESUME_END_SLACK_MS,
+                }
+              : undefined;
           const result = await downloadFlow.retryDownload({
             context: downloadContext,
             collectionId,
             submittedClipIds,
             expectedClipCount,
+            savedExport,
             clearResumeState: clearResumeStateForCollection,
           });
           // 完了時の状態復元契約を通常 run と揃えるため、FINISHED snapshot を
