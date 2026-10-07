@@ -280,6 +280,96 @@ describe("download flow", () => {
     expect(result.summary).toBe(PARTIAL_SUMMARY);
   });
 
+  it("retry download で保存済み ZIP が返ると再 export せず取り込みを再開する (#5143)", async () => {
+    const emitProgress = vi.fn();
+    messagingMocks.sendMessage.mockImplementation(async (message: string) => {
+      if (message === "startDownload") {
+        return { ok: true, savedFilename: "/Downloads/saved.zip" };
+      }
+      if (message === "postDownloaded") {
+        return { summary: PARTIAL_SUMMARY };
+      }
+      return { ok: true };
+    });
+    const flow = createSubject(() => false, emitProgress);
+
+    const result = await flow.retryDownload({
+      context: CONTEXT,
+      collectionId: "collection",
+      submittedClipIds: CLIP_IDS,
+      expectedClipCount: 56,
+      savedExport: { sinceMs: 1000, untilMs: 2000 },
+      clearResumeState: vi.fn(async () => undefined),
+    });
+
+    // 探索窓が background の startDownload へ伝わる
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("startDownload", {
+      savedExportSinceMs: 1000,
+      savedExportUntilMs: 2000,
+    });
+    // Studio project を作り直さない: export 依頼も tab close も走らない
+    expect(
+      studioExportMocks.requestStudioMultitrackExport
+    ).not.toHaveBeenCalled();
+    expect(studioExportMocks.closeStudioExportTab).not.toHaveBeenCalled();
+    // 保存済み filename でそのまま取り込み
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("postDownloaded", {
+      baseUrl: CONTEXT.baseUrl,
+      collectionId: "collection",
+      body: {
+        file_count: 56,
+        expected_file_count: 56,
+        format: "wav",
+        download_path: "/Downloads/saved.zip",
+        clip_ids: CLIP_IDS,
+        generated_at: expect.any(String),
+      },
+    });
+    expect(result.summary).toBe(PARTIAL_SUMMARY);
+    const messages = emitProgress.mock.calls.map(([event]) => event.message);
+    expect(
+      messages.some((message) => message?.includes("再 export をスキップ"))
+    ).toBe(true);
+  });
+
+  it("retry download で保存済み ZIP が無いときは従来どおり export を実行する (#5143)", async () => {
+    messagingMocks.sendMessage.mockImplementation(async (message: string) => {
+      if (message === "startDownload") {
+        return { ok: true };
+      }
+      if (message === "postDownloaded") {
+        return { summary: PARTIAL_SUMMARY };
+      }
+      return { ok: true };
+    });
+    studioExportMocks.requestStudioMultitrackExport.mockImplementationOnce(
+      async () => {
+        dispatchDownloadComplete("fresh.zip");
+        return STUDIO_TAB_ID;
+      }
+    );
+    const flow = createSubject(() => false);
+
+    await flow.retryDownload({
+      context: CONTEXT,
+      collectionId: "collection",
+      submittedClipIds: CLIP_IDS,
+      savedExport: { sinceMs: 1000 },
+      clearResumeState: vi.fn(async () => undefined),
+    });
+
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith("startDownload", {
+      savedExportSinceMs: 1000,
+      savedExportUntilMs: undefined,
+    });
+    expect(
+      studioExportMocks.requestStudioMultitrackExport
+    ).toHaveBeenCalledWith({ collectionId: "collection", clipIds: CLIP_IDS });
+    expect(studioExportMocks.closeStudioExportTab).toHaveBeenCalledWith(
+      STUDIO_TAB_ID
+    );
+  });
+
   it("retry download の部分成功は同じ server summary を返す", async () => {
     arrangePartialDownloadSuccess();
     const emitProgress = vi.fn();

@@ -157,7 +157,7 @@ export default defineBackground(() => {
       requireRelayTab(sender, "queryUnattendedState")
     )
   );
-  onMessage("startDownload", async ({ sender }) => {
+  onMessage("startDownload", async ({ data, sender }) => {
     const tabId = relayTabId(sender);
     if (tabId === null) {
       console.warn("[suno-helper] startDownload: 送信元タブが特定できません");
@@ -166,7 +166,14 @@ export default defineBackground(() => {
         message: "startDownload: 送信元タブが特定できません",
       } as const;
     }
-    return downloadWatcher.start(tabId);
+    const savedExport =
+      typeof data?.savedExportSinceMs === "number"
+        ? {
+            sinceMs: data.savedExportSinceMs,
+            untilMs: data?.savedExportUntilMs,
+          }
+        : undefined;
+    return downloadWatcher.start(tabId, savedExport);
   });
 
   onMessage("startStudioExport", async ({ data, sender }) => {

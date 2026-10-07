@@ -62,11 +62,20 @@ export interface DownloadFlowDeps {
   onDownloadComplete?: (filename: string) => Promise<void>;
 }
 
+/** 前回 run の Studio export で保存済みの ZIP を拾う探索窓 (#5143)。
+ * sinceMs〜untilMs の間に開始された信頼済み Suno ZIP だけを採用する。 */
+export interface SavedExportWindow {
+  sinceMs: number;
+  untilMs?: number;
+}
+
 export interface RetryDownloadOptions {
   context: DownloadContext;
   collectionId: string;
   submittedClipIds: string[];
   expectedClipCount?: number;
+  /** 中断 run 由来の保存済み ZIP を拾う探索窓。未指定なら従来どおり新規 export する。 */
+  savedExport?: SavedExportWindow;
   clearResumeState: (collectionId: string) => Promise<void>;
 }
 
@@ -134,13 +143,24 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     });
   }
 
-  async function startDownloadWatcher(): Promise<void> {
-    const startResult = await sendMessage("startDownload", undefined);
+  async function startDownloadWatcher(
+    savedExport?: SavedExportWindow
+  ): Promise<{ savedFilename?: string }> {
+    const startResult = await sendMessage(
+      "startDownload",
+      savedExport === undefined
+        ? undefined
+        : {
+            savedExportSinceMs: savedExport.sinceMs,
+            savedExportUntilMs: savedExport.untilMs,
+          }
+    );
     if (!startResult?.ok) {
       throw new Error(
         startResult?.message ?? "Studio export の監視を開始できませんでした"
       );
     }
+    return { savedFilename: startResult.savedFilename };
   }
 
   async function cancelDownloadWatcher(): Promise<void> {
@@ -240,7 +260,8 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number,
-    clipIds: string[]
+    clipIds: string[],
+    savedExport?: SavedExportWindow
   ): Promise<DownloadSummary | undefined> {
     if (deps.isAborted()) return;
 
@@ -249,10 +270,27 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
       total: progressTotal,
       message: "Studio Multitrack export（WAV）",
     });
-    await startDownloadWatcher();
+    const startResult = await startDownloadWatcher(savedExport);
     if (deps.isAborted()) {
       await cancelDownloadWatcher();
       return;
+    }
+    if (typeof startResult.savedFilename === "string") {
+      // 前回 run で ZIP が保存済みなら Studio project / export を作り直さず、
+      // その ZIP で取り込みを再開する (#5143)。
+      deps.emitProgress({
+        phase: PHASE.DOWNLOADING,
+        total: progressTotal,
+        message: `保存済みの Studio export ZIP を検出。再 export をスキップして取り込みを再開します: ${startResult.savedFilename}`,
+      });
+      return await postDownloadedArchive(
+        context,
+        collectionId,
+        progressTotal,
+        expectedFileCount,
+        startResult.savedFilename,
+        clipIds
+      );
     }
     const filename = await waitForDownloadedFilename(collectionId, clipIds);
     if (filename === null) return;
@@ -271,7 +309,8 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number,
-    clipIds: string[]
+    clipIds: string[],
+    savedExport?: SavedExportWindow
   ): Promise<DownloadSummary | undefined> {
     try {
       return await performDownloadAttempt(
@@ -279,7 +318,8 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
         collectionId,
         progressTotal,
         expectedFileCount,
-        clipIds
+        clipIds,
+        savedExport
       );
     } catch (error) {
       throw withDownloadingPhase(error);
@@ -344,7 +384,8 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
       options.collectionId,
       total,
       options.expectedClipCount ?? total,
-      options.submittedClipIds
+      options.submittedClipIds,
+      options.savedExport
     );
     if (deps.isAborted()) {
       deps.emitProgress({ phase: PHASE.STOPPED, total: 0 });

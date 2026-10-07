@@ -199,6 +199,7 @@ overlay / popup 上部の live region と root の `data-suno-phase` に進捗�
 - `entry-failed` は run 全体は継続中。`finished` が一部失敗を示した場合は「失敗分のみ再実行」を提案し、自動で無限再試行しない。
 - status に `duration guard NG` と `再生成 OFF` が出た場合は run を継続する。対象 clip は除外されず playlist / download 候補に残るため、entry 名と NG 理由を完了確認へ引き継ぐ。
 - `adding-to-playlist` / `downloading` が 10 分以上無変化なら overlay の status、Downloads、server log を確認し、同じ操作を連打しない。`error` になったら resume / retry ボタンで再開するか handoff する。
+- `downloading` で `error` になっても、Downloads に ZIP が残っていれば retry で再 export せず保存済み ZIP から取り込みを再開する（Chrome が書き込み完了後に `interrupted` を返すことがある）。失敗文言の `error=…, 受信 X/Y bytes, 保存ファイルあり/なし` で「実際に保存されたか」を切り分ける。
 
 handoff 条件（agent は自動突破しない）:
 
@@ -266,7 +267,7 @@ DL が止まる・形式が違う・`workflow-state.json` へ反映されない�
 - `yt-collection-serve collections/planning --port 49152` の稼働情報は `http://localhost:7872/.well-known/yt-collection-serve` から動的検出する。selector を開く操作で更新し、更新完了後に選択肢を表示する。`http://youtube-automation.localhost:7873` は常に表示される。
 - **下流チャンネルの venv が古いと `/collections` の status / count 契約が古い場合がある**。automation リポに機能追加した後は下流で `uv lock --upgrade-package youtube-channels-automation && uv sync` を実行し、サーバーを再起動する。Step 1 の確認で検出できる。
 - **playlist URL が記録されない場合**: (1) `/auth/token` が 200 を返すか、(2) popup の対象 collection が正しいか、(3) `POST /collections/<id>/downloaded` の 1 回目（`file_count: 0`）が 2xx で返っているかを確認する。
-- **ZIP 展開後も downloaded にならない場合**: (1) Studio Multitrack ZIP が完了しているか、(2) `download_path` が絶対パスで POST されているか、(3) ZIP 内音声数が `expected_file_count` 以上か、(4) `02-Individual-music/` に WAV が配置されたかを確認する。
+- **ZIP 展開後も downloaded にならない場合**: (1) Studio Multitrack ZIP が完了しているか、(2) `download_path` が絶対パスで POST されているか、(3) ZIP 内音声数が `expected_file_count` 以上か、(4) `02-Individual-music/` に WAV が配置されたかを確認する。ZIP が Downloads に残るのに `downloaded_count=0` のときは overlay の Download 再開でよい。再開は resume state の時刻窓で保存済み ZIP を検出し、Studio project を作り直さずそのまま `POST /downloaded` を再実行する。
 
 ## Rules
 

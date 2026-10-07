@@ -38,34 +38,25 @@ interface StoredDownloadWatcher {
   targetDownloadId: number | null;
 }
 
+interface DownloadSearchStub {
+  id?: number;
+  filename: string;
+  startTime?: string;
+  url?: string;
+  finalUrl?: string;
+  referrer?: string;
+  state?: string;
+  exists?: boolean;
+  bytesReceived?: number;
+  fileSize?: number;
+  totalBytes?: number;
+  error?: string;
+}
+
 async function loadBackground(opts?: {
-  searchResults?: Array<{
-    filename: string;
-    startTime?: string;
-    url?: string;
-    finalUrl?: string;
-    referrer?: string;
-  }>;
-  searchResultsById?: Record<
-    number,
-    Array<{
-      filename: string;
-      startTime?: string;
-      url?: string;
-      finalUrl?: string;
-      referrer?: string;
-      state?: string;
-    }>
-  >;
-  recentSearchResults?: Array<{
-    id?: number;
-    filename: string;
-    startTime?: string;
-    url?: string;
-    finalUrl?: string;
-    referrer?: string;
-    state?: string;
-  }>;
+  searchResults?: DownloadSearchStub[];
+  searchResultsById?: Record<number, DownloadSearchStub[]>;
+  recentSearchResults?: DownloadSearchStub[];
   debuggerAttachError?: Error;
   debuggerSendCommandError?: Error;
   postDownloadedError?: Error;
@@ -164,18 +155,7 @@ async function loadBackground(opts?: {
       }),
     },
     search: vi.fn(
-      (
-        query: { id?: number },
-        cb: (
-          results: Array<{
-            id: number;
-            filename: string;
-            startTime: string;
-            url: string;
-            state?: string;
-          }>
-        ) => void
-      ) => {
+      (query: { id?: number }, cb: (results: DownloadSearchStub[]) => void) => {
         if (typeof query.id !== "number") {
           const results = (opts?.recentSearchResults ?? []).map((r, index) => ({
             id: r.id ?? index + 100,
@@ -1935,6 +1915,299 @@ describe('background onMessage("cancelDownload"): active watcher を解除する
       message:
         "別の Studio export 監視が進行中です。完了後に再実行してください。",
     });
+  });
+});
+
+// #5143: 中断 run の再実行で「監視前に保存済みの ZIP」を拾う / 中断 event の診断強化
+describe('background onMessage("startDownload"): 保存済み ZIP 再開 (#5143)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("Given 窓内に保存済みの中断 ZIP When startDownload Then savedFilename を返し監視を開始しない", async () => {
+    const sinceMs = Date.now() - 10 * 60_000;
+    const { handlers, sessionStore } = await loadBackground({
+      recentSearchResults: [
+        {
+          filename: "/Users/test/Downloads/closer-to-the-speaker.zip",
+          startTime: new Date(sinceMs + 60_000).toISOString(),
+          url: "https://suno.com/api/download/zip",
+          state: "interrupted",
+          exists: true,
+          bytesReceived: 839_000_000,
+          fileSize: 839_000_000,
+          error: "ABORTED",
+        },
+      ],
+    });
+
+    const result = await handlers.get("startDownload")!({
+      data: {
+        savedExportSinceMs: sinceMs,
+        savedExportUntilMs: Date.now(),
+      },
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      savedFilename: "/Users/test/Downloads/closer-to-the-speaker.zip",
+    });
+    // 監視 watcher は作られない
+    expect(sessionStore["suno-helper:downloadWatcher"]).toBeUndefined();
+  });
+
+  it("Given 窓内に complete の ZIP When startDownload Then savedFilename を返す", async () => {
+    const sinceMs = Date.now() - 10 * 60_000;
+    const { handlers } = await loadBackground({
+      recentSearchResults: [
+        {
+          filename: "/Users/test/Downloads/done.zip",
+          startTime: new Date(sinceMs + 60_000).toISOString(),
+          url: "https://cdn1.suno.ai/done.zip",
+          state: "complete",
+        },
+      ],
+    });
+
+    const result = await handlers.get("startDownload")!({
+      data: { savedExportSinceMs: sinceMs },
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      savedFilename: "/Users/test/Downloads/done.zip",
+    });
+  });
+
+  it("Given 窓より古い ZIP のみ When startDownload Then 保存済み採用せず監視を開始する", async () => {
+    const sinceMs = Date.now();
+    const { handlers, sessionStore } = await loadBackground({
+      recentSearchResults: [
+        {
+          filename: "/Users/test/Downloads/old.zip",
+          startTime: new Date(sinceMs - 60_000).toISOString(),
+          url: "https://suno.com/api/download/zip",
+          state: "complete",
+        },
+      ],
+    });
+
+    const result = await handlers.get("startDownload")!({
+      data: { savedExportSinceMs: sinceMs },
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(sessionStore["suno-helper:downloadWatcher"]).toBeDefined();
+  });
+
+  it("Given untilMs 以降の ZIP のみ When startDownload Then 保存済み採用せず監視を開始する", async () => {
+    const sinceMs = Date.now() - 10 * 60_000;
+    const untilMs = sinceMs + 60_000;
+    const { handlers, sessionStore } = await loadBackground({
+      recentSearchResults: [
+        {
+          filename: "/Users/test/Downloads/later.zip",
+          startTime: new Date(untilMs + 60_000).toISOString(),
+          url: "https://suno.com/api/download/zip",
+          state: "complete",
+        },
+      ],
+    });
+
+    const result = await handlers.get("startDownload")!({
+      data: { savedExportSinceMs: sinceMs, savedExportUntilMs: untilMs },
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(sessionStore["suno-helper:downloadWatcher"]).toBeDefined();
+  });
+
+  it("Given 他 origin の保存済み ZIP When startDownload Then 採用しない", async () => {
+    const sinceMs = Date.now() - 10 * 60_000;
+    const { handlers } = await loadBackground({
+      recentSearchResults: [
+        {
+          filename: "/Users/test/Downloads/evil.zip",
+          startTime: new Date(sinceMs + 60_000).toISOString(),
+          url: "https://evil.example/evil.zip",
+          state: "complete",
+        },
+      ],
+    });
+
+    const result = await handlers.get("startDownload")!({
+      data: { savedExportSinceMs: sinceMs },
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(result).toEqual({ ok: true });
+  });
+
+  it("Given payload なし When startDownload Then 保存済み探索を行わず監視を開始する", async () => {
+    const { handlers, sessionStore } = await loadBackground({
+      recentSearchResults: [
+        {
+          filename: "/Users/test/Downloads/ignored.zip",
+          startTime: new Date().toISOString(),
+          url: "https://suno.com/api/download/zip",
+          state: "complete",
+        },
+      ],
+    });
+
+    const result = await handlers.get("startDownload")!({
+      data: { format: "mp3" },
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(sessionStore["suno-helper:downloadWatcher"]).toBeDefined();
+  });
+});
+
+describe('background onMessage("startDownload"): interrupted だが保存済みの ZIP を完了として採用する (#5143)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("Given interrupted で exists+bytesReceived>=fileSize When listener 発火 Then downloadComplete を中継する", async () => {
+    const { handlers, sentMessages, createdListeners, downloadListeners } =
+      await loadBackground({
+        searchResultsById: {
+          1: [
+            {
+              filename: "/Users/test/Downloads/aborted-but-saved.zip",
+              startTime: new Date().toISOString(),
+              url: "https://suno.com/api/download/zip",
+              state: "interrupted",
+              exists: true,
+              bytesReceived: 839_000_000,
+              fileSize: 839_000_000,
+              error: "ABORTED",
+            },
+          ],
+        },
+      });
+
+    await handlers.get("startDownload")!({
+      data: {},
+      sender: { tab: { id: 42 } },
+    });
+    createdListeners[0](freshZip(1));
+    downloadListeners[0]({ id: 1, state: { current: "interrupted" } });
+    await flushPromises();
+
+    expect(sentMessages).toContainEqual({
+      type: "downloadComplete",
+      data: { filename: "/Users/test/Downloads/aborted-but-saved.zip" },
+      tabId: 42,
+    });
+    expect(
+      sentMessages.filter((m) => m.type === "downloadFailed")
+    ).toHaveLength(0);
+  });
+
+  it("Given 中断 item は未保存だが別の終端 ZIP がある When interrupted Then fallback ZIP で downloadComplete を中継する", async () => {
+    const { handlers, sentMessages, createdListeners, downloadListeners } =
+      await loadBackground({
+        searchResultsById: {
+          1: [
+            {
+              filename: "/Users/test/Downloads/partial.zip",
+              startTime: new Date().toISOString(),
+              url: "https://suno.com/api/download/zip",
+              state: "interrupted",
+              exists: false,
+              bytesReceived: 100,
+              fileSize: 839_000_000,
+              error: "NETWORK_FAILED",
+            },
+          ],
+        },
+        recentSearchResults: [
+          {
+            filename: "/Users/test/Downloads/partial.zip",
+            startTime: new Date().toISOString(),
+            url: "https://suno.com/api/download/zip",
+            state: "interrupted",
+            exists: false,
+            bytesReceived: 100,
+            fileSize: 839_000_000,
+            error: "NETWORK_FAILED",
+          },
+          {
+            filename: "/Users/test/Downloads/finished.zip",
+            startTime: new Date().toISOString(),
+            url: "https://cdn1.suno.ai/finished.zip",
+            state: "interrupted",
+            exists: true,
+            bytesReceived: 500,
+            fileSize: 500,
+          },
+        ],
+      });
+
+    await handlers.get("startDownload")!({
+      data: {},
+      sender: { tab: { id: 42 } },
+    });
+    createdListeners[0](freshZip(1));
+    downloadListeners[0]({ id: 1, state: { current: "interrupted" } });
+    await flushPromises();
+
+    expect(sentMessages).toContainEqual({
+      type: "downloadComplete",
+      data: { filename: "/Users/test/Downloads/finished.zip" },
+      tabId: 42,
+    });
+  });
+
+  it("Given 未保存の中断のみ When interrupted Then error/受信 bytes/保存有無を含む downloadFailed を中継する", async () => {
+    const { handlers, sentMessages, createdListeners, downloadListeners } =
+      await loadBackground({
+        searchResultsById: {
+          1: [
+            {
+              filename: "/Users/test/Downloads/partial.zip",
+              startTime: new Date().toISOString(),
+              url: "https://suno.com/api/download/zip",
+              state: "interrupted",
+              exists: false,
+              bytesReceived: 100,
+              fileSize: 839_000_000,
+              error: "NETWORK_FAILED",
+            },
+          ],
+        },
+      });
+
+    await handlers.get("startDownload")!({
+      data: {},
+      sender: { tab: { id: 42 } },
+    });
+    createdListeners[0](freshZip(1));
+    downloadListeners[0]({ id: 1, state: { current: "interrupted" } });
+    await flushPromises();
+
+    const failed = sentMessages.find((m) => m.type === "downloadFailed");
+    if (!failed) {
+      throw new Error("downloadFailed が送信されていません");
+    }
+    const message = (failed.data as { message: string }).message;
+    expect(message).toContain("中断");
+    expect(message).toContain("error=NETWORK_FAILED");
+    expect(message).toContain("受信 100/839000000 bytes");
+    expect(message).toContain("保存ファイルなし");
+    expect(message).toContain("Download から export を再実行できます");
   });
 });
 

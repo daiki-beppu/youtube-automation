@@ -83,6 +83,8 @@ async function loadContentScript(
     const actual = await importOriginal<typeof import("../lib/resume-state")>();
     return {
       ...actual,
+      // node 環境では chrome.storage が無いため read を stub する (#5143)
+      readResumeState: vi.fn(() => Promise.resolve(null)),
       writeResumeState: vi.fn(() => Promise.resolve()),
       clearResumeStateForCollection: clearResumeStateForCollectionMock,
     };
