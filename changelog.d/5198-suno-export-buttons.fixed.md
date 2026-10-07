@@ -1,0 +1,3 @@
+- suno-helper の Studio エクスポートでボタン検出をラベル大小文字に揺らがない照合へ修正し、"Rename Track" / "Rename track" のような表記差で Multitrack export が停止しないようにした（#5198）。
+- Library が最後に開いた Workspace を記憶して直接開く場合でも、"Go back" で Library トップへ戻ってから "All Songs" を待つようにした（#5198）。
+- 要素待機のタイムアウトに非表示・画面外・遮蔽の診断を付け、拡張自身のパネルに遮られた場合も識別できるようにした（#5198）。

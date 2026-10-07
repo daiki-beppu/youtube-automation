@@ -1,9 +1,14 @@
+import {
+  attributeEqualsSelector,
+  matchesLabel,
+} from "../../shared/suno-labels";
 import { sendMessage } from "./messaging";
 
 const STUDIO_CLIP_DRAG_TYPE = "application/x-suno-studio-clip";
 const DOM_TIMEOUT_MS = 30_000;
 const DOM_POLL_MS = 200;
 const LIBRARY_LAZY_LOAD_WAIT_MS = 2_000;
+const LIBRARY_TRANSITION_WAIT_MS = 500;
 const LIBRARY_CLIP_SELECTOR = '[draggable="true"][data-clip-id]';
 
 export interface StudioExportRequest {
@@ -45,6 +50,74 @@ function isVisible(element: Element): boolean {
   );
 }
 
+function describeElement(element: Element): string {
+  const tag = element.tagName.toLowerCase();
+  const id = element.id ? `#${element.id}` : "";
+  const aria = element.getAttribute("aria-label");
+  const ariaPart = aria ? ` [aria-label="${aria}"]` : "";
+  const text = (element.textContent ?? "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, 40);
+  const textPart = text ? ` "${text}"` : "";
+  return `<${tag}${id}>${ariaPart}${textPart}`;
+}
+
+function diagnoseHiddenElement(element: Element): string {
+  if (!(element instanceof HTMLElement)) {
+    return "要素は存在するが HTMLElement ではない";
+  }
+  if (element.hidden) return "要素は存在するが hidden 属性";
+  if (element.getAttribute("aria-hidden") === "true") {
+    return "要素は存在するが aria-hidden";
+  }
+  const style = getComputedStyle(element);
+  if (style.display === "none") return "要素は存在するが display:none";
+  if (style.visibility === "hidden") {
+    return "要素は存在するが visibility:hidden";
+  }
+  const rect = element.getBoundingClientRect();
+  return `要素は存在するがサイズ ${Math.round(rect.width)}x${Math.round(rect.height)}`;
+}
+
+function diagnoseOcclusion(element: Element, x: number, y: number): string {
+  if (typeof document.elementFromPoint !== "function") {
+    return "要素は表示中（遮蔽判定不可）";
+  }
+  const top = document.elementFromPoint(x, y);
+  if (
+    !top ||
+    top === element ||
+    element.contains(top) ||
+    top.contains(element)
+  ) {
+    return "要素は表示中（クリックは未反映）";
+  }
+  // overlay は Shadow DOM なので elementFromPoint は host 要素を返す。
+  // WXT の shadow root host は <suno-helper-overlay> カスタム要素。
+  const own = top.tagName.toLowerCase().includes("suno-helper");
+  return own
+    ? `要素は存在するが suno-helper パネルに遮蔽 (${describeElement(top)})`
+    : `要素は存在するが他要素に遮蔽 (${describeElement(top)})`;
+}
+
+/**
+ * タイムアウト時の切り分け証跡。対象が「存在しない」のか、存在するが
+ * 非表示 / 画面外 / 他要素（suno-helper パネル含む）に遮蔽されているのかを
+ * 1 行で返す。失敗ログだけで原因を識別できるようにする (#5198)。
+ */
+function diagnoseElement(element: Element | null): string {
+  if (!element) return "要素なし";
+  if (!isVisible(element)) return diagnoseHiddenElement(element);
+  const rect = element.getBoundingClientRect();
+  const x = rect.left + rect.width / 2;
+  const y = rect.top + rect.height / 2;
+  if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) {
+    return `要素は存在するが画面外 (x=${Math.round(x)}, y=${Math.round(y)})`;
+  }
+  return diagnoseOcclusion(element, x, y);
+}
+
 async function waitForElement<T extends Element>(
   find: () => T | null,
   description: string
@@ -55,22 +128,49 @@ async function waitForElement<T extends Element>(
     if (element && isVisible(element)) return element;
     await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
   }
-  throw new Error(`Studio の ${description} が見つかりません`);
+  throw new Error(
+    `Studio の ${description} が見つかりません（${diagnoseElement(find())}）`
+  );
 }
 
-function buttonByName(name: string): Button | null {
+function toLabelList(labels: string | readonly string[]): readonly string[] {
+  return typeof labels === "string" ? [labels] : labels;
+}
+
+/** requireVisible=false はタイムアウト診断用。非表示ボタンも拾って理由を報告する。 */
+function findButtonByName(
+  names: string | readonly string[],
+  requireVisible = true
+): Button | null {
+  const labels = toLabelList(names);
   return (
     Array.from(document.querySelectorAll<Button>("button")).find(
-      (button) => button.textContent?.trim() === name && isVisible(button)
+      (button) =>
+        matchesLabel(button.textContent, labels) &&
+        (!requireVisible || isVisible(button))
     ) ?? null
   );
 }
 
-function buttonByAriaLabel(label: string): Button | null {
+/** ラベルの大小文字差や別表記で取りこぼさないよう、照合は常に case-insensitive とする。 */
+function buttonByName(names: string | readonly string[]): Button | null {
+  return findButtonByName(names);
+}
+
+function findButtonByAriaLabel(
+  labels: string | readonly string[],
+  requireVisible = true
+): Button | null {
   const element = document.querySelector<Button>(
-    `button[aria-label="${label}"]`
+    attributeEqualsSelector("button", "aria-label", toLabelList(labels), {
+      ignoreCase: true,
+    })
   );
-  return element && isVisible(element) ? element : null;
+  return element && (!requireVisible || isVisible(element)) ? element : null;
+}
+
+function buttonByAriaLabel(labels: string | readonly string[]): Button | null {
+  return findButtonByAriaLabel(labels);
 }
 
 async function clickButtonByName(name: string): Promise<void> {
@@ -172,7 +272,16 @@ export async function clickStudioButtonUntil<T extends HTMLElement>(
     }
     await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
   }
-  throw new Error(`Studio の ${description} が見つかりません`);
+  const button = findButtonByName(buttonName, false);
+  const buttonDiagnosis =
+    button === null
+      ? "ボタンなし"
+      : button.disabled
+        ? "ボタンは無効"
+        : diagnoseElement(button);
+  throw new Error(
+    `Studio の ${description} が見つかりません（${diagnoseElement(findResult())}。ボタン: ${buttonDiagnosis}）`
+  );
 }
 
 export async function clickStudioAriaButtonUntil<T extends HTMLElement>(
@@ -198,7 +307,16 @@ export async function clickStudioAriaButtonUntil<T extends HTMLElement>(
     }
     await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
   }
-  throw new Error(`Studio の ${description} が見つかりません`);
+  const button = findButtonByAriaLabel(ariaLabel, false);
+  const buttonDiagnosis =
+    button === null
+      ? "ボタンなし"
+      : button.disabled
+        ? "ボタンは無効"
+        : diagnoseElement(button);
+  throw new Error(
+    `Studio の ${description} が見つかりません（${diagnoseElement(findResult())}。ボタン: ${buttonDiagnosis}）`
+  );
 }
 
 function findLibraryScroller(element: Element): HTMLElement | null {
@@ -328,8 +446,9 @@ async function renameTrack(track: HTMLElement, name: string): Promise<void> {
   );
   if (!menu) throw new Error("Studio の track menu が見つかりません");
   dispatchStudioPointerClick(menu);
+  // Suno の版で "Rename Track" / "Rename track" と表記が揺れる (#5198)。
   const renameButton = await waitForElement(
-    () => buttonByName("Rename Track"),
+    () => buttonByName(["Rename Track", "Rename track"]),
     "Rename Track ボタン"
   );
   dispatchStudioPointerClick(renameButton);
@@ -347,6 +466,35 @@ async function renameTrack(track: HTMLElement, name: string): Promise<void> {
   await waitForElement(
     () => (trackName(track) === name ? track : null),
     `track 名 ${name}`
+  );
+}
+
+/**
+ * Library を開き All Songs の clip 一覧へ辿る。Library は前回開いた workspace を
+ * 記憶して直接その一覧を開くことがあり、その場合 Library トップの All Songs は
+ * 存在しない。Go back があればトップへ戻ってから All Songs を探す (#5198)。
+ */
+export async function openStudioLibraryAllSongs(): Promise<HTMLElement> {
+  // 「開いた」ことの確認は All Songs または workspace 内の Go back のどちらかで行う。
+  await clickStudioAriaButtonUntil(
+    "Open library",
+    () => buttonByName("All Songs") ?? buttonByAriaLabel("Go back"),
+    "All Songs / Go back ボタン"
+  );
+  // workspace 内に開いた場合は Go back で Library トップへ戻る。トップで開いた
+  // 場合は All Songs が即座に見つかり、Go back はクリックしない。
+  await clickStudioAriaButtonUntil(
+    "Go back",
+    () => buttonByName("All Songs"),
+    "All Songs ボタン",
+    { postClickDelayMs: LIBRARY_TRANSITION_WAIT_MS }
+  );
+  return clickStudioButtonUntil(
+    "All Songs",
+    () =>
+      document.querySelector<HTMLElement>('[draggable="true"][data-clip-id]'),
+    "Library の clip 一覧",
+    "pointer"
   );
 }
 
@@ -404,20 +552,7 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
       );
     },
     async openLibrary() {
-      await clickStudioAriaButtonUntil(
-        "Open library",
-        () => buttonByName("All Songs"),
-        "All Songs ボタン"
-      );
-      await clickStudioButtonUntil(
-        "All Songs",
-        () =>
-          document.querySelector<HTMLElement>(
-            '[draggable="true"][data-clip-id]'
-          ),
-        "Library の clip 一覧",
-        "pointer"
-      );
+      await openStudioLibraryAllSongs();
     },
     async placeClipOnTrackAtStart(clipId, trackIndex) {
       if (trackIndex > 0) {

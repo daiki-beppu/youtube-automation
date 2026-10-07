@@ -12,7 +12,25 @@ import {
   dispatchStudioPointerClick,
   exportStudioMultitrack,
   findLibraryClip,
+  openStudioLibraryAllSongs,
 } from "../lib/studio-export";
+
+function visibleButton(label: string, text?: string): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.textContent = text ?? label;
+  button.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+  return button;
+}
+
+function libraryClip(clipId: string): HTMLElement {
+  const clip = document.createElement("div");
+  clip.dataset.clipId = clipId;
+  clip.draggable = true;
+  clip.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+  return clip;
+}
 
 const TITLE_BY_CLIP = new Map([
   ["clip-a", "Song A"],
@@ -405,5 +423,212 @@ describe("Studio multitrack export", () => {
         deps
       )
     ).rejects.toThrow("Premier プラン");
+  });
+
+  it("Given ボタン文言の大小文字が揺れた UI When 名前でボタンを探す Then case-insensitive に一致する", async () => {
+    // "Rename Track" → "Rename track" のような Suno 側の表記揺れ (#5198)
+    const button = visibleButton("unused", "rename track");
+    document.body.append(button);
+    const target = document.createElement("div");
+    target.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+    button.addEventListener("pointerdown", () => document.body.append(target));
+
+    const found = await clickStudioButtonUntil(
+      "Rename Track",
+      () => (document.body.contains(target) ? target : null),
+      "対象要素",
+      "pointer"
+    );
+
+    expect(found).toBe(target);
+    document.body.replaceChildren();
+  });
+
+  it("Given Library がトップで開く When openStudioLibraryAllSongs Then Go back を押さずに All Songs へ進む", async () => {
+    vi.mocked(sendMessage).mockImplementation(async (type) => {
+      if (type !== "sendTrustedClick") return undefined;
+      if (!document.querySelector('button[aria-label="All Songs"]')) {
+        document.body.append(visibleButton("All Songs", "All Songs"));
+      }
+      return undefined;
+    });
+    document.body.append(visibleButton("Open library"));
+
+    const goBack = visibleButton("Go back");
+    goBack.setAttribute("aria-label", "Go back");
+    goBack.addEventListener("pointerdown", () => {
+      throw new Error("Go back は押されないはず");
+    });
+    document.body.append(goBack);
+
+    const result = openStudioLibraryAllSongs();
+    // All Songs が出た段階で pointer click 経路へ進む
+    const allSongs = () =>
+      Array.from(document.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim() === "All Songs"
+      );
+    const poll = setInterval(() => {
+      const b = allSongs();
+      if (b && !document.querySelector("[data-clip-id]")) {
+        document.body.append(libraryClip("clip-a"));
+      }
+    }, 50);
+    await expect(result).resolves.toHaveProperty("dataset.clipId", "clip-a");
+    clearInterval(poll);
+    document.body.replaceChildren();
+    vi.mocked(sendMessage).mockReset();
+  });
+
+  it("Given Library が記憶した workspace 内で開く When openStudioLibraryAllSongs Then Go back で戻ってから All Songs を押す", async () => {
+    // 観測された遷移: Open library → workspace 一覧（Go back のみ）→ Go back → All Songs (#5198)
+    const phase = { current: "closed" as "closed" | "workspace" | "top" };
+    vi.mocked(sendMessage).mockImplementation(async (type) => {
+      if (type !== "sendTrustedClick") return undefined;
+      return undefined;
+    });
+
+    const openLibrary = visibleButton("Open library");
+    openLibrary.setAttribute("aria-label", "Open library");
+    document.body.append(openLibrary);
+
+    // pointerdown で遷移を模擬: Open library → workspace、Go back → top、All Songs → clip
+    openLibrary.addEventListener("pointerdown", () => {
+      phase.current = "workspace";
+      document.body.replaceChildren();
+      const back = visibleButton("Go back");
+      back.setAttribute("aria-label", "Go back");
+      back.addEventListener("pointerdown", () => {
+        phase.current = "top";
+        document.body.replaceChildren();
+        const allSongs = visibleButton("All Songs");
+        allSongs.addEventListener("pointerdown", () => {
+          document.body.append(libraryClip("clip-a"));
+        });
+        document.body.append(allSongs);
+      });
+      document.body.append(back);
+    });
+
+    // trusted click は背景経由で pointerdown と同等の効果として扱うため、
+    // テストでは sendTrustedClick 呼び出し時に対象座標の pointerdown を代理させる
+    vi.mocked(sendMessage).mockImplementation(async (type, payload) => {
+      if (type !== "sendTrustedClick") return undefined;
+      const { x, y } = payload as { x: number; y: number };
+      void x;
+      void y;
+      // 前面にある該当 aria-label ボタンの pointerdown を発火させる
+      const target = document.querySelector<HTMLButtonElement>(
+        phase.current === "closed"
+          ? 'button[aria-label="Open library"]'
+          : 'button[aria-label="Go back"]'
+      );
+      target?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+      return undefined;
+    });
+
+    await expect(openStudioLibraryAllSongs()).resolves.toHaveProperty(
+      "dataset.clipId",
+      "clip-a"
+    );
+    expect(phase.current).toBe("top");
+    document.body.replaceChildren();
+    vi.mocked(sendMessage).mockReset();
+  });
+
+  it("Given 対象が timeout で見つからない When 診断 Then エラーに要素なしが付く", async () => {
+    vi.useFakeTimers();
+    try {
+      const promise = clickStudioButtonUntil(
+        "Missing",
+        () => null,
+        "Missing ボタン",
+        "pointer"
+      );
+      const assertion = expect(promise).rejects.toThrow(/要素なし/);
+      await vi.runAllTimersAsync();
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+      document.body.replaceChildren();
+    }
+  });
+
+  it("Given 対象ボタンが display:none When 診断 Then エラーに非表示理由が付く", async () => {
+    vi.useFakeTimers();
+    try {
+      const button = visibleButton("Hidden");
+      button.style.display = "none";
+      document.body.append(button);
+      const promise = clickStudioButtonUntil(
+        "Hidden",
+        () => null,
+        "Hidden ボタン",
+        "pointer"
+      );
+      const assertion = expect(promise).rejects.toThrow(/display:none/);
+      await vi.runAllTimersAsync();
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+      document.body.replaceChildren();
+    }
+  });
+
+  it("Given 対象ボタンが他要素に遮蔽される When 診断 Then エラーに遮蔽物が付く", async () => {
+    vi.useFakeTimers();
+    try {
+      const button = visibleButton("Occluded");
+      document.body.append(button);
+      const occluder = document.createElement("div");
+      occluder.id = "modal-backdrop";
+      document.body.append(occluder);
+      const original = document.elementFromPoint;
+      document.elementFromPoint = () => occluder;
+
+      const promise = clickStudioButtonUntil(
+        "Occluded",
+        () => null,
+        "Occluded ボタン",
+        "pointer"
+      );
+      const assertion = expect(promise).rejects.toThrow(
+        /他要素に遮蔽.*modal-backdrop/
+      );
+      await vi.runAllTimersAsync();
+      await assertion;
+      document.elementFromPoint = original;
+    } finally {
+      vi.useRealTimers();
+      document.body.replaceChildren();
+    }
+  });
+
+  it("Given 対象ボタンが拡張パネルに遮蔽される When 診断 Then エラーが suno-helper パネルを指す", async () => {
+    vi.useFakeTimers();
+    try {
+      const button = visibleButton("BehindPanel");
+      document.body.append(button);
+      const panel = document.createElement("suno-helper-overlay");
+      document.body.append(panel);
+      const original = document.elementFromPoint;
+      document.elementFromPoint = () => panel;
+
+      const promise = clickStudioButtonUntil(
+        "BehindPanel",
+        () => null,
+        "BehindPanel ボタン",
+        "pointer"
+      );
+      const assertion = expect(promise).rejects.toThrow(
+        /suno-helper パネルに遮蔽/
+      );
+      await vi.runAllTimersAsync();
+      await assertion;
+      document.elementFromPoint = original;
+    } finally {
+      vi.useRealTimers();
+      document.body.replaceChildren();
+    }
   });
 });
