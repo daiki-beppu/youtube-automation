@@ -417,6 +417,81 @@ def test_cli_resolves_relative_music_directory_from_collection(tmp_path, monkeyp
     assert err == ""
 
 
+def test_cli_resolves_bare_collection_name_from_planning(tmp_path, monkeypatch, capsys):
+    """Given collections/planning/ 配下にあるコレクションの bare name
+    When CLI main を実行する
+    Then planning のコレクションディレクトリへ解決して exit 0。
+    """
+    channel = tmp_path / "channel"
+    collection_dir = channel / "collections" / "planning" / "night-collection"
+    collection_dir.mkdir(parents=True)
+    _write_prompts_json(collection_dir, [ENTRIES[0]])
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(suno_verify_playlist, "channel_dir", lambda: channel)
+
+    code, out, err = _run_cli(
+        monkeypatch,
+        capsys,
+        ["night-collection", "--titles", ENTRIES[0], ENTRIES[0]],
+    )
+
+    assert code == 0
+    assert "→ OK" in out
+    assert err == ""
+
+
+def test_cli_resolves_bare_collection_name_from_live(tmp_path, monkeypatch, capsys):
+    """Given planning に無く live にあるコレクションの bare name
+    When CLI main を実行する
+    Then live のコレクションディレクトリへ解決して exit 0。
+    """
+    channel = tmp_path / "channel"
+    collection_dir = channel / "collections" / "live" / "night-collection"
+    collection_dir.mkdir(parents=True)
+    _write_prompts_json(collection_dir, [ENTRIES[0]])
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(suno_verify_playlist, "channel_dir", lambda: channel)
+
+    code, out, err = _run_cli(
+        monkeypatch,
+        capsys,
+        ["night-collection", "--titles", ENTRIES[0], ENTRIES[0]],
+    )
+
+    assert code == 0
+    assert "→ OK" in out
+    assert err == ""
+
+
+def test_cli_rejects_unknown_bare_collection_name(tmp_path, monkeypatch, capsys):
+    """Given planning / live のどちらにも無い bare name
+    When CLI main を実行する
+    Then pair 検証の内部エラーではなく探索先を示す用法エラーで exit 1。
+    """
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(suno_verify_playlist, "channel_dir", lambda: tmp_path / "channel")
+
+    code, out, err = _run_cli(monkeypatch, capsys, ["missing-collection", "--titles", "x"])
+
+    assert code == 1
+    assert out == ""
+    assert "collections/planning/ にも collections/live/ にも見つかりません" in err
+    assert "JSON+HTML" not in err
+
+
+def test_cli_rejects_nonexistent_collection_path(tmp_path, monkeypatch, capsys):
+    """Given 存在しないコレクションパス
+    When CLI main を実行する
+    Then pair 検証の内部エラーではなくディレクトリ不在のエラーで exit 1。
+    """
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path / "missing"), "--titles", "x"])
+
+    assert code == 1
+    assert out == ""
+    assert "コレクションディレクトリが見つかりません" in err
+    assert "JSON+HTML" not in err
+
+
 def test_cli_accepts_bilingual_names_emitted_by_zip_extraction(tmp_path, monkeypatch, capsys):
     """Given ZIP extraction が bilingual entry の英語候補で出力した音声ファイル
     When public CLI を --music-dir で実行する
