@@ -37,7 +37,7 @@ Google Auth Platform の設定が必要なら、setup が対話 session で [OAu
 
 first-party の共有 GCP 構成は、上流の [`infra/terraform/gcp/README.md`](../infra/terraform/gcp/README.md) を正本として Terraform で管理する。`yt-doctor` は GCP 層の検証と正本への誘導のみを行い、project / billing / API / IAM を変更しない。
 
-external user は上流リポジトリを clone し、同じ README に従って自分の tfvars で apply する。Terraform 資産は下流チャンネルリポジトリへ配布しない。GCP 層の構築・変更・トラブルシューティングは上流 README、OAuth の本人操作と secret 解決順は本ガイドを参照する。
+external user は上流 stack を自分の project へ apply しない。`infra/terraform/gcp/` は上流専属で、`wif.tf` が上流 repo の GitHub Actions に対象 project の読み取り権限を付与し、GCS backend は上流 bootstrap stack の bucket、`imports.tf` は API 有効化済みを前提とする。下流の GCP 層は `gcloud` で直接設定するか、自前の最小 Terraform stack を用意する。Terraform 資産は下流チャンネルリポジトリへ配布しない。OAuth の本人操作と secret 解決順は本ガイドを参照する。
 
 ---
 

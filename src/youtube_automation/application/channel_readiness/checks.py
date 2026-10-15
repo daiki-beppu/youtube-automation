@@ -778,12 +778,18 @@ def check_gcloud_account() -> CheckResult:
 
 
 # GCP 層 4 check の fail は全て human 対応（上流 Terraform）へ誘導する。
+# infra/terraform/gcp/ は上流専属 stack で下流 project への apply は読み取り権限の
+# 第三者付与になるため、instructions には下流向けの注意も含める（#5223）。
 # CheckResult.__post_init__ が dict を frozen な ManualRemediation へ変換するため、
 # この dict 自体は読み取り専用として共有してよい。
 _TERRAFORM_GCP_ACTION: dict = {
     "kind": "human",
-    "instructions": "GCP 層は上流 Terraform が管理する。infra/terraform/gcp/ で "
-    "terraform plan → apply してから再診断してください。",
+    "instructions": "GCP 層は上流 Terraform が管理する。first-party は infra/terraform/gcp/ で "
+    "terraform plan → apply してから再診断してください。"
+    "この stack は上流専属で、wif.tf が上流 repo の GitHub Actions に対象 project の"
+    "読み取り権限を付与し、backend / imports.tf も上流 bootstrap と有効化済み API を"
+    "前提とするため、下流チャンネルの project には apply しないでください。"
+    "下流の GCP 層は gcloud で直接設定するか、自前の最小 Terraform stack を用意してください。",
     "url": f"https://github.com/{UPSTREAM_REPO}/blob/main/infra/terraform/gcp/README.md",
 }
 

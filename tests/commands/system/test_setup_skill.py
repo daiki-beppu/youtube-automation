@@ -397,6 +397,9 @@ def test_setup_runbook_routes_gcp_layer_checks_to_upstream_terraform() -> None:
     routing = (
         "GCP 層は上流 `infra/terraform/gcp/` が管理する。fail なら `next_action.url` の README に従って"
         "上流で plan → apply を行い、完了後に `uv run yt-doctor --json` で再診断する。"
+        "なおこの stack は上流専属で、下流 project へ apply すると `wif.tf` が上流 repo の"
+        " GitHub Actions に project の読み取り権限を付与してしまうため、"
+        "下流チャンネルの GCP 層は gcloud 直接実行か自前の最小 Terraform で整備する。"
     )
     for check_id in ("billing_linked", "apis_enabled", "iam_aiplatform_user"):
         assert routing in _runbook_section(check_id), f"{check_id} の節が上流 Terraform への誘導文と一致しない"

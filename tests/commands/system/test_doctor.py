@@ -328,6 +328,9 @@ def _assert_terraform_gcp_action(next_action) -> None:
     assert next_action is not None
     assert next_action["kind"] == "human"
     assert "infra/terraform/gcp/" in next_action["instructions"]
+    # #5223: 上流専属 stack を下流 project へ apply させないよう、instructions に下流向け注意を含める
+    assert "上流専属" in next_action["instructions"]
+    assert "下流" in next_action["instructions"]
     assert (
         next_action["url"]
         == f"https://github.com/{doctor.readiness_checks.UPSTREAM_REPO}/blob/main/infra/terraform/gcp/README.md"

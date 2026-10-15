@@ -1,6 +1,6 @@
 # infra/terraform/gcp
 
-共有 GCP プロジェクト + 必要 API + IAM を Terraform で IaC 管理する上流専属 stack。下流チャンネルリポジトリへは配布しない。
+共有 GCP プロジェクト + 必要 API + IAM を Terraform で IaC 管理する上流専属 stack。下流チャンネルリポジトリへは配布しない。下流の project に apply すると `wif.tf` が上流 repo の GitHub Actions へ project の読み取り権限を付与するうえ、GCS backend は上流 bootstrap stack の bucket、`imports.tf` は API 有効化済みを前提とするため、下流の GCP 層は `gcloud` で直接設定するか自前の最小 Terraform stack を用意すること。
 
 ## 運用入口
 
