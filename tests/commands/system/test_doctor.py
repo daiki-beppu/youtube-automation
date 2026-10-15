@@ -2566,6 +2566,20 @@ class TestCheckAnalyticsReport:
         assert result.status == "ok"
         assert "1 件存在" in result.message
 
+    def test_analysis_sidecar_with_stale_html_is_not_a_report_input(self, tmp_path):
+        """schema 検証を通る sidecar 命名でも freshness 対象の analysis report にしない."""
+        reports_dir = tmp_path / "reports"
+        reports_dir.mkdir()
+        _write_analysis_pair(tmp_path, "20240101")
+        sidecar = reports_dir / "analysis_20240101.win-pattern.json"
+        sidecar.write_text((reports_dir / "analysis_20240101.json").read_text(encoding="utf-8"), encoding="utf-8")
+        publish_json_document(sidecar, RepositorySchema.ANALYSIS_REPORT)
+        sidecar.with_suffix(".html").write_text("old template", encoding="utf-8")
+
+        result = doctor.check_analytics_report(tmp_path)
+
+        assert result.status == "ok"
+
     def test_invalid_json_or_missing_html_is_not_a_successful_analysis_input(self, tmp_path):
         reports = tmp_path / "reports"
         reports.mkdir()

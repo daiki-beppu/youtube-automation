@@ -54,7 +54,7 @@ def next_workflow_step(
 
 def _estimate(reports_dir: Path, count: int, usd_per_kib: float) -> tuple[float | None, int, str | None]:
     reports: list[Path] = []
-    for report in sorted(reports_dir.glob("analysis_*.json"), reverse=True):
+    for report in sorted(reports_dir.glob("analysis_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].json"), reverse=True):
         try:
             read_published_json_document(report, RepositorySchema.ANALYSIS_REPORT)
         except AutomationError:

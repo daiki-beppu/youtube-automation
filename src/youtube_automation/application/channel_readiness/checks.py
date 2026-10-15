@@ -1539,7 +1539,9 @@ def check_analytics_report(channel_dir: Path) -> CheckResult:
 
 
 def _analysis_report_with_stale_html(channel_dir: Path) -> Path | None:
-    for source in sorted((channel_dir / "reports").glob("analysis_*.json"), reverse=True):
+    for source in sorted(
+        (channel_dir / "reports").glob("analysis_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].json"), reverse=True
+    ):
         try:
             document = json.loads(source.read_text(encoding="utf-8"))
             validate_repository_document(RepositorySchema.ANALYSIS_REPORT, document)
