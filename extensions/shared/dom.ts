@@ -67,6 +67,7 @@ const SLIDER_MAX_STEPS = 150;
  * clip カードの in-flight マーカー（#866、実機検証で確定）。Suno が `data-testid="clip-row"` と
  * `svg.animate-spin` を撤去したため、音源が揃わない限り押せない Remix btn の `disabled` を軸にする。
  * UI 装飾（spinner/testid）と違い「音源未完成なら Remix 不可」という Suno のドメインルール由来で変更されにくい。
+ * clip 行が `data-clip-status` を持つ場合はそちらを一次シグナルとし、本セレクタは fallback（#5210）。
  */
 export const REMIX_BTN_SELECTOR = attributeEqualsSelector(
   "button",
@@ -89,6 +90,12 @@ const EDIT_TITLE_BTN_SELECTOR = attributeEqualsSelector(
   "aria-label",
   SUNO_LABELS.editTitle
 );
+/**
+ * clip 行の `data-clip-status` の終端状態（#5210、ロケール非依存）。complete は生成完了、
+ * error / failed は失敗終端で、いずれも in-flight でない。これ以外の非空 status
+ * （submitted / queued / streaming / processing / ...）は全て in-flight とみなす。
+ */
+const CLIP_STATUS_TERMINAL = new Set(["complete", "error", "failed"]);
 export type SunoViewMode = "list" | "waveform" | "grid" | "unknown";
 const SUNO_VIEW_LABELS: Record<
   Exclude<SunoViewMode, "unknown">,
@@ -1375,9 +1382,26 @@ export function findCardRoot(anchor: HTMLElement): HTMLElement {
   );
 }
 
+/**
+ * card（または card 内の clip 行）が持つ `data-clip-status` を返す（#5210）。
+ * ロケール非依存の一次シグナル。属性が無い・空値の clip 行では null を返し、
+ * 呼び出し側は従来の Remix / aria-busy / progressbar 判定へ fallback する。
+ */
+function findClipStatus(card: HTMLElement): string | null {
+  const el = card.matches("[data-clip-status]")
+    ? card
+    : card.querySelector<HTMLElement>("[data-clip-status]");
+  const status = el?.getAttribute("data-clip-status")?.trim().toLowerCase();
+  return status || null;
+}
+
 function hasAlternateInFlightSignal(card: HTMLElement): boolean {
   if (!isVisible(card)) {
     return false;
+  }
+  const status = findClipStatus(card);
+  if (status !== null) {
+    return !CLIP_STATUS_TERMINAL.has(status);
   }
   return (
     card.matches('[aria-busy="true"]') ||
@@ -1387,6 +1411,7 @@ function hasAlternateInFlightSignal(card: HTMLElement): boolean {
 
 function hasClipIdentity(card: HTMLElement): boolean {
   return (
+    card.matches("[data-clip-status]") ||
     card.querySelector(
       `${SELECT_CLIP_BTN_SELECTOR}, ${DESELECT_CLIP_BTN_SELECTOR}, ${REMIX_BTN_SELECTOR}, ${EDIT_TITLE_BTN_SELECTOR}`
     ) !== null
@@ -1396,11 +1421,16 @@ function hasClipIdentity(card: HTMLElement): boolean {
 function hasCountSignal(card: HTMLElement): boolean {
   return (
     card.querySelector(REMIX_BTN_SELECTOR) !== null ||
+    findClipStatus(card) !== null ||
     hasAlternateInFlightSignal(card)
   );
 }
 
 function findClipCandidateRoot(anchor: HTMLElement): HTMLElement | null {
+  // `data-clip-status` は clip 行自身が持つ属性（#5210）。その行がそのまま候補 card。
+  if (anchor.matches("[data-clip-status]")) {
+    return anchor;
+  }
   const article = findArticleCardRoot(anchor);
   if (article && hasClipIdentity(article)) {
     return article;
@@ -1427,7 +1457,7 @@ interface InFlightCandidates {
 
 function collectInFlightCandidates(): InFlightCandidates {
   const anchors = document.querySelectorAll<HTMLElement>(
-    `${SELECT_CLIP_BTN_SELECTOR}, ${DESELECT_CLIP_BTN_SELECTOR}, ${REMIX_BTN_SELECTOR}, ${EDIT_TITLE_BTN_SELECTOR}, [aria-busy="true"], [role="progressbar"]`
+    `${SELECT_CLIP_BTN_SELECTOR}, ${DESELECT_CLIP_BTN_SELECTOR}, ${REMIX_BTN_SELECTOR}, ${EDIT_TITLE_BTN_SELECTOR}, [data-clip-status], [aria-busy="true"], [role="progressbar"]`
   );
   const inFlightCards = new Set<HTMLElement>();
   const clipCandidates = new Set<HTMLElement>();
@@ -1450,13 +1480,20 @@ function collectInFlightCandidates(): InFlightCandidates {
 }
 
 /**
- * 1 つの clip card が「生成中」か判定する（#866）。
- * card 内 Remix btn が `disabled`（または `aria-disabled="true"`）なら生成中。音源が揃って初めて
- * Remix が押せるようになる Suno のドメインルールを利用する。strict isVisible() で card 自体も filter し、
+ * 1 つの clip card が「生成中」か判定する（#866, #5210）。
+ * clip 行が `data-clip-status` を持つ場合はそれを一次シグナルにする: 終端（complete / error /
+ * failed）は生成中でなく、それ以外の非空 status（submitted / queued / streaming / ...）は生成中。
+ * `data-clip-status` が無い clip 行では従来通り、card 内 Remix btn が `disabled`（または
+ * `aria-disabled="true"`）なら生成中。音源が揃って初めて Remix が押せるようになる Suno の
+ * ドメインルールを利用する。strict isVisible() で card 自体も filter し、
  * 非可視 card（display:none / bbox 0 / 親 walk で隠れ）は生成中とみなさない。
- * Remix btn が card 内に無い場合は throw（fail-loud, req 8: silent に false を返さない）。
+ * status も Remix btn も無い場合は throw（fail-loud, req 8: silent に false を返さない）。
  */
 export function isClipGenerating(card: HTMLElement): boolean {
+  const status = findClipStatus(card);
+  if (status !== null) {
+    return isVisible(card) && !CLIP_STATUS_TERMINAL.has(status);
+  }
   const remix = card.querySelector<HTMLButtonElement>(REMIX_BTN_SELECTOR);
   if (!remix) {
     throw new Error(
@@ -1470,10 +1507,11 @@ export function isClipGenerating(card: HTMLElement): boolean {
 }
 
 /**
- * 生成中（in-flight）な clip 数を数える（#866）。
+ * 生成中（in-flight）な clip 数を数える（#866, #5210）。
  * 全 Remix btn から findCardRoot で card root を解決して重複排除し、`isClipGenerating(card)`
  * （内部で `isVisible(card)` も判定）が true な distinct card 数を返す。
- * Remix btn が無い card は、aria-busy / progressbar の明示シグナルがある場合だけ union して数える。
+ * `data-clip-status` を持つ clip 行は status を一次シグナルとして数え、
+ * Remix btn が無い card は、status / aria-busy / progressbar の明示シグナルがある場合だけ union して数える。
  * clip 候補自体が無く、現在ビューを検出できる場合だけ空 queue として 0 を返す。
  */
 export function getInFlightClipCount(): number {
@@ -1496,8 +1534,10 @@ export function getInFlightClipCount(): number {
     cards.add(card);
   }
   if (anchors.length === 0 && cards.size === 0) {
+    // clip 候補が全て count 可能（status 持ち等）なら in-flight 0 で確定。
+    // 候補自体が無い場合は、現在ビューを検出できるときだけ空 queue として 0 を返す。
     if (
-      candidates.clipCandidates.size === 0 &&
+      candidates.clipCandidates.size > 0 ||
       detectSunoViewMode() !== "unknown"
     ) {
       return 0;
