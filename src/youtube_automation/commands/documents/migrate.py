@@ -19,6 +19,14 @@ from youtube_automation.commands._shared.cli_harness import run_cli
 from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.documents.schema_registry import RepositorySchema, repository_schema_names
 
+_NO_PROJECT_SCHEMAS = frozenset(
+    {
+        RepositorySchema.COLLECTION_PLAN,
+        RepositorySchema.MUSIC_PROMPT,
+        RepositorySchema.VIDEO_DESCRIPTION,
+    }
+)
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -29,6 +37,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--target", type=Path, required=True, help="公開先 .json path")
     parser.add_argument("--schema", required=True, choices=repository_schema_names(), help="固定 registry の schema 名")
     parser.add_argument("--workflow-state", type=Path, help="collection 文書公開後に更新する workflow-state.json")
+    parser.add_argument(
+        "--no-project",
+        action="store_true",
+        help="workflow-state へ投影せず文書 pair だけを公開する（--workflow-state と併用不可）",
+    )
     parser.add_argument(
         "--migration-decision",
         choices=(MarkdownMigrationDecision.YES.value, MarkdownMigrationDecision.NO.value),
@@ -52,24 +65,30 @@ def run(args: argparse.Namespace) -> int:
         return json.loads(args.candidate.read_text(encoding="utf-8"))
 
     schema = RepositorySchema(args.schema)
+    if args.no_project:
+        if args.workflow_state is not None:
+            raise ValidationError("--no-project と --workflow-state は併用できません")
+        if schema not in _NO_PROJECT_SCHEMAS:
+            raise ValidationError("--no-project は collection plan / music prompt / video description 専用です")
+    workflow_state = None if args.no_project else args.workflow_state
     if schema is RepositorySchema.CHANNEL_STRATEGY:
         result = write_channel_strategy_document(args.target, load_candidate, decision)
     elif schema is RepositorySchema.COLLECTION_PLAN:
-        result = write_collection_plan_document(args.target, args.workflow_state, load_candidate, decision)
+        result = write_collection_plan_document(args.target, workflow_state, load_candidate, decision)
     elif schema is RepositorySchema.MUSIC_PROMPT:
-        if args.workflow_state is None:
-            raise ValidationError("music prompt の公開には --workflow-state が必要です")
+        if workflow_state is None and not args.no_project:
+            raise ValidationError("music prompt の公開には --workflow-state または --no-project が必要です")
         result = write_music_prompt_document(
             args.target,
-            args.workflow_state,
+            workflow_state,
             load_candidate,
             decision,
             machine_verify=require_recorded_machine_verification,
         )
     elif schema is RepositorySchema.VIDEO_DESCRIPTION:
-        if args.workflow_state is None:
-            raise ValidationError("video description の公開には --workflow-state が必要です")
-        result = write_video_description_document(args.target, args.workflow_state, load_candidate, decision)
+        if workflow_state is None and not args.no_project:
+            raise ValidationError("video description の公開には --workflow-state または --no-project が必要です")
+        result = write_video_description_document(args.target, workflow_state, load_candidate, decision)
     else:
         if args.workflow_state is not None:
             raise ValidationError("--workflow-state は collection plan / music prompt / video description 専用です")

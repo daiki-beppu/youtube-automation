@@ -204,3 +204,80 @@ def test_video_description_cli_publishes_pair_and_updates_state(tmp_path: Path, 
     assert target.with_suffix(".html").is_file()
     assert json.loads(state.read_text())["assets"]["description"] is True
     assert "created:" in capsys.readouterr().out
+
+
+def test_video_description_cli_no_project_publishes_pair_without_state(tmp_path: Path, capsys) -> None:
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    fixture = write_video_description_pair(fixture_dir)
+    candidate = tmp_path / "candidate.json"
+    candidate.write_bytes(fixture.read_bytes())
+    target = tmp_path / "20-documentation/descriptions.json"
+    target.parent.mkdir()
+
+    result = migrate.main(
+        [
+            str(candidate),
+            "--target",
+            str(target),
+            "--schema",
+            "video-description.schema.json",
+            "--no-project",
+        ]
+    )
+
+    assert result == 0
+    assert target.is_file()
+    assert target.with_suffix(".html").is_file()
+    assert not (tmp_path / "workflow-state.json").exists()
+    assert "created:" in capsys.readouterr().out
+
+
+def test_no_project_and_workflow_state_are_mutually_exclusive(tmp_path: Path, capsys) -> None:
+    fixture_dir = tmp_path / "fixture"
+    fixture_dir.mkdir()
+    fixture = write_video_description_pair(fixture_dir)
+    candidate = tmp_path / "candidate.json"
+    candidate.write_bytes(fixture.read_bytes())
+    target = tmp_path / "20-documentation/descriptions.json"
+    target.parent.mkdir()
+    state = tmp_path / "workflow-state.json"
+    state.write_text(json.dumps({"phase": "prepared", "assets": {}}), encoding="utf-8")
+
+    result = migrate.main(
+        [
+            str(candidate),
+            "--target",
+            str(target),
+            "--schema",
+            "video-description.schema.json",
+            "--workflow-state",
+            str(state),
+            "--no-project",
+        ]
+    )
+
+    assert result == 1
+    assert "併用できません" in capsys.readouterr().err
+    assert not target.exists()
+
+
+def test_no_project_is_rejected_for_non_stateful_schema(tmp_path: Path, capsys) -> None:
+    candidate = tmp_path / "candidate.json"
+    target = tmp_path / "weekly.json"
+    _write_candidate(candidate)
+
+    result = migrate.main(
+        [
+            str(candidate),
+            "--target",
+            str(target),
+            "--schema",
+            "weekly_vote_log.schema.json",
+            "--no-project",
+        ]
+    )
+
+    assert result == 1
+    assert "専用" in capsys.readouterr().err
+    assert not target.exists()
