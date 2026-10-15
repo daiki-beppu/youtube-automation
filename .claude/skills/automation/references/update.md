@@ -532,10 +532,15 @@ sync 直後に、次の 2 点を Phase 4 へ進む前に判定する。手順は
 
 ### Step 4-1. ステージング
 
+staging 対象は asset の書き込み先を固定パスで列挙するのではなく、**追従前後の `git status --porcelain` 差分に現れた path 全体**とする（`apply --commit` と同じ #4911 の契約）。baseline は Phase 1-2 の `git status --porcelain` 出力。`yt-skills sync --force`（`--asset all`）は skills 以外の asset も書き換えるため、固定パス指定では sync 由来の変更を取りこぼす。
+
 ```bash
-git status
-git add pyproject.toml uv.lock .claude/skills/
+git status --porcelain
+git add -- <status に現れた全 path>   # R（rename）行は old / new 両 path を渡す
 ```
+
+- 通常経路（Phase 1-2 で clean 確認済み）: 上記の status 出力は全て追従由来なので全 path を add する。
+- `--allow-dirty` で dirty のまま進めた場合: Phase 1-2 時点の status から **新たに増えた path だけ** を add し、追従開始前の既存差分は含めない。既存差分に staged なものが残っている場合は Phase 4-2 の commit を `git commit --only -m ... -- <対象 path>` で実行し、巻き込まない。
 
 `git add -A` や `.` は **使わない**（無関係なファイルの巻き込みを避ける）。
 
