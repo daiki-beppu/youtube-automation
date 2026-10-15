@@ -789,9 +789,10 @@ cleanup_runtime_files() {
 trap cleanup_runtime_files EXIT
 
 # stream copy は出力尺にほぼ比例する disk I/O 律速。#4757 の実測
-# (3h13m の出力を 18分08秒 = 約 10.6 倍速) を基準に、10–15 倍速で見積もる。
+# (3h13m の出力を 18分08秒 = 約 10.6 倍速) が基準だが、環境によっては
+# 約 5 倍速まで落ちる実測があるため、5–15 倍速で見積もる。
 STREAM_COPY_FAST_RATE=900
-STREAM_COPY_SLOW_RATE=600
+STREAM_COPY_SLOW_RATE=300
 # 呼び出し側の foreground timeout は 10 分。disk I/O のブレを考慮し、
 # 上限見積もりがその半分に達した時点で background 実行を勧める。
 FOREGROUND_TIMEOUT_MINUTES=10
@@ -833,7 +834,7 @@ stream_copy_estimate() {
     else
         span="${lower} minutes"
     fi
-    printf 'roughly %s for %s output (duration-based; disk I/O varies)' \
+    printf 'roughly %s for %s output (duration-based; disk I/O varies by environment)' \
         "$span" "$(format_duration "${FULL_VIDEO_DURATION:-0}")"
 }
 
