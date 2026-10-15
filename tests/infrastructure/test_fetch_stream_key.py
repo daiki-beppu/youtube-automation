@@ -660,6 +660,10 @@ class TestOAuthHandlerExtension:
         with (
             patch.dict(os.environ, {"CLIENT_SECRETS_DIR": str(tmp_path)}),
             patch("youtube_automation.infrastructure.auth.youtube.InstalledAppFlow") as mock_flow_cls,
+            patch(
+                "youtube_automation.infrastructure.auth.youtube._stdin_is_interactive",
+                return_value=True,
+            ),
         ):
             mock_flow = MagicMock()
             mock_creds = MagicMock()

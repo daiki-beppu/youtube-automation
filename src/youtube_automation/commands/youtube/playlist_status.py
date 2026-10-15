@@ -16,6 +16,7 @@ import sys
 
 from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
 from youtube_automation.configuration import load_config
+from youtube_automation.core.errors import AuthError
 from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
@@ -93,6 +94,10 @@ class PlaylistStatusViewer:
                 try:
                     video_ids = self._list_playlist_video_ids(playlist_id)
                     print(f"    動画数: {len(video_ids)}")
+                except AuthError:
+                    # 認証失敗は per-playlist の取得エラーではなくコマンドの失敗として
+                    # 非 0 終了させる（#5235: 失効トークンを成功扱いしない）
+                    raise
                 except Exception:
                     print("    動画数: (取得エラー)")
 

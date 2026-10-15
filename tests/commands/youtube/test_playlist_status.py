@@ -5,7 +5,10 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 import youtube_automation.commands.youtube.playlist_status as _playlist_status_module
+from youtube_automation.core.errors import AuthError
 
 PLAYLIST_ID_STRING_SHAPE = "PL_test_string_275"
 
@@ -180,3 +183,41 @@ class TestShowStatusContractDrift:
 
         out = capsys.readouterr().out
         assert "Main Playlist" in out
+
+
+class TestShowStatusAuthError:
+    """認証失敗は per-playlist の取得エラーに握りつぶさずコマンド失敗へ伝播する（#5235）。"""
+
+    def _viewer(self, tmp_path: Path, monkeypatch):
+        ch = TestShowStatusContractDrift()._dict_shape_channel(tmp_path)
+        monkeypatch.setenv("CHANNEL_DIR", str(ch))
+        with patch.object(
+            _playlist_status_module,
+            "YouTubeClients",
+            return_value=SimpleNamespace(youtube_readonly=MagicMock()),
+        ):
+            return _playlist_status_module.PlaylistStatusViewer()
+
+    def test_auth_error_propagates_from_show_status(self, tmp_path, monkeypatch, capsys):
+        """AuthError は「動画数: (取得エラー)」に変換せずそのまま送出する。"""
+        viewer = self._viewer(tmp_path, monkeypatch)
+        with patch.object(
+            viewer,
+            "_list_playlist_video_ids",
+            side_effect=AuthError("refresh token が失効しています"),
+        ):
+            with pytest.raises(AuthError):
+                viewer.show_status()
+
+        assert "(取得エラー)" not in capsys.readouterr().out
+
+    def test_main_returns_1_on_auth_error(self, monkeypatch, capsys):
+        """main() は AuthError を表示して非 0 で終了する。"""
+        viewer = MagicMock()
+        viewer.show_status.side_effect = AuthError(
+            "refresh token が失効しています。uv run yt-oauth で再認証してください"
+        )
+        monkeypatch.setattr(_playlist_status_module, "PlaylistStatusViewer", MagicMock(return_value=viewer))
+
+        assert _playlist_status_module.main([]) == 1
+        assert "refresh token が失効しています" in capsys.readouterr().out

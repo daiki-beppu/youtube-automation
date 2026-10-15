@@ -104,6 +104,12 @@ def _make_credentials(
     return creds
 
 
+@pytest.fixture(autouse=True)
+def _interactive_stdin(monkeypatch):
+    """pytest の stdin は非対話なので、ブラウザ系テストでは対話端末ありに見せる（#5235）。"""
+    monkeypatch.setattr("youtube_automation.infrastructure.auth.youtube._stdin_is_interactive", lambda: True)
+
+
 # ===========================================================================
 # 1. AuthError クラス（#1, #2）
 # ===========================================================================
@@ -1147,3 +1153,85 @@ class TestChannelIdentityInAuthMessages:
         formatted = prompt.format(url="http://localhost:12345/auth")
         assert "TC{x}" in formatted
         assert "http://localhost:12345/auth" in formatted
+
+
+# ===========================================================================
+# 9. 非対話環境での fail-fast（#5235）
+# ===========================================================================
+
+
+class TestNonInteractiveReauthentication:
+    """stdin が対話端末でない環境ではブラウザ OAuth を開始せず AuthError で失敗する。"""
+
+    def _revoked_token_setup(self, tmp_path: Path, monkeypatch) -> YouTubeOAuthHandler:
+        """refresh が invalid_grant で失敗する expired token 持ち handler を組み立てる。"""
+        handler = _make_handler(tmp_path)
+        handler.token_file.write_text("{}")
+        creds = _make_credentials(
+            expired=True,
+            valid=False,
+            refresh_side_effect=google.auth.exceptions.RefreshError(
+                "invalid_grant: Token has been expired or revoked."
+            ),
+        )
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.Credentials.from_authorized_user_file",
+            MagicMock(return_value=creds),
+        )
+        return handler
+
+    def test_should_raise_auth_error_immediately_when_stdin_not_tty(self, tmp_path: Path, monkeypatch):
+        """Given stdin が非対話かつ token なし
+        When authenticate
+        Then ブラウザフローを開始せず AuthError で即座に失敗する（#5235）。
+        """
+        handler = _make_handler(tmp_path)
+        monkeypatch.setattr("youtube_automation.infrastructure.auth.youtube._stdin_is_interactive", lambda: False)
+        flow = MagicMock()
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
+            MagicMock(return_value=flow),
+        )
+
+        with pytest.raises(AuthError, match="対話可能なターミナル"):
+            handler.authenticate()
+
+        flow.run_local_server.assert_not_called()
+
+    def test_should_report_revoked_refresh_token_when_not_tty(self, tmp_path: Path, monkeypatch):
+        """Given refresh が invalid_grant で失敗し stdin が非対話
+        When authenticate
+        Then 待機せず再認証案内つきで失敗する（#5235）。
+        """
+        handler = self._revoked_token_setup(tmp_path, monkeypatch)
+        monkeypatch.setattr("youtube_automation.infrastructure.auth.youtube._stdin_is_interactive", lambda: False)
+        flow = MagicMock()
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
+            MagicMock(return_value=flow),
+        )
+
+        with pytest.raises(AuthError, match="refresh token が失効しています。uv run yt-oauth で再認証してください"):
+            handler.authenticate()
+
+        flow.run_local_server.assert_not_called()
+
+    def test_should_print_revoked_reason_before_browser_flow(self, tmp_path: Path, monkeypatch, capsys):
+        """Given refresh が invalid_grant で失敗し stdin は対話可能
+        When authenticate
+        Then ブラウザで待つ前に失効理由を stderr に出してから再認証フローへ進む（#5235）。
+        """
+        handler = self._revoked_token_setup(tmp_path, monkeypatch)
+        new_creds = _make_credentials(valid=True, expired=False)
+        flow = MagicMock()
+        flow.run_local_server.return_value = new_creds
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
+            MagicMock(return_value=flow),
+        )
+        monkeypatch.setattr(handler, "_save_credentials", MagicMock())
+
+        handler.authenticate()
+
+        assert "refresh token が失効" in capsys.readouterr().err
+        flow.run_local_server.assert_called_once()
