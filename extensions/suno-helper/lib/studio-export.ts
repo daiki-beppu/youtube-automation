@@ -1,6 +1,8 @@
 import {
   attributeEqualsSelector,
   matchesLabel,
+  PLAY_BUTTON_SELECTOR,
+  SUNO_LABELS,
 } from "../../shared/suno-labels";
 import { sendMessage } from "./messaging";
 
@@ -173,9 +175,12 @@ function buttonByAriaLabel(labels: string | readonly string[]): Button | null {
   return findButtonByAriaLabel(labels);
 }
 
-async function clickButtonByName(name: string): Promise<void> {
+async function clickButtonByName(
+  names: string | readonly string[]
+): Promise<void> {
+  const name = toLabelList(names)[0];
   const button = await waitForElement(
-    () => buttonByName(name),
+    () => buttonByName(names),
     `${name} ボタン`
   );
   if (button.disabled) {
@@ -253,7 +258,7 @@ async function dispatchTrustedStudioClick(element: HTMLElement): Promise<void> {
 }
 
 export async function clickStudioButtonUntil<T extends HTMLElement>(
-  buttonName: string,
+  buttonName: string | readonly string[],
   findResult: () => T | null,
   description: string,
   clickMode: "trusted" | "pointer" = "trusted"
@@ -285,7 +290,7 @@ export async function clickStudioButtonUntil<T extends HTMLElement>(
 }
 
 export async function clickStudioAriaButtonUntil<T extends HTMLElement>(
-  ariaLabel: string,
+  ariaLabel: string | readonly string[],
   findResult: () => T | null,
   description: string,
   options: TrustedClickUntilOptions = {}
@@ -418,8 +423,10 @@ function dispatchClipDrop(
 }
 
 function libraryClipTitle(source: HTMLElement, clipId: string): string {
+  // Studio Library の再生ボタン。aria-label が "Play" 単独と "Play <曲名>" / "<曲名>を再生"
+  // 系のどちらでも拾えるよう、完全一致ラベルと PLAY_BUTTON_SELECTOR を併用する (#5209)。
   const playButton = source.querySelector<HTMLButtonElement>(
-    'button[aria-label="Play"]'
+    `${attributeEqualsSelector("button", "aria-label", SUNO_LABELS.studioPlay, { ignoreCase: true })}, ${PLAY_BUTTON_SELECTOR}`
   );
   const title = playButton?.parentElement?.nextElementSibling
     ?.querySelector<HTMLElement>(":scope > span")
@@ -446,9 +453,9 @@ async function renameTrack(track: HTMLElement, name: string): Promise<void> {
   );
   if (!menu) throw new Error("Studio の track menu が見つかりません");
   dispatchStudioPointerClick(menu);
-  // Suno の版で "Rename Track" / "Rename track" と表記が揺れる (#5198)。
+  // 大小文字揺れ ("Rename Track" / "Rename track") は照合の case-insensitive で吸収する (#5198, #5209)。
   const renameButton = await waitForElement(
-    () => buttonByName(["Rename Track", "Rename track"]),
+    () => buttonByName(SUNO_LABELS.studioRenameTrack),
     "Rename Track ボタン"
   );
   dispatchStudioPointerClick(renameButton);
@@ -477,20 +484,22 @@ async function renameTrack(track: HTMLElement, name: string): Promise<void> {
 export async function openStudioLibraryAllSongs(): Promise<HTMLElement> {
   // 「開いた」ことの確認は All Songs または workspace 内の Go back のどちらかで行う。
   await clickStudioAriaButtonUntil(
-    "Open library",
-    () => buttonByName("All Songs") ?? buttonByAriaLabel("Go back"),
+    SUNO_LABELS.studioOpenLibrary,
+    () =>
+      buttonByName(SUNO_LABELS.studioAllSongs) ??
+      buttonByAriaLabel(SUNO_LABELS.studioGoBack),
     "All Songs / Go back ボタン"
   );
   // workspace 内に開いた場合は Go back で Library トップへ戻る。トップで開いた
   // 場合は All Songs が即座に見つかり、Go back はクリックしない。
   await clickStudioAriaButtonUntil(
-    "Go back",
-    () => buttonByName("All Songs"),
+    SUNO_LABELS.studioGoBack,
+    () => buttonByName(SUNO_LABELS.studioAllSongs),
     "All Songs ボタン",
     { postClickDelayMs: LIBRARY_TRANSITION_WAIT_MS }
   );
   return clickStudioButtonUntil(
-    "All Songs",
+    SUNO_LABELS.studioAllSongs,
     () =>
       document.querySelector<HTMLElement>('[draggable="true"][data-clip-id]'),
     "Library の clip 一覧",
@@ -509,44 +518,53 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
         throw new Error("Studio ページを開けませんでした");
       }
       await clickStudioAriaButtonUntil(
-        "Project menu",
-        () => buttonByName("New Project"),
+        SUNO_LABELS.studioProjectMenu,
+        () => buttonByName(SUNO_LABELS.studioNewProject),
         "New Project ボタン"
       );
       await clickStudioButtonUntil(
-        "New Project",
-        () => buttonByName("New empty project"),
+        SUNO_LABELS.studioNewProject,
+        () => buttonByName(SUNO_LABELS.studioNewEmptyProject),
         "New empty project ボタン"
       );
       await clickStudioButtonUntil(
-        "New empty project",
-        () =>
-          buttonByAriaLabel("Project menu")?.textContent?.trim() ===
-          "Untitled Project"
-            ? buttonByAriaLabel("Project menu")
-            : null,
+        SUNO_LABELS.studioNewEmptyProject,
+        () => {
+          const menu = buttonByAriaLabel(SUNO_LABELS.studioProjectMenu);
+          return menu &&
+            matchesLabel(menu.textContent, SUNO_LABELS.studioUntitledProject)
+            ? menu
+            : null;
+        },
         "空 project"
       );
     },
     async renameProject(name) {
       await clickStudioAriaButtonUntil(
-        "Project menu",
-        () => buttonByName("Rename"),
+        SUNO_LABELS.studioProjectMenu,
+        () => buttonByName(SUNO_LABELS.studioRename),
         "Rename ボタン"
       );
       const input = await clickStudioButtonUntil(
-        "Rename",
+        SUNO_LABELS.studioRename,
         () =>
           document.querySelector<HTMLInputElement>(
-            'input[aria-label="Project name"]'
+            attributeEqualsSelector(
+              "input",
+              "aria-label",
+              SUNO_LABELS.studioProjectName,
+              { ignoreCase: true }
+            )
           ),
         "Project name 入力"
       );
       commitStudioInputValue(input, name);
       await waitForElement(
         () =>
-          buttonByAriaLabel("Project menu")?.textContent?.trim() === name
-            ? buttonByAriaLabel("Project menu")
+          buttonByAriaLabel(
+            SUNO_LABELS.studioProjectMenu
+          )?.textContent?.trim() === name
+            ? buttonByAriaLabel(SUNO_LABELS.studioProjectMenu)
             : null,
         `project 名 ${name}`
       );
@@ -557,8 +575,8 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
     async placeClipOnTrackAtStart(clipId, trackIndex) {
       if (trackIndex > 0) {
         await clickStudioAriaButtonUntil(
-          "Add new track",
-          () => buttonByAriaLabel("Add Audio track"),
+          SUNO_LABELS.studioAddNewTrack,
+          () => buttonByAriaLabel(SUNO_LABELS.studioAddAudioTrack),
           "Add Audio track ボタン"
         );
         // The menu animates from the trigger. Its item is already "visible"
@@ -566,7 +584,7 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
         // the backdrop at the stale center point and only close the menu.
         await new Promise((resolve) => setTimeout(resolve, 500));
         await clickStudioAriaButtonUntil(
-          "Add Audio track",
+          SUNO_LABELS.studioAddAudioTrack,
           () =>
             document.querySelectorAll<HTMLElement>("[data-track-id]").length ===
             trackIndex + 1
@@ -581,7 +599,7 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
             // A click during the closing edge of the menu animation can only
             // dismiss the menu. Reopen it so the action itself can be retried.
             recoverButton: async () => {
-              const trigger = buttonByAriaLabel("Add new track");
+              const trigger = buttonByAriaLabel(SUNO_LABELS.studioAddNewTrack);
               if (trigger && !trigger.disabled) {
                 await dispatchTrustedStudioClick(trigger);
                 await new Promise((resolve) => setTimeout(resolve, 500));
@@ -598,7 +616,7 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
       return title;
     },
     async countPlacedClips() {
-      await clickButtonByName("In Project");
+      await clickButtonByName(SUNO_LABELS.studioInProject);
       await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
       return document.querySelectorAll('[draggable="true"][data-clip-id]')
         .length;
@@ -616,14 +634,14 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
     },
     async openExportMenu() {
       await clickStudioAriaButtonUntil(
-        "Export menu",
-        () => buttonByName("Multitrack"),
+        SUNO_LABELS.studioExportMenu,
+        () => buttonByName(SUNO_LABELS.studioMultitrack),
         "Multitrack export ボタン"
       );
     },
     async clickMultitrackExport() {
       const button = await waitForElement(
-        () => buttonByName("Multitrack"),
+        () => buttonByName(SUNO_LABELS.studioMultitrack),
         "Multitrack export ボタン"
       );
       if (button.disabled || button.getAttribute("aria-disabled") === "true") {
