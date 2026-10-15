@@ -1,0 +1,2 @@
+- suno-helper overlay panel を viewport 内の高さに制限し内部スクロール可能にして、下端が見切れた場合も実行ボタンへ到達できるようにした（#5232）。
+- `data-suno-control` 属性を generate 手順書の DOM signal 表へ追加した（#5232）。
