@@ -1,0 +1,2 @@
+- yt-suno-verify が suno-prompts.json の合成済み per-entry style を検証するようになった: 1 行目 (Suno Style 欄実効値) が style_char_limit を超過、または style 全体が full_style_char_limit を超過した entry を exit 1 で検出する（#5224）。
+- entry 間の最小 hamming distance が 0 の同一 style (zero-diversity) を exit 1 で検出するようにした（#5224）。

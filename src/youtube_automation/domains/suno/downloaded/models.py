@@ -19,6 +19,8 @@ SUNO_PROMPTS_ROUTE = "/suno/prompts.json"
 COLLECTIONS_ROUTE = "/collections"
 DOWNLOADED_ROUTE_SUFFIX = "/downloaded"
 
+DEFAULT_FULL_STYLE_CHAR_LIMIT = 256
+
 
 class PromptEntriesReader(Protocol):
     @abstractmethod
