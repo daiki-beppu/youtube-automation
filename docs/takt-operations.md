@@ -96,7 +96,7 @@ gh stack sync --prune          # 下段 merge 後の追随。merge 済みロー�
      --json databaseId,workflowName,headSha,status,conclusion,url
    ```
 
-4. 対象 PR の最新 HEAD に対する、後述「CI 失敗の自動修正」の PR をゲートする 5 workflow の queued / in_progress run だけを `gh run cancel <run-id>` で止める。autofix、main push、release、他 stack の run は対象外。起動が遅れている場合は再取得し、キャンセル要求後も終了を確認する。すでに完了した run はその結果を保持する。
+4. 対象 PR の最新 HEAD に対する、PR をゲートする 5 workflow(CI / Dashboard / Extensions / Audio Studio / Release notes site)の queued / in_progress run だけを `gh run cancel <run-id>` で止める。main push、release、他 stack の run は対象外。起動が遅れている場合は再取得し、キャンセル要求後も終了を確認する。すでに完了した run はその結果を保持する。
 5. 延期した PR 番号・HEAD・workflow・run ID を作業報告に残す。修正段と最上段の最新 HEAD で対象 CI が完了し、成功したことを確認するまで修正ループを終えない。
 
 `[skip ci]` や必須チェックの削除による省略は使わない。キャンセルによる未検証状態はそのまま残し、次のマージ前手順で解消する。
@@ -139,17 +139,6 @@ gh stack merge <stack番号|PR番号> --yes --squash
 - **stack は厳密に線形。** 1 つの親に複数の子は持てない。並行させたい作業は別 stack にする
 - `gh stack sync` はローカルとリモートの stack が diverge していると、非対話環境では何も変更せず `ℹ Sync aborted` を出して **exit 0 で終わる**。成功と読み違えない。解消は `gh stack unstack` してから作り直す
 - `gh stack rebase` の conflict は exit 3。`git add` で解決を stage して `gh stack rebase --continue`、戻せなくなったら `--abort` で全 branch が rebase 前へ復元される
-
-## CI 失敗の自動修正(post-push の保険)
-
-PR をゲートする 5 workflow(CI / Dashboard / Extensions / Audio Studio / Release notes site)のいずれかが PR で失敗した場合、`.github/workflows/ci-autofix.yml` が `workflow_run` で発火する。claude-code-action は失敗ログを診断し、修正 commit を PR ブランチへ push する。worktree 上で修正・検証する一次経路に加えて、push 後に発生した回帰への保険として重ねる。
-
-- **push は claude-code-action 既定の OIDC → Claude GitHub App トークン交換で行う**(`id-token: write`)。App トークンの push は `pull_request: synchronize` を発火させ、修正 commit の CI が自動で再検証される。push 経路は本 workflow だけが持つ
-- **修正試行は PR あたり 1 回。** commit body の `[ci-autofix]` マーカーで判定し、修正後の CI で問題が残っても 2 回目以降はコメント報告のみ(コスト暴走・修正ループ防止)
-- 修正不能・修正すべきでない(仕様矛盾・flaky・インフラ起因)と判断した場合は push せず診断コメントを投稿して正常終了する
-- オプトアウトは PR に `skip-autofix` ラベルを付与する。draft PR・fork からの PR は最初から対象外
-- `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` がどちらも未設定の環境では fail せず skip される(evals.yml と同じ慣行)
-- モデルは opus(pytest 失敗の診断・修正は難易度が高いため)
 
 ## 環境
 
