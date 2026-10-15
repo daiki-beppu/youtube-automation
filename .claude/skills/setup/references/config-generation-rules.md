@@ -125,7 +125,7 @@
 | `image_generation.gemini.brand_background` | 「ビジュアルアイデンティティ」の背景色 |
 | `image_generation.gemini.reference_images.default` | TTP 対象の代表サムネ（`data/thumbnail_compare/benchmark/<channel>-<vid>.jpg`、`/channel-research --benchmark` で download される） |
 | `image_generation.gemini.reference_images.channel_branding` | `docs/channel/competitor-branding-snapshot.json` 由来の icon / banner reference と `branding/icon.png` / `branding/banner.png` の出力先 |
-| `image_generation.gemini.composition_rules.*` | 「ビジュアルアイデンティティ」「サムネイル方針」 |
+| `image_generation.gemini.composition_rules.*` | 「ビジュアルアイデンティティ」「サムネイル方針」。数値閾値（被写体帯の下端 %・`size_hierarchy` 幅比 等）を書く場合は `reference_images.default` の参照サムネを実測して導出し、出典を `reference_images.notes` 等に残す。未計測なら実測較正済みの帯下端 65-80%（影分 +5%）・幅比 3.5-5x を目安にする（productivityonyt 上位3枚実測: 73.9/79.0/92.5%、3.73/4.42、#5234） |
 | `image_generation.gemini.diff_prompt_template` | コレクション側 `prompts/<theme>.md` への差分指示テンプレ |
 
 `reference_images.default` の TTP サムネは `/channel-research --benchmark` skill（CLI は `yt-benchmark-collect`）が

@@ -16,13 +16,13 @@ SETUP_REFERENCES = REPO_ROOT / ".claude" / "skills" / "setup" / "references"
 
 SETUP_ASSET_SHA256 = {
     "claude-md-template.md": "64882d3cbe6c1d69c982f723d2a62bf67a88aa6895dddc79b75ce3c45857bbdd",
-    "config-generation-rules.md": "fc35adf5602d8998a065cf14c2b3e851ef655df996a880d5c69607ce279977b7",
+    "config-generation-rules.md": "4a2c9737a09b7a61c4a198de21a47258e2043f77d27b86631f123d99998e9869",
     "config-template/analytics.json": "4344ad8d4c9a1c81958b721eb3d999172f14f71f17d863a1708492ce687b68d2",
     "config-template/audio.json": "c55033dc448cb91fe3cdb47e20f220c5879c05f95855d918a8e72297a5f20a43",
     "config-template/content.json": "5a60fc3327bb2cca1daa5da3744dc218495f3f0f304aebdad41fd2ba32d1bed0",
     "config-template/meta.json": "324194e12d576604b3751af469bd7e965efb28db088b4671d76bb80b499d9da4",
     "config-template/skills/music.yaml": "dfb8800beadfd058fdbbb5380259d9d75f3c50e27705f430de940a4826175336",
-    "config-template/skills/thumbnail.yaml": "d13c92a2f44730b62da29f92c38a9e6df11488929fd77c16fb880418725e3991",
+    "config-template/skills/thumbnail.yaml": "6bc22391694976ee32da9081fe161e4b270cf4aae8c166b4074287dcdb3999a6",
     "config-template/youtube.json": "849f4b0912cb7be3d1cc92b7607d355e856b5af3e9e85db0449fabdf1713bb6c",
     "directory-structure.md": "d8590189cf8929b968b4f1169b723cc0ed71e0be06dbd57cc3ed405967bc4e14",
     "fetch_branding_snapshot.py": "6cb89a136372c98289eec3cb0990ea1dcc220667696ed0938eae6dcff6e393e2",
@@ -32,7 +32,7 @@ SETUP_ASSET_SHA256 = {
 }
 STRATEGY_ASSET_SHA256 = {
     "desire-vocabulary.md": "d6a2a6eda7597b9aa66f0b140a42834807374cc80a313c9b8edb8114f3126388",
-    "direction.md": "241fae742bfc6ee33f0f078c1921e15ad989238d861b181bba566e0ffe4050a6",
+    "direction.md": "ceea46a5293cf26b8cf7f573271affb526f10c11e97d21dedfac653e1b1b92a8",
 }
 MOVED_ASSET_SHA256 = {
     "import-mode.md": "2e7a69d0e45994d4ce267a7852c475b8db86bd6971e64311bf53021f337d060b",

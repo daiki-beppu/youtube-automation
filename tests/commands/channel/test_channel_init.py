@@ -636,6 +636,10 @@ def test_localizations_and_skill_configs_reflect_channel_init_args(tmp_path):
     }
     # #1702: scaffold は deprecated な composition_rules 個別キーを含まない（text_lines のみ）
     assert thumbnail["image_generation"]["gemini"]["composition_rules"] == {"text_lines": "タイトルは 2 行以内"}
+    # #5234: 数値閾値は参照サムネ実測から導出するガイダンスを scaffold コメントに残す
+    thumbnail_text = (tmp_path / "config" / "skills" / "thumbnail.yaml").read_text(encoding="utf-8")
+    assert "帯下端 65-80%" in thumbnail_text
+    assert "幅比 3.5-5x" in thumbnail_text
 
 
 def test_channel_init_does_not_generate_legacy_upload_settings_file(tmp_path):

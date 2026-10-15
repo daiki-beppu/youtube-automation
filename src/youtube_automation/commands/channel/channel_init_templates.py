@@ -254,6 +254,10 @@ def _render_thumbnail_skill(ctx: ChannelInitContext) -> str:
         '    diff_prompt_template: "Apply this channel visual direction to the collection theme."\n'
         "    composition_rules:\n"
         '      text_lines: "タイトルは 2 行以内"\n'
+        "      # 数値閾値 (被写体帯の下端 %・size_hierarchy 幅比 等) を追加するときは\n"
+        "      # reference_images.default の参照サムネを実測して導出し、出典を残す。\n"
+        "      # 未計測なら実測較正済みの帯下端 65-80% (影分 +5%)・幅比 3.5-5x を目安にする\n"
+        "      # (productivityonyt 上位3枚の実測: 帯下端 73.9/79.0/92.5%、幅比 3.73/4.42、#5234)\n"
     )
 
 

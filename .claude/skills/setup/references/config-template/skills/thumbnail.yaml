@@ -64,5 +64,9 @@ image_generation:
     diff_prompt_template: "{{DIFF_PROMPT_TEMPLATE}}"
 
     # 構図ルール（既定で残る実効キーは text_lines のみ）
+    # 数値閾値 (被写体帯の下端 %・size_hierarchy 幅比 等) を追加するときは
+    # reference_images.default の参照サムネを実測して導出し、出典を残すこと。
+    # 未計測なら実測較正済みの帯下端 65-80% (影分 +5%)・幅比 3.5-5x を目安にする
+    # (productivityonyt 上位3枚の実測: 帯下端 73.9/79.0/92.5%、幅比 3.73/4.42、#5234)
     composition_rules:
       text_lines: "タイトルは 2 行以内"
