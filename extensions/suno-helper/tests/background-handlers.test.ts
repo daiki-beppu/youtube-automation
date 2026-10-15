@@ -67,6 +67,9 @@ async function loadBackground(opts?: {
   fetchImpl?: ReturnType<typeof vi.fn>;
   migrationError?: Error;
   studioExportResult?: { ok: boolean; message?: string };
+  performStudioExportImpl?: (
+    callIndex: number
+  ) => Promise<{ ok: boolean; message?: string }>;
   studioTabId?: number;
   tabsRemoveError?: Error;
 }) {
@@ -74,6 +77,7 @@ async function loadBackground(opts?: {
 
   const handlers = new Map<string, Handler>();
   const sentMessages: SentMessage[] = [];
+  let studioExportCalls = 0;
   const installedListeners: Array<(details: { reason: string }) => void> = [];
   const notificationCreate = vi.fn(() => Promise.resolve("notification-id"));
   const sessionStore: Record<string, unknown> = opts?.sessionState
@@ -239,6 +243,10 @@ async function loadBackground(opts?: {
     sendMessage: vi.fn((type: string, data?: unknown, tabId?: number) => {
       sentMessages.push({ type, data, tabId });
       if (type === "performStudioExport") {
+        studioExportCalls += 1;
+        if (opts?.performStudioExportImpl) {
+          return opts.performStudioExportImpl(studioExportCalls);
+        }
         return Promise.resolve(opts?.studioExportResult ?? { ok: true });
       }
       return Promise.resolve();
@@ -573,6 +581,61 @@ describe('background onMessage("startStudioExport")', () => {
       })
     ).resolves.toEqual(failure);
     expect(tabsRemove).toHaveBeenCalledWith(73);
+  });
+
+  it("content script 未注入の connection エラーは期限まで retry して export を開始する (#5199)", async () => {
+    const { handlers, sentMessages } = await loadBackground({
+      performStudioExportImpl: (callIndex) => {
+        if (callIndex < 3) {
+          return Promise.reject(
+            new Error(
+              "Could not establish connection. Receiving end does not exist."
+            )
+          );
+        }
+        return Promise.resolve({ ok: true });
+      },
+    });
+
+    const result = await handlers.get("startStudioExport")!({
+      data: { collectionId: "collection-a", clipIds: ["clip-a"] },
+      sender: { tab: { id: 42 } },
+    });
+
+    expect(result).toEqual({ ok: true, studioTabId: 73 });
+    expect(
+      sentMessages.filter((m) => m.type === "performStudioExport").length
+    ).toBe(3);
+  });
+
+  it("connection が回復しない場合は 60 秒待って失敗を返し Studio tab を閉じる (#5199)", async () => {
+    vi.useFakeTimers();
+    try {
+      const { handlers, tabsRemove } = await loadBackground({
+        performStudioExportImpl: () =>
+          Promise.reject(
+            new Error(
+              "Could not establish connection. Receiving end does not exist."
+            )
+          ),
+      });
+      const pending = handlers.get("startStudioExport")!({
+        data: { collectionId: "collection-a", clipIds: ["clip-a"] },
+        sender: { tab: { id: 42 } },
+      }) as Promise<{ ok: boolean; message?: string }>;
+
+      // 30 秒ではまだ retry 中であること（#5199 で 30s → 60s に延長）
+      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(30_500);
+
+      const result = await pending;
+      expect(result.ok).toBe(false);
+      expect(result.message).toContain("Studio を開けませんでした");
+      expect(result.message).toContain("Could not establish connection");
+      expect(tabsRemove).toHaveBeenCalledWith(73);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

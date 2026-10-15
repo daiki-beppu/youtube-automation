@@ -1,0 +1,4 @@
+- Studio export の playlist 作成で playlist name 入力欄の出現を poll するようにし、dialog 描画遅延と placeholder の大小文字揺れに耐えるようにした（#5199）。
+- Studio の track rename を track 見出しへの右クリック（contextmenu）起点に変更し、hover 限定・幅 0 の ︙ ボタンに依存しない動作にした（#5199）。
+- Studio tab の content script 起動待ちを 30 秒から 60 秒に延長し、background 化された tab でも export を開始できるようにした（#5199）。
+- Studio への clip 配置後に配置済み clip の長さをライブラリ曲長と照合し、生成未完了で短いまま置かれた場合は明示的なエラーで停止するようにした（#5199）。

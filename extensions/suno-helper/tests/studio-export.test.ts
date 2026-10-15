@@ -10,10 +10,13 @@ import {
   clickStudioAriaButtonUntil,
   clickStudioButtonUntil,
   commitStudioInputValue,
+  dispatchStudioContextMenu,
   dispatchStudioPointerClick,
   exportStudioMultitrack,
   findLibraryClip,
   openStudioLibraryAllSongs,
+  renameTrack,
+  verifyPlacedClipLength,
 } from "../lib/studio-export";
 
 function visibleButton(label: string, text?: string): HTMLButtonElement {
@@ -725,5 +728,204 @@ describe("Studio export の日本語 UI ラベル (#5209)", () => {
     );
     document.body.replaceChildren();
     vi.mocked(sendMessage).mockReset();
+  });
+});
+
+describe("Studio track の rename (#5199)", () => {
+  function createTrack(name: string): {
+    track: HTMLElement;
+    heading: HTMLElement;
+  } {
+    const track = document.createElement("div");
+    track.dataset.trackId = "track-1";
+    const heading = document.createElement("div");
+    heading.setAttribute("role", "button");
+    heading.textContent = name;
+    heading.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 100, height: 20 }) as DOMRect;
+    track.append(heading);
+    track.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 100, height: 40 }) as DOMRect;
+    document.body.append(track);
+    return { track, heading };
+  }
+
+  function appendRenameMenuItem(
+    label: string,
+    onClick: () => void
+  ): HTMLButtonElement {
+    const item = document.createElement("button");
+    item.textContent = label;
+    item.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+    item.addEventListener("pointerdown", onClick);
+    document.body.append(item);
+    return item;
+  }
+
+  it("Given contextmenu sequence When track 見出しを右クリック Then button=2 で pointerdown→mouseup を送る", () => {
+    const { heading } = createTrack("Audio Track");
+    const seen: Array<{ type: string; button: number }> = [];
+    for (const type of ["pointerdown", "mousedown", "contextmenu", "mouseup"]) {
+      heading.addEventListener(type, (event) => {
+        seen.push({ type, button: (event as MouseEvent).button });
+      });
+    }
+
+    dispatchStudioContextMenu(heading);
+
+    expect(seen).toEqual([
+      { type: "pointerdown", button: 2 },
+      { type: "mousedown", button: 2 },
+      { type: "contextmenu", button: 2 },
+      { type: "mouseup", button: 2 },
+    ]);
+    document.body.replaceChildren();
+  });
+
+  it("Given 右クリックで Rename track menu が開く When renameTrack Then ︙ ボタンを押さず rename する", async () => {
+    const { track, heading } = createTrack("Audio Track");
+    heading.addEventListener("contextmenu", () => {
+      appendRenameMenuItem("Rename track", () => {
+        const input = document.createElement("input");
+        input.value = "Audio Track";
+        input.getBoundingClientRect = () =>
+          ({ left: 0, top: 0, width: 100, height: 20 }) as DOMRect;
+        input.addEventListener("blur", () => {
+          heading.textContent = input.value;
+        });
+        document.body.append(input);
+        input.focus();
+      });
+    });
+    const contextMenuButton = document.createElement("button");
+    contextMenuButton.className = "track-menu-reveal";
+    contextMenuButton.dataset.contextMenuTrigger = "true";
+    contextMenuButton.addEventListener("pointerdown", () => {
+      throw new Error("︙ ボタンは押されないはず");
+    });
+    track.append(contextMenuButton);
+
+    await renameTrack(track, "Song A");
+
+    expect(heading.textContent).toBe("Song A");
+    document.body.replaceChildren();
+  });
+
+  it("Given 右クリックで menu が開かない When renameTrack Then ︙ ボタン click にフォールバックする", async () => {
+    vi.useFakeTimers();
+    try {
+      const { track, heading } = createTrack("Audio Track");
+      const contextMenuButton = document.createElement("button");
+      contextMenuButton.className = "track-menu-reveal";
+      contextMenuButton.dataset.contextMenuTrigger = "true";
+      contextMenuButton.getBoundingClientRect = () =>
+        ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+      contextMenuButton.addEventListener("pointerdown", () => {
+        appendRenameMenuItem("Rename track", () => {
+          const input = document.createElement("input");
+          input.value = "Audio Track";
+          input.getBoundingClientRect = () =>
+            ({ left: 0, top: 0, width: 100, height: 20 }) as DOMRect;
+          input.addEventListener("blur", () => {
+            heading.textContent = input.value;
+          });
+          document.body.append(input);
+          input.focus();
+        });
+      });
+      track.append(contextMenuButton);
+
+      const pending = renameTrack(track, "Song A");
+      await vi.runAllTimersAsync();
+      await pending;
+
+      expect(heading.textContent).toBe("Song A");
+    } finally {
+      vi.useRealTimers();
+      document.body.replaceChildren();
+    }
+  });
+});
+
+describe("配置済み clip の長さ検証 (#5199)", () => {
+  function createTrackWithClip(
+    clipId: string,
+    placedDurationText?: string
+  ): HTMLElement {
+    const track = document.createElement("div");
+    track.dataset.trackId = "track-1";
+    if (placedDurationText !== undefined) {
+      const clip = document.createElement("div");
+      clip.dataset.clipId = clipId;
+      clip.textContent = placedDurationText;
+      track.append(clip);
+    }
+    document.body.append(track);
+    return track;
+  }
+
+  it("Given 配置済み clip が library と同じ長さ When verifyPlacedClipLength Then true を返す", async () => {
+    const track = createTrackWithClip("clip-a", "Song A 3:20");
+
+    await expect(verifyPlacedClipLength(track, "clip-a", 200)).resolves.toBe(
+      true
+    );
+    document.body.replaceChildren();
+  });
+
+  it("Given 配置済み clip が short なまま When verifyPlacedClipLength Then 明示的なエラーで停止する", async () => {
+    vi.useFakeTimers();
+    try {
+      const track = createTrackWithClip("clip-a", "2:00");
+      const pending = verifyPlacedClipLength(track, "clip-a", 240);
+      const expectation = expect(pending).rejects.toThrow(
+        /ライブラリの曲長より短いまま/
+      );
+      await vi.runAllTimersAsync();
+      await expectation;
+    } finally {
+      vi.useRealTimers();
+      document.body.replaceChildren();
+    }
+  });
+
+  it("Given 配置直後は短いが伸びる clip When verifyPlacedClipLength Then 再計測で照合する", async () => {
+    vi.useFakeTimers();
+    try {
+      const track = createTrackWithClip("clip-a", "2:00");
+      const clip = track.querySelector<HTMLElement>("[data-clip-id]")!;
+      setTimeout(() => {
+        clip.textContent = "3:20";
+      }, 1_000);
+
+      const pending = verifyPlacedClipLength(track, "clip-a", 200);
+      await vi.runAllTimersAsync();
+      await expect(pending).resolves.toBe(true);
+    } finally {
+      vi.useRealTimers();
+      document.body.replaceChildren();
+    }
+  });
+
+  it("Given 曲長表示を持たない clip When verifyPlacedClipLength Then 検証不能で false を返す", async () => {
+    vi.useFakeTimers();
+    try {
+      const track = createTrackWithClip("clip-a", "Song A");
+      const pending = verifyPlacedClipLength(track, "clip-a", 200);
+      await vi.runAllTimersAsync();
+      await expect(pending).resolves.toBe(false);
+    } finally {
+      vi.useRealTimers();
+      document.body.replaceChildren();
+    }
+  });
+
+  it("Given library 曲長が読めない When verifyPlacedClipLength Then false を返す", async () => {
+    const track = createTrackWithClip("clip-a", "3:20");
+    await expect(verifyPlacedClipLength(track, "clip-a", null)).resolves.toBe(
+      false
+    );
+    document.body.replaceChildren();
   });
 });
