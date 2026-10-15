@@ -671,6 +671,8 @@ interface PlaylistClipPlan {
 
 interface PlaylistClipPersistInfo {
   submittedClipIds: string[];
+  /** Studio export の Library 検索 fallback 用 clip ID → タイトル (#5221)。 */
+  clipTitleById?: Record<string, string>;
   submittedClipIdsAreDurationFiltered: boolean;
   playlistExpectedClipCount: number;
   playlistUrlsBeforeCreate?: string[];
@@ -1427,6 +1429,7 @@ export default defineContentScript({
       );
       await onResolvedPlaylistClipIds?.({
         submittedClipIds: plan.clipIds,
+        clipTitleById: Object.fromEntries(plan.titleFallbackMap),
         submittedClipIdsAreDurationFiltered:
           durationOutlierPolicy.kind === "regenerate",
         playlistExpectedClipCount: plan.expectedClipCount,
@@ -2957,6 +2960,7 @@ export default defineContentScript({
             return;
           }
           let studioClipIds: string[] | null = null;
+          let studioClipTitleById: Record<string, string> | undefined;
           const verifiedClipCount = await addClipsToPlaylist(
             0,
             playlistName,
@@ -2969,6 +2973,7 @@ export default defineContentScript({
             durationOutlierPolicy,
             (info) => {
               studioClipIds = info.submittedClipIds;
+              studioClipTitleById = info.clipTitleById;
             }
           );
           if (aborted) {
@@ -2988,7 +2993,9 @@ export default defineContentScript({
               collectionId,
               verifiedClipCount,
               verifiedClipCount,
-              studioClipIds
+              studioClipIds,
+              undefined,
+              studioClipTitleById
             );
           }
           if (aborted) {

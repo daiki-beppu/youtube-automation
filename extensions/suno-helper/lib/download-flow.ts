@@ -22,7 +22,9 @@ export interface DownloadFlow {
     collectionId: string,
     progressTotal: number,
     expectedFileCount: number,
-    clipIds: string[]
+    clipIds: string[],
+    savedExport?: SavedExportWindow,
+    clipTitleById?: Record<string, string>
   ) => Promise<DownloadSummary | undefined>;
   downloadBestEffortResult: (
     context: DownloadContext,
@@ -174,7 +176,8 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
 
   async function waitForDownloadedFilename(
     collectionId: string,
-    clipIds: string[]
+    clipIds: string[],
+    clipTitleById?: Record<string, string>
   ): Promise<string | null> {
     const downloadPromise = waitForDownloadComplete();
     let watcherActive = true;
@@ -183,6 +186,7 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
       studioTabId = await requestStudioMultitrackExport({
         collectionId,
         clipIds,
+        clipTitleById,
       });
       const downloadResult = await downloadPromise;
       if (deps.isAborted()) return null;
@@ -261,7 +265,8 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     progressTotal: number,
     expectedFileCount: number,
     clipIds: string[],
-    savedExport?: SavedExportWindow
+    savedExport?: SavedExportWindow,
+    clipTitleById?: Record<string, string>
   ): Promise<DownloadSummary | undefined> {
     if (deps.isAborted()) return;
 
@@ -292,7 +297,11 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
         clipIds
       );
     }
-    const filename = await waitForDownloadedFilename(collectionId, clipIds);
+    const filename = await waitForDownloadedFilename(
+      collectionId,
+      clipIds,
+      clipTitleById
+    );
     if (filename === null) return;
     return await postDownloadedArchive(
       context,
@@ -310,7 +319,8 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
     progressTotal: number,
     expectedFileCount: number,
     clipIds: string[],
-    savedExport?: SavedExportWindow
+    savedExport?: SavedExportWindow,
+    clipTitleById?: Record<string, string>
   ): Promise<DownloadSummary | undefined> {
     try {
       return await performDownloadAttempt(
@@ -319,7 +329,8 @@ export function createDownloadFlow(deps: DownloadFlowDeps): DownloadFlow {
         progressTotal,
         expectedFileCount,
         clipIds,
-        savedExport
+        savedExport,
+        clipTitleById
       );
     } catch (error) {
       throw withDownloadingPhase(error);

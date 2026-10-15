@@ -2,7 +2,7 @@
 // order.md 実機 DOM 検証 (Step 0) で確定したセレクタ・操作仕様をこの 1 箇所に集約する
 // （Suno の DOM は変わりうるため、壊れたら README / order.md を参照して更新する）。
 // Style/Lyrics 注入系 (shared/dom.ts) とは責務が異なるため別モジュールに分ける。
-import { setNativeValue, sleep } from "./dom";
+import { setNativeValue } from "./dom";
 import {
   attributeEqualsSelector,
   includesLabel,
@@ -12,6 +12,7 @@ import {
   titleFromPlayLabel,
 } from "./suno-labels";
 import { isVisible } from "./visibility";
+import { sleep } from "./worker-sleep";
 
 /**
  * clip list のスクロールコンテナ (#881)。配下に（Emotion の中間ラッパ div を挟んで）
