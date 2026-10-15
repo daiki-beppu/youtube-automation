@@ -1,0 +1,1 @@
+- Suno downloaded ZIP の総展開サイズ上限を `SUNO_ZIP_MAX_TOTAL_SIZE_GIB` 環境変数で引き上げ可能にし、上限超過メッセージに引き上げ方法と末尾 silence trim の回避策を追記した（#5222）。

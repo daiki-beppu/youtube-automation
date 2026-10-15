@@ -37,3 +37,30 @@ def test_oversize_message_shows_actual_limit_and_action(capsys: pytest.CaptureFi
     assert f"上限 {archive._ZIP_MAX_TOTAL_SIZE} bytes" in output
     assert f"{archive._ZIP_MAX_TOTAL_SIZE_GIB} GiB を超える場合" in output
     assert "複数バッチ" in output
+    assert archive._ZIP_MAX_TOTAL_SIZE_ENV in output
+
+
+def test_total_size_limit_is_configurable_via_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Given 全トラックがプロジェクト長にパディングされた Studio Multitrack ZIP（9 GiB 超）がある
+    When SUNO_ZIP_MAX_TOTAL_SIZE_GIB で上限を引き上げる
+    Then 引き上げた上限内として受理する。
+    """
+    infos = [ZipInfo(f"track-{index}.wav") for index in range(60)]
+    for info in infos:
+        info.file_size = 160 * 1024 * 1024
+    assert sum(info.file_size for info in infos) > archive._ZIP_MAX_TOTAL_SIZE
+    monkeypatch.setenv(archive._ZIP_MAX_TOTAL_SIZE_ENV, "12")
+
+    assert archive._zip_within_size_limits(infos)
+
+
+@pytest.mark.parametrize("raw", ["large", "0", "-1"])
+def test_invalid_total_size_env_fails_loud(monkeypatch: pytest.MonkeyPatch, raw: str) -> None:
+    """Given SUNO_ZIP_MAX_TOTAL_SIZE_GIB に非数値または 0 以下が設定されている
+    When 展開サイズ上限を検査する
+    Then 環境変数名つきで fail-loud する。
+    """
+    monkeypatch.setenv(archive._ZIP_MAX_TOTAL_SIZE_ENV, raw)
+
+    with pytest.raises(ValueError, match=archive._ZIP_MAX_TOTAL_SIZE_ENV):
+        archive._zip_within_size_limits([])

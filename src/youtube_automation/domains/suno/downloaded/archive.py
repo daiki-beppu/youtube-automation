@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import tempfile
@@ -29,10 +30,25 @@ from youtube_automation.domains.suno.name_matching import (
 _AUDIO_EXTENSIONS = frozenset({".mp3", ".m4a", ".wav"})
 # Studio Multitrack は全 stem をプロジェクト長までパディングする。長尺 WAV 20 曲の
 # 実測 3.6 GiB を安全に受け入れつつ、zip bomb 防御として 8 GiB の有限上限を維持する。
+# 60 トラック級の export で超過する場合は SUNO_ZIP_MAX_TOTAL_SIZE_GIB で引き上げられる。
 _ZIP_MAX_TOTAL_SIZE = 8 * 1024 * 1024 * 1024
 _ZIP_MAX_TOTAL_SIZE_GIB = _ZIP_MAX_TOTAL_SIZE // (1024 * 1024 * 1024)
+_ZIP_MAX_TOTAL_SIZE_ENV = "SUNO_ZIP_MAX_TOTAL_SIZE_GIB"
 _ZIP_MAX_SINGLE_FILE = 500 * 1024 * 1024
 _ZIP_MAX_ENTRIES = 1000
+
+
+def _zip_max_total_size() -> int:
+    raw = os.environ.get(_ZIP_MAX_TOTAL_SIZE_ENV)
+    if raw is None or not raw.strip():
+        return _ZIP_MAX_TOTAL_SIZE
+    try:
+        gib = float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{_ZIP_MAX_TOTAL_SIZE_ENV} は GiB 数値で指定してください: {raw}") from exc
+    if gib <= 0:
+        raise ValueError(f"{_ZIP_MAX_TOTAL_SIZE_ENV} は 0 より大きい GiB 数値で指定してください: {raw}")
+    return int(gib * 1024 * 1024 * 1024)
 
 
 @dataclass(frozen=True, slots=True)
@@ -411,11 +427,15 @@ def _zip_within_size_limits(infos: list[zipfile.ZipInfo]) -> bool:
             )
             return False
         total_size += info.file_size
-    if total_size > _ZIP_MAX_TOTAL_SIZE:
+    max_total_size = _zip_max_total_size()
+    if total_size > max_total_size:
+        max_gib = max_total_size / (1024 * 1024 * 1024)
         print(
             "[yt-collection-serve] ZIP 総展開サイズが上限超過 "
-            f"(実サイズ {total_size} bytes / 上限 {_ZIP_MAX_TOTAL_SIZE} bytes): skip。"
-            f"{_ZIP_MAX_TOTAL_SIZE_GIB} GiB を超える場合は Studio export を複数バッチに分割してください"
+            f"(実サイズ {total_size} bytes / 上限 {max_total_size} bytes): skip。"
+            f"{max_gib:g} GiB を超える場合は {_ZIP_MAX_TOTAL_SIZE_ENV}=<GiB> で上限を引き上げるか、"
+            "Studio export を複数バッチに分割してください。"
+            "プロジェクト長までパディングされた末尾 silence が主因なら、trim して再 ZIP でも回避できる"
         )
         return False
     return True
