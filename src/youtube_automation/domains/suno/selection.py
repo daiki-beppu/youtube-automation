@@ -39,6 +39,8 @@ SUNO_PROMPTS_JSON_FILENAME = "suno-prompts.json"
 _AUDIO_EXTENSIONS = {".mp3", ".m4a", ".wav"}
 _DOWNLOADED_NAME_RE = re.compile(r"^(?P<idx>\d{2,})(?P<variant>[a-z])?-(?P<title>.+)$", re.IGNORECASE)
 _BRACKET_LINE_RE = re.compile(r"^\s*\[[^\]]+\]\s*$")
+# /music --prompt が lyrics 先頭へ入れる平文の指示行 (Mixing Notes: ... / Instrument Notes: ...)
+_DIRECTIVE_LINE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9 ]*:")
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 _DEFAULT_SELECTION_LOG = "01-master/.selection.log"
 _DEFAULT_STOCK_DIR = "assets/stock/music/b-side"
@@ -285,7 +287,9 @@ def parse_selection_config(cfg: Mapping[str, object], collection_dir: Path) -> S
     )
 
 
-def _has_substantive_lyrics(value: object) -> bool:
+def _has_substantive_lyrics(value: object, *, instrumental: bool = False) -> bool:
+    if instrumental:
+        return False
     if not isinstance(value, str):
         return False
     lines = []
@@ -294,6 +298,8 @@ def _has_substantive_lyrics(value: object) -> bool:
         if not stripped:
             continue
         if _BRACKET_LINE_RE.match(stripped):
+            continue
+        if _DIRECTIVE_LINE_RE.match(stripped):
             continue
         lines.append(stripped)
     text = " ".join(lines).strip()
@@ -321,10 +327,12 @@ def load_prompts(collection_dir: Path) -> list[PromptEntry]:
             raise ValidationError(f"{SUNO_PROMPTS_JSON_FILENAME}: entry {i}.name must be a non-empty string")
         if title is not None and not isinstance(title, str):
             raise ValidationError(f"{SUNO_PROMPTS_JSON_FILENAME}: entry {i}.title must be a string")
+        options = entry.get("options")
+        instrumental = isinstance(options, Mapping) and options.get("instrumental") is True
         prompts.append(
             PromptEntry(
                 index=i,
-                has_lyrics=_has_substantive_lyrics(entry.get("lyrics")),
+                has_lyrics=_has_substantive_lyrics(entry.get("lyrics"), instrumental=instrumental),
                 aliases=suno_prompt_lookup_candidates(name, title),
             )
         )

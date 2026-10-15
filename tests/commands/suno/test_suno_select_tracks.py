@@ -88,6 +88,56 @@ def test_instrumental_prompt_keeps_both_clips_after_duration_filter(tmp_path, mo
     assert result.mode_counts == {"vocal": 0, "instrumental": 1}
 
 
+def test_mixing_and_instrument_notes_header_lines_stay_instrumental(tmp_path, monkeypatch):
+    """REQ-5236: /music --prompt が lyrics 先頭へ入れる平文の Notes 行は歌詞とみなさない."""
+    collection = _make_collection(
+        tmp_path,
+        [
+            {
+                "name": "夜明け — Dawn Groove",
+                "lyrics": (
+                    "Mixing Notes: warm analog warmth, slight tape saturation\n"
+                    "Instrument Notes: lead with felt piano, background with soft pad\n"
+                    "[Instrumental]\n"
+                    "[Extended Outro]"
+                ),
+            }
+        ],
+    )
+    _write_audio(collection, "01a-Dawn Groove.mp3")
+    _write_audio(collection, "01b-Dawn Groove.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
+
+    result = suno_track_selection.select_suno_tracks(collection, _cfg())
+
+    music_files = sorted(p.name for p in (collection / "02-Individual-music").iterdir() if p.is_file())
+    assert music_files == ["01a-Dawn Groove.mp3", "01b-Dawn Groove.mp3"]
+    assert result.mode_counts == {"vocal": 0, "instrumental": 1}
+
+
+def test_options_instrumental_true_stays_instrumental(tmp_path, monkeypatch):
+    """REQ-5236: options.instrumental: true の entry は lyrics 内容に関わらず instrumental."""
+    collection = _make_collection(
+        tmp_path,
+        [
+            {
+                "name": "夜明け — Dawn Groove",
+                "lyrics": "singing along all night",
+                "options": {"instrumental": True},
+            }
+        ],
+    )
+    _write_audio(collection, "01a-Dawn Groove.mp3")
+    _write_audio(collection, "01b-Dawn Groove.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
+
+    result = suno_track_selection.select_suno_tracks(collection, _cfg())
+
+    music_files = sorted(p.name for p in (collection / "02-Individual-music").iterdir() if p.is_file())
+    assert music_files == ["01a-Dawn Groove.mp3", "01b-Dawn Groove.mp3"]
+    assert result.mode_counts == {"vocal": 0, "instrumental": 1}
+
+
 @pytest.mark.parametrize("separator", ["—", "–", "―"])
 def test_symbol_normalized_noncanonical_names_are_selected(tmp_path, monkeypatch, separator):
     collection = _make_collection(
