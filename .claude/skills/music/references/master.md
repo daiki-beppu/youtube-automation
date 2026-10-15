@@ -204,6 +204,7 @@ primary path では `02-Individual-music/` のローカルファイル名を第�
 uv run yt-suno-verify-playlist <collection-path> --music-dir 02-Individual-music
 ```
 
+非対話実行（Bash tool 等、stdin が TTY でない環境）では stdin が開いたまま入力も EOF も来ないため、CLI は stdin の読み取りを最長 5 秒で打ち切る。`--music-dir` 指定時は stdin を入力元とみなさずそのまま突合へ進む。曲名を stdin で渡す場合は pipe が EOF で閉じる必要がある。
 
 判定:
 - **unknown（どの entry にも一致しない曲）**: 別コレクション由来の混入。playlist から除外するまで Step 5 に進まない

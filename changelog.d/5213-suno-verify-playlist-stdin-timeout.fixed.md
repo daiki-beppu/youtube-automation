@@ -1,0 +1,1 @@
+- `fix(masterup)`: `yt-suno-verify-playlist` が非対話 shell（stdin が TTY でなく入力も EOF も来ない環境）で stdin の読み取りに無期限待機していたハングを修正した。stdin の read は最長 5 秒で打ち切り、データが届かなければ stdin 入力なしとして `--music-dir` 等の明示入力で完走する（#5213）。
