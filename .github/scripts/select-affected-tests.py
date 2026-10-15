@@ -50,19 +50,16 @@ PATH_TEST_MAP: Final = (
         ".github/workflows/ci.yml",
         (
             "tests/repo/test_changelog_ci_contract.py",
-            "tests/repo/test_evals_workflow.py",
             "tests/repo/test_pyscn_diff_gate_contract.py",
             "tests/repo/test_pytest_lane_contract.py",
             "tests/repo/test_release_notes_contract.py",
             "tests/repo/test_skill_catalog_removal.py",
         ),
     ),
-    (".github/workflows/ci-autofix.yml", ("tests/repo/test_ci_autofix_workflow.py",)),
     (
         ".github/workflows/dashboard.yml",
         ("tests/contracts/architecture/test_repository_reorganization_contract.py",),
     ),
-    (".github/workflows/evals.yml", ("tests/repo/test_evals_workflow.py",)),
     (".github/workflows/extensions.yml", ("tests/repo/test_extension_package_manager_contract.py",)),
     (
         ".github/workflows/release-extensions.yml",

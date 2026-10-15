@@ -233,7 +233,6 @@ def test_workflow_adr_changelog_and_direct_test_use_explicit_mapping(tmp_path: P
     assert selector.select_targets(repository, [".github/workflows/ci.yml"]) == (
         "tests/repo/test_actions_parallel_workflows.py",
         "tests/repo/test_changelog_ci_contract.py",
-        "tests/repo/test_evals_workflow.py",
         "tests/repo/test_github_actions_pinning.py",
         "tests/repo/test_pyscn_diff_gate_contract.py",
         "tests/repo/test_pytest_lane_contract.py",
