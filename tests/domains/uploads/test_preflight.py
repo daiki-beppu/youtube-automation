@@ -386,6 +386,31 @@ def test_upload_collection_reports_unreachable_tags_min_count_from_channel_confi
     assert "Reduce tags.min_count or shorten base tags." in message
 
 
+def test_collect_live_titles_warns_and_skips_mismatched_pair(tmp_path: Path, caplog) -> None:
+    """REQ-5231: JSON を直接編集して HTML と不整合になった live collection は
+    警告して skip し、他 collection のタイトル収集を継続する."""
+    import logging
+
+    collections_root = tmp_path / "collections"
+    valid_docs = collections_root / "live" / "valid" / "20-documentation"
+    valid_docs.mkdir(parents=True)
+    write_video_description_pair(valid_docs, title="Rainy Night Focus Mix")
+    broken_docs = collections_root / "live" / "broken" / "20-documentation"
+    broken_docs.mkdir(parents=True)
+    source = write_video_description_pair(broken_docs, title="Original Title")
+    document = json.loads(source.read_text(encoding="utf-8"))
+    document["title"] = "Edited Without Html"
+    source.write_text(json.dumps(document), encoding="utf-8")
+
+    checker = PreflightChecker(collections_root)
+    with caplog.at_level(logging.WARNING):
+        titles = checker._collect_live_titles()
+
+    assert titles == ["Rainy Night Focus Mix"]
+    assert "broken" in caplog.text
+    assert "yt-document-render" in caplog.text
+
+
 def test_preflight_aggregates_tag_and_duration_issues_in_order(tmp_path: Path, monkeypatch) -> None:
     channel_dir = _write_minimal_channel(
         tmp_path,
