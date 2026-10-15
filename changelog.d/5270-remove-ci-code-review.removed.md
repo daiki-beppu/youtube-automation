@@ -1,0 +1,1 @@
+- PR ごとに claude-code-action で走る CI の自動コードレビュー（`Code review` workflow）を廃止した。CI autofix は CI 失敗起点の自動修正だけを扱う

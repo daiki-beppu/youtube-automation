@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-import subprocess
 
 import yaml
 
@@ -14,7 +13,6 @@ WORKFLOWS_DIR = REPO_ROOT / ".github/workflows"
 
 # PR をゲートする workflow だけが対象(evals / release-extensions は schedule / tag トリガー)
 CI_WORKFLOWS = ["CI", "Dashboard", "Extensions", "Audio Studio", "Release notes site"]
-WATCHED_WORKFLOWS = [*CI_WORKFLOWS, "Code review"]
 
 _PINNED_ACTION = re.compile(r"^anthropics/claude-code-action@[0-9a-f]{40}$")
 
@@ -48,7 +46,7 @@ def test_autofix_fires_when_a_pr_gate_workflow_fails() -> None:
 
     assert set(triggers) == {"workflow_run"}
     assert triggers["workflow_run"] == {
-        "workflows": WATCHED_WORKFLOWS,
+        "workflows": CI_WORKFLOWS,
         "types": ["completed"],
     }
 
@@ -60,116 +58,25 @@ def test_watched_workflow_names_match_existing_workflow_files() -> None:
         names.add(definition.get("name"))
 
     # 対象 workflow の rename で autofix が黙って発火しなくなる drift を検出する
-    assert set(WATCHED_WORKFLOWS) <= names
+    assert set(CI_WORKFLOWS) <= names
 
 
-def test_gate_processes_ci_failures_and_every_completed_code_review() -> None:
+def test_gate_processes_only_ci_failures() -> None:
     gate = _workflow()["jobs"]["gate"]["if"]
 
     assert "github.event.workflow_run.conclusion == 'failure'" in gate
-    assert "github.event.workflow_run.name == 'Code review'" in gate
+    assert "Code review" not in gate
     assert "github.event.workflow_run.event == 'pull_request'" in gate
     # fork からの PR は対象外
     assert "github.event.workflow_run.head_repository.full_name == github.repository" in gate
 
 
-def test_review_runs_skip_without_findings_and_supply_the_aggregate_comment() -> None:
-    """info の simplify 提案だけでは自動修正を起動しない。"""
-    workflow = _workflow()
-    gate = workflow["jobs"]["gate"]
-    decide = _decide_step(gate)
+def test_prompt_reads_the_failed_run_log() -> None:
+    prompt = _autofix_step(_workflow()["jobs"]["autofix"])["with"]["prompt"]
 
-    assert decide["env"]["SOURCE_WORKFLOW"] == "${{ github.event.workflow_run.name }}"
-    assert "<!-- code-review-workflow -->" in decide["run"]
-    assert "critical_count" in decide["run"]
-    assert "warning_count" in decide["run"]
-    # summary の parse 可能性ガードとして info_count の取得・検証は残す
-    assert "info_count" in decide["run"]
-    assert "${1}[[:space:][:punct:]]*[0-9]+" in decide["run"]
-    assert "][0].body" in decide["run"]
-    assert "skip-review" in decide["run"]
-    assert "awk '/^---[[:space:]]*$/{exit}" in decide["run"]
-    assert 'skip "code review reported no critical or warning findings' in decide["run"]
-    # info-only のレビューでは Opus を起動しない(発火は critical+warning のみ)
-    assert '[ "$((critical_count + warning_count))" -gt 0 ]' in decide["run"]
-    assert "critical_count + warning_count + info_count" not in decide["run"]
-
-    prompt = _autofix_step(workflow["jobs"]["autofix"])["with"]["prompt"]
-    assert "critical / warning / info" in prompt
-    assert "<!-- code-review-workflow -->" in prompt
-    assert "同意できない" in prompt
-    assert "SOURCE WORKFLOW" in prompt
-    assert "FAILED WORKFLOW" not in prompt
-
-
-def test_review_severity_parser_accepts_real_comment_formats_without_matching_prose() -> None:
-    summary = """\
-| critical | 1 |
-- **Critical**: 2
-**Critical:** 3
-- Critical: **4**
-- Critical (5 件)
-- **critical: 6件** / **warning: 7件** / **info: 8件**
-critical_path.py:42
-The critical finding is on line 99.
-"""
-
-    result = subprocess.run(
-        [
-            "bash",
-            "-c",
-            "grep -ioE 'critical[[:space:][:punct:]]*[0-9]+' | grep -oE '[0-9]+'",
-        ],
-        input=summary,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.stdout.splitlines() == ["1", "2", "3", "4", "5", "6"]
-
-    for severity, expected in (("warning", "7"), ("info", "8")):
-        result = subprocess.run(
-            [
-                "bash",
-                "-c",
-                f"grep -ioE '{severity}[[:space:][:punct:]]*[0-9]+' | grep -oE '[0-9]+'",
-            ],
-            input=summary,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        assert result.stdout.strip() == expected
-
-
-def test_review_severity_parser_ignores_finding_details_after_summary_boundary() -> None:
-    comment = """\
-<!-- code-review-workflow -->
-## Summary
-- critical: 0
-- warning: 1
-- info: 0
----
-### critical: line 42
-The detailed finding mentions warning: 99.
-"""
-
-    result = subprocess.run(
-        [
-            "bash",
-            "-c",
-            "awk '/^---[[:space:]]*$/{exit} {print}' "
-            "| grep -ioE 'critical[[:space:][:punct:]]*[0-9]+' "
-            "| head -n 1 | grep -oE '[0-9]+' | head -n 1",
-        ],
-        input=comment,
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-    assert result.stdout.strip() == "0"
+    assert "FAILED RUN ID" in prompt
+    assert "--log-failed" in prompt
+    assert "code-review-workflow" not in prompt
 
 
 def test_missing_auth_explicitly_skips_the_paid_fix() -> None:

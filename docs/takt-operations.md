@@ -96,17 +96,17 @@ gh stack sync --prune          # 下段 merge 後の追随。merge 済みロー�
      --json databaseId,workflowName,headSha,status,conclusion,url
    ```
 
-4. 対象 PR の最新 HEAD に対する、後述「CI 失敗の自動修正」の PR をゲートする 5 workflow の queued / in_progress run だけを `gh run cancel <run-id>` で止める。`Code review`、autofix、main push、release、他 stack の run は対象外。起動が遅れている場合は再取得し、キャンセル要求後も終了を確認する。すでに完了した run はその結果を保持する。
-5. 延期した PR 番号・HEAD・workflow・run ID を作業報告に残す。修正段と最上段の最新 HEAD で対象 CI が完了し、成功したことを確認するまで修正ループを終えない。コードレビューは既存のゲートに従う。
+4. 対象 PR の最新 HEAD に対する、後述「CI 失敗の自動修正」の PR をゲートする 5 workflow の queued / in_progress run だけを `gh run cancel <run-id>` で止める。autofix、main push、release、他 stack の run は対象外。起動が遅れている場合は再取得し、キャンセル要求後も終了を確認する。すでに完了した run はその結果を保持する。
+5. 延期した PR 番号・HEAD・workflow・run ID を作業報告に残す。修正段と最上段の最新 HEAD で対象 CI が完了し、成功したことを確認するまで修正ループを終えない。
 
 `[skip ci]` や必須チェックの削除による省略は使わない。キャンセルによる未検証状態はそのまま残し、次のマージ前手順で解消する。
 
 ### マージ前の全段検証
 
-1. 指定 PR までの全段について、最新 `headRefOid` と必要な CI / review の結果を再取得する。報告に残した延期一覧だけでなく、`gh pr checks <PR番号>` も照合する。
+1. 指定 PR までの全段について、最新 `headRefOid` と必要な CI の結果を再取得する。報告に残した延期一覧だけでなく、`gh pr checks <PR番号>` も照合する。
 2. 最新 HEAD に対応する延期 run を `gh run rerun <run-id>` で **全 job 再実行**する（`--failed` は使わない）。進行中なら完了を待つ。すでに同じ HEAD の有効な検証が成功していれば、重複再実行は不要。
 3. 再実行は元イベントの SHA / ref を使うため、旧 HEAD の run を再実行しても最新 HEAD の検証にはならない。HEAD または検証対象の base が進んだ場合は、その状態に対応する新しい run を確認する。run が未作成・期限切れ等で再実行できない場合は、通常の PR 更新による新規検証を成立させてから先へ進む。
-4. 各段の必須チェックと実行対象 CI / review が成功し、保留・キャンセル・失敗した必要チェックがなく、HEAD が検証中から変わっていないことを確認して、下記の `gh stack merge` へ進む。キャンセルを理由に required check を弱めない。
+4. 各段の必須チェックと実行対象 CI が成功し、保留・キャンセル・失敗した必要チェックがなく、HEAD が検証中から変わっていないことを確認して、下記の `gh stack merge` へ進む。キャンセルを理由に required check を弱めない。
 
 コマンドの仕様: [gh run cancel](https://cli.github.com/manual/gh_run_cancel)、[gh run rerun](https://cli.github.com/manual/gh_run_rerun)、[再実行時の SHA / ref](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs)。
 
@@ -140,26 +140,16 @@ gh stack merge <stack番号|PR番号> --yes --squash
 - `gh stack sync` はローカルとリモートの stack が diverge していると、非対話環境では何も変更せず `ℹ Sync aborted` を出して **exit 0 で終わる**。成功と読み違えない。解消は `gh stack unstack` してから作り直す
 - `gh stack rebase` の conflict は exit 3。`git add` で解決を stage して `gh stack rebase --continue`、戻せなくなったら `--abort` で全 branch が rebase 前へ復元される
 
-## PR 自動コードレビュー(マージ前ゲート)
-
-draft ではなく、head ref が `release/` で始まらない PR の opened / ready_for_review / synchronize で `.github/workflows/code-review.yml` が発火し、claude-code-action が mattpocock code-review(Standards / Spec の 2 軸)+ simplify 観点(reuse / simplification / efficiency)で差分をレビューして severity 付きの集約コメントを投稿する。すべての対象 PR に同じゲートが効く。
-
-- **critical 指摘が 1 件以上あると `Code review` check が fail する**。warning / info のみなら success。`gh stack merge` の CI green 待ちにはこの check も含まれる
-- review workflow 自体は `contents: read` のまま指摘の生成だけを担う。集約コメントに critical / warning / info が 1 件以上あれば、後続の CI autofix が全指摘の修正を試みる
-- オプトアウトは PR に `skip-review` ラベルを付与する(誤検知が続く PR・機械生成の大量 PR 向け)。draft PR と `release/*` ブランチのリリース PR は最初から対象外
-- `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` がどちらも未設定の環境では fail せず skip される(evals.yml と同じ慣行)
-- 同一 PR への連続 push は進行中の run が cancel され、最新 commit のレビューだけが残る
-
 ## CI 失敗の自動修正(post-push の保険)
 
-PR をゲートする 5 workflow(CI / Dashboard / Extensions / Audio Studio / Release notes site)のいずれかが PR で失敗した場合、または `Code review` の集約コメントに critical / warning / info の指摘がある場合、`.github/workflows/ci-autofix.yml` が `workflow_run` で発火する。claude-code-action は失敗ログまたはレビューコメントを診断し、修正 commit を PR ブランチへ push する。レビューが指摘 0 件なら何もせず終了する。worktree 上で修正・検証する一次経路に加えて、push 後に発生した回帰への保険として重ねる。
+PR をゲートする 5 workflow(CI / Dashboard / Extensions / Audio Studio / Release notes site)のいずれかが PR で失敗した場合、`.github/workflows/ci-autofix.yml` が `workflow_run` で発火する。claude-code-action は失敗ログを診断し、修正 commit を PR ブランチへ push する。worktree 上で修正・検証する一次経路に加えて、push 後に発生した回帰への保険として重ねる。
 
-- **push は claude-code-action 既定の OIDC → Claude GitHub App トークン交換で行う**(`id-token: write`)。App トークンの push は `pull_request: synchronize` を発火させ、修正 commit の CI が自動で再検証される。code-review.yml が `contents: read` + 明示 `GITHUB_TOKEN` でレビューに閉じるのと対で、push 経路は本 workflow だけが持つ
-- **修正試行は CI 起点・レビュー起点を通算して PR あたり 1 回。** commit body の `[ci-autofix]` マーカーで判定し、修正後の再レビューや CI で問題が残っても 2 回目以降はコメント報告のみ(コスト暴走・修正ループ防止)
-- 修正不能・修正すべきでない(仕様矛盾・flaky・インフラ起因・同意できないレビュー指摘)と判断した場合は push せず診断コメントを投稿して正常終了する
-- オプトアウトは PR に `skip-autofix` ラベルを付与する(`skip-review` と独立制御)。draft PR・fork からの PR は最初から対象外
-- `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` がどちらも未設定の環境では fail せず skip される(code-review.yml と同じ慣行)
-- モデルは opus(pytest 失敗の診断・修正はレビューより難易度が高く、sonnet 既定の code-review.yml とは別判断)
+- **push は claude-code-action 既定の OIDC → Claude GitHub App トークン交換で行う**(`id-token: write`)。App トークンの push は `pull_request: synchronize` を発火させ、修正 commit の CI が自動で再検証される。push 経路は本 workflow だけが持つ
+- **修正試行は PR あたり 1 回。** commit body の `[ci-autofix]` マーカーで判定し、修正後の CI で問題が残っても 2 回目以降はコメント報告のみ(コスト暴走・修正ループ防止)
+- 修正不能・修正すべきでない(仕様矛盾・flaky・インフラ起因)と判断した場合は push せず診断コメントを投稿して正常終了する
+- オプトアウトは PR に `skip-autofix` ラベルを付与する。draft PR・fork からの PR は最初から対象外
+- `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` がどちらも未設定の環境では fail せず skip される(evals.yml と同じ慣行)
+- モデルは opus(pytest 失敗の診断・修正は難易度が高いため)
 
 ## 環境
 
