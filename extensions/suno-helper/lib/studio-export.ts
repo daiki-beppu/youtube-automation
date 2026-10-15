@@ -20,6 +20,8 @@ const PLACED_CLIP_VERIFY_WAIT_MS = 10_000;
 const PLACED_CLIP_LENGTH_TOLERANCE_SEC = 2;
 /** clip 表示に含まれる "M:SS" 形式の曲長。 */
 const CLIP_DURATION_TEXT_RE = /(\d+):(\d{2})/;
+/** background 化された tab での描画遅延を吸収するための長めの待ち (#5219)。 */
+const STUDIO_PATIENT_WAIT_MS = 60_000;
 
 export interface StudioExportRequest {
   collectionId: string;
@@ -208,15 +210,23 @@ async function clickButtonByName(
   dispatchStudioPointerClick(button);
 }
 
-async function waitForTrackCount(expected: number): Promise<HTMLElement[]> {
-  await waitForElement(
-    () =>
-      document.querySelectorAll<HTMLElement>("[data-track-id]").length ===
-      expected
-        ? document.querySelector<HTMLElement>("[data-track-id]")
-        : null,
-    `track ${expected} 件`
-  );
+export async function waitForTrackCount(
+  expected: number
+): Promise<HTMLElement[]> {
+  // track は非同期に描画されるため、件数ぴったりではなく expected 以上を render lag
+  // 吸収用の長めの窓で待つ。Add 系の overshoot 検知は click 側の == 判定が担う (#5219)。
+  const find = () =>
+    document.querySelectorAll<HTMLElement>("[data-track-id]").length >= expected
+      ? document.querySelector<HTMLElement>("[data-track-id]")
+      : null;
+  const first = await waitForElementOrNull(find, STUDIO_PATIENT_WAIT_MS);
+  if (!first) {
+    // 見つからなければ track 一覧領域へ scroll を流して再 mount を促し、一度だけ retry する。
+    document
+      .querySelector<HTMLElement>("[data-studio-main-canvas]")
+      ?.dispatchEvent(new Event("scroll", { bubbles: true }));
+    await waitForElement(find, `track ${expected} 件以上`);
+  }
   return Array.from(document.querySelectorAll<HTMLElement>("[data-track-id]"));
 }
 
@@ -309,9 +319,10 @@ export async function clickStudioButtonUntil<T extends HTMLElement>(
   buttonName: string | readonly string[],
   findResult: () => T | null,
   description: string,
-  clickMode: "trusted" | "pointer" = "trusted"
+  clickMode: "trusted" | "pointer" = "trusted",
+  timeoutMs = DOM_TIMEOUT_MS
 ): Promise<T> {
-  const deadline = Date.now() + DOM_TIMEOUT_MS;
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const result = findResult();
     if (result && isVisible(result)) return result;
@@ -621,6 +632,30 @@ export async function verifyPlacedClipLength(
 }
 
 /**
+ * project 領域が空（track 1 件以下・clip 0 件）になるまで待つ (#5219)。
+ * 内容を持つ既存の Untitled Project が開いたままなら、そのまま rename すると
+ * 上書きするため非空が続く限り待ち、timeout で観測件数つきの明示的エラーにする。
+ */
+export async function waitForEmptyStudioProject(): Promise<void> {
+  const deadline = Date.now() + DOM_TIMEOUT_MS;
+  let trackCount = 0;
+  let clipCount = 0;
+  for (;;) {
+    trackCount = document.querySelectorAll("[data-track-id]").length;
+    clipCount = document.querySelectorAll(
+      "[data-track-id] [data-clip-id]"
+    ).length;
+    if (clipCount === 0 && trackCount <= 1) return;
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `内容を持つ Untitled Project（track ${trackCount} 件 / clip ${clipCount} 件）が開かれました。Studio で新規の空 project を作成してから再実行してください。`
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
+  }
+}
+
+/**
  * Library を開き All Songs の clip 一覧へ辿る。Library は前回開いた workspace を
  * 記憶して直接その一覧を開くことがあり、その場合 Library トップの All Songs は
  * 存在しない。Go back があればトップへ戻ってから All Songs を探す (#5198)。
@@ -685,6 +720,10 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
         },
         "空 project"
       );
+      // 新規 empty project は track 1 件・clip 0 件で始まる。内容を持つ既存の
+      // Untitled Project が開いたまま rename すると上書きするため、空になるまで
+      // 待ってから検証する (#5219)。
+      await waitForEmptyStudioProject();
     },
     async renameProject(name) {
       await clickStudioAriaButtonUntil(
@@ -703,7 +742,9 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
               { ignoreCase: true }
             )
           ),
-        "Project name 入力"
+        "Project name 入力",
+        "trusted",
+        STUDIO_PATIENT_WAIT_MS
       );
       commitStudioInputValue(input, name);
       await waitForElement(

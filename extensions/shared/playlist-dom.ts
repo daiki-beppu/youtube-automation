@@ -780,6 +780,8 @@ interface VirtualWindowScanOptions {
   isAborted: () => boolean;
   renderWaitMs: number;
   hydrationWaitMs: number;
+  /** 走査 timeout 時に error message へ追記する診断（実測/期待件数など）(#5219)。 */
+  timeoutDetail?: () => string;
 }
 
 /**
@@ -795,6 +797,14 @@ interface VirtualWindowScanOptions {
  *
  * onWindow が true を返すか isAborted() が true になったら走査を打ち切る。
  */
+/** 走査 timeout の error message。timeoutDetail があれば実測/期待件数を追記する (#5219)。 */
+function clipScanTimeoutError(options: VirtualWindowScanOptions): Error {
+  const detail = options.timeoutDetail?.();
+  return new Error(
+    `clip 一覧の走査がタイムアウトしました${detail ? `（${detail}）` : ""}。Suno で対象曲だけの一覧を開いて再実行してください。`
+  );
+}
+
 /**
  * スクロール 1 ステップ分の仮想ウィンドウ hydration 待ち (#2043)。
  * 各 poll で onWindow を呼び、true が返るか中断されたら done=true で走査全体を打ち切る。
@@ -814,9 +824,7 @@ async function settleVirtualClipWindow(
     await sleep(options.renderWaitMs);
     if (Date.now() >= options.deadline) {
       restoreClipListHead(scroller);
-      throw new Error(
-        "clip 一覧の走査がタイムアウトしました。Suno で対象曲だけの一覧を開いて再実行してください。"
-      );
+      throw clipScanTimeoutError(options);
     }
     if (options.isAborted()) {
       return { done: true, signature: prevSignature };
@@ -1010,7 +1018,14 @@ export async function scrollAndMultiSelectByIds(
   for (let pass = 0; pass <= VIRTUAL_SCROLL_RETRY_PASSES; pass++) {
     await scanVirtualClipWindows(
       scroller,
-      { isAborted, renderWaitMs, hydrationWaitMs, deadline },
+      {
+        isAborted,
+        renderWaitMs,
+        hydrationWaitMs,
+        deadline,
+        timeoutDetail: () =>
+          `対象 ${uniqueTargetIds.size} 件中 ${foundIds.size} 件を検出`,
+      },
       async () => {
         await selectMatchingRows();
         return allFound();
@@ -1122,7 +1137,19 @@ export async function readSelectedClipIds(
   for (let pass = 0; pass < maxScanPasses; pass++) {
     await scanVirtualClipWindows(
       scroller,
-      { isAborted, renderWaitMs, hydrationWaitMs, deadline },
+      {
+        isAborted,
+        renderWaitMs,
+        hydrationWaitMs,
+        deadline,
+        // 件数不一致で走査が尽きた場合に汎用 timeout で原因が埋もれないよう、
+        // 実測/期待件数を error message に載せる (#5219)。
+        timeoutDetail:
+          expectedClipCount === undefined
+            ? undefined
+            : () =>
+                `expected ${expectedClipCount}, scanned ${selectedIds.size}`,
+      },
       () => {
         collectVisibleSelectedRows();
         return scanDone();
