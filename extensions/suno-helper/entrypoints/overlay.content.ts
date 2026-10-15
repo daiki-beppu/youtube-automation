@@ -7,6 +7,7 @@ import { createRoot, type Root } from "react-dom/client";
 
 import { SUNO_MATCHES } from "../../shared/constants";
 import { Overlay } from "../components/Overlay";
+import { scopeOverlayPointerEvents } from "../lib/overlay-pointer-scope";
 
 import "../components/overlay.css";
 
@@ -29,6 +30,10 @@ export default defineContentScript({
         root?.unmount();
       },
     });
+    // host / shadow 内コンテナ (html, body) は装飾レイヤなので pointer event を透過させ、
+    // Suno のコンテキストメニュー等へのクリックを遮らない (#5227)。
+    // panel 側は OverlayShell の Card が pointerEvents: "auto" で受け取る。
+    scopeOverlayPointerEvents(ui.shadowHost, ui.uiContainer);
     try {
       ui.mount();
     } catch (error) {

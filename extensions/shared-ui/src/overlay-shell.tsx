@@ -94,6 +94,8 @@ export function OverlayShell({
         top: controller.position.y,
         width,
         zIndex: 2_147_483_647,
+        // shadow host / コンテナが pointer-events: none でも panel 側は event を受ける (#5227)。
+        pointerEvents: "auto",
         ...overlayHiddenStyle(controller.hidden),
       }}
     >
