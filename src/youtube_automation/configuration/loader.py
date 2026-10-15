@@ -604,6 +604,7 @@ def _build_analytics(merged: dict) -> Analytics:
         )
     return Analytics(
         collection_filter_keywords=list(an.get("collection_filter_keywords", [])),
+        exclude_private=bool(an.get("exclude_private", True)),
         benchmark=Benchmark(channels=list(bm.get("channels", []))),
     )
 

@@ -94,6 +94,23 @@ def test_missing_or_invalid_duration_is_explicitly_undetermined(details: dict[st
     assert result[0]["duration"] is None
 
 
+def test_exclude_private_drops_non_public_videos_from_population() -> None:
+    collector = _Collector()
+    collector.video_ids = ["v00", "v01", "v02", "v03"]
+    collector.get_video_details = lambda _ids: {  # type: ignore[method-assign]
+        "v00": {"view_count": "10", "privacy_status": "public"},
+        "v01": {"view_count": "20", "privacy_status": "private"},
+        "v02": {"view_count": "30", "privacy_status": "unlisted"},
+        "v03": {"view_count": "40"},
+    }
+
+    excluded = collect_all_video_statistics(collector, exclude_private=True)
+    included = collect_all_video_statistics(collector)
+
+    assert [item["video_id"] for item in excluded] == ["v00", "v03"]
+    assert [item["video_id"] for item in included] == collector.video_ids
+
+
 @pytest.mark.parametrize("details", [{}, {"v00": {}}, {"v00": {"view_count": "invalid"}}])
 def test_missing_or_invalid_view_count_fails_closed(details: dict[str, object]) -> None:
     collector = _Collector()

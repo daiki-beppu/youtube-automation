@@ -1469,6 +1469,7 @@ def test_optional_sections_default(tmp_path, monkeypatch):
     config = load_config()
 
     assert config.analytics.collection_filter_keywords == []
+    assert config.analytics.exclude_private is True
     assert config.analytics.benchmark.channels == []
     assert config.playlists.items == {}
     assert config.audio.target_duration_min is None
@@ -2604,3 +2605,12 @@ def test_first_config_load_refreshes_previously_resolved_root(tmp_path, monkeypa
     monkeypatch.setenv("CHANNEL_DIR", str(second))
     assert load_config().meta.channel_name == "Second channel"
     assert channel_context.channel_dir() == channel_dir() == second
+
+
+def test_analytics_exclude_private_is_configurable(tmp_path, monkeypatch):
+    sections = _minimal_sections()
+    sections["analytics.json"] = {"analytics": {"exclude_private": False}}
+    ch = _setup_channel(tmp_path, sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(ch))
+
+    assert load_config().analytics.exclude_private is False
