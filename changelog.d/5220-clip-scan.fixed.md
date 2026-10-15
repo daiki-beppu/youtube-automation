@@ -1,0 +1,3 @@
+- suno-helper: clip 一覧走査をページネーション対応にし、Next page ボタンで全ページを走査するようにした。ページネーションや仮想化で描画できない対象 clip は Library 検索（Search songs…）でタイトル検索して選択するフォールバックを追加した（#5220）。
+- suno-helper: 「ダウンロードのみ実行」が採用済み clip ID（extension storage の resume state）を優先利用するようにし、ページ再読み込みで Suno 側の選択状態が消えても Download からの再開が継続できるようにした（#5220）。
+- suno-helper: playlist ページなどで clip row が見つからない失敗に、検出状況（scroller 有無・選択ボタン数）と復帰手順（対象曲だけの一覧を開く等）を含むエラーメッセージを付けるようにした（#5220）。

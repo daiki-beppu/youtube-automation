@@ -151,8 +151,18 @@ function tabVisibilityRecoveryHint(): string {
     : "実行中に Suno タブが背面になりました。タブを表示中にして再実行してください。";
 }
 
+/**
+ * clip row lookup 失敗時の actionable error (#5220)。
+ * 検出状況（scroller の有無 / 選択ボタン数）と、ユーザーが取れる復帰手順
+ * （対象曲だけの一覧を開く・検索で絞る）を併記する。
+ */
 function clipRowNotFoundMessage(): string {
-  return `clip row が見つかりません。${tabVisibilityRecoveryHint()}Suno の UI 変更の可能性があります。`;
+  const scrollerExists =
+    document.querySelector(CLIP_LIST_SCROLLER_SELECTOR) !== null;
+  const selectButtonCount = queryClipSelectButtons(document).length;
+  return `clip row が見つかりません（clip list scroller: ${
+    scrollerExists ? "あり" : "なし"
+  }, select button: ${selectButtonCount} 件）。${tabVisibilityRecoveryHint()}Suno で対象曲だけの一覧（Library 検索や playlist の絞り込み）を開いてから再実行してください。Suno の UI 変更の可能性があります。`;
 }
 
 /**
@@ -282,6 +292,74 @@ function resolveClipListScroller(): HTMLElement | null {
 }
 
 /**
+ * ページネーション / 検索絞り込みで clip list が再描画され scroller 要素が
+ * 差し替わった場合に、最新の scroller へ追従する (#5220)。
+ */
+function ensureConnectedScroller(scroller: HTMLElement): HTMLElement {
+  if (scroller.isConnected) {
+    return scroller;
+  }
+  return resolveClipListScroller() ?? scroller;
+}
+
+/**
+ * clip browser 下部の「次ページ」ボタンを探す (#5220)。
+ * ページネーション UI は clip list の scroller の外に出るため document 全体から
+ * ラベル照合で拾う。無効化されているボタン（最終ページ）は null 扱いにする。
+ */
+function findClipListNextPageButton(): HTMLElement | null {
+  const candidates = Array.from(
+    document.querySelectorAll<HTMLElement>("button, [role='button']")
+  );
+  for (const candidate of candidates) {
+    if (!isVisible(candidate)) {
+      continue;
+    }
+    if (
+      !matchesLabel(
+        candidate.getAttribute("aria-label"),
+        SUNO_LABELS.clipListNextPage
+      ) &&
+      !matchesLabel(candidate.textContent, SUNO_LABELS.clipListNextPage)
+    ) {
+      continue;
+    }
+    if (
+      (candidate as HTMLButtonElement).disabled ||
+      candidate.getAttribute("aria-disabled") === "true"
+    ) {
+      continue;
+    }
+    return candidate;
+  }
+  return null;
+}
+
+/**
+ * clip browser の曲検索入力欄を探す (#5220)。
+ * 全件走査で対象 clip を描画できないとき、検索で対象曲だけを描画させる。
+ */
+function findLibrarySearchInput(): HTMLInputElement | null {
+  const inputs = Array.from(
+    document.querySelectorAll<HTMLInputElement>("input[placeholder]")
+  );
+  for (const input of inputs) {
+    if (!isVisible(input)) {
+      continue;
+    }
+    if (
+      includesLabel(
+        input.getAttribute("placeholder"),
+        SUNO_LABELS.librarySearchPlaceholder
+      )
+    ) {
+      return input;
+    }
+  }
+  return null;
+}
+
+/**
  * root 配下の Select / Deselect clip ボタンを文書順で返す。
  * 日英ラベルを並べたセレクタリストは非 ASCII を含み、jsdom（nwsapi）の要素スコープ
  * querySelectorAll はこの形で文書順を崩すため、ASCII だけのセレクタで文書順に取得してから
@@ -349,6 +427,7 @@ function extractClipIdFromImageUrl(url: string): string | null {
   return match ? match[1] : null;
 }
 
+// fallow-ignore-next-line complexity
 function collectClipRowIds(row: HTMLElement): Set<string> {
   const ids = new Set<string>();
   const songId = row.dataset[CLIP_ROW_SONG_ID_DATA_KEY];
@@ -407,6 +486,7 @@ export function collectClipRowTitle(row: HTMLElement): string | null {
   return rowLabel || null;
 }
 
+// fallow-ignore-next-line complexity
 function findRowsByClipIds(
   rows: HTMLElement[],
   targetIds: string[],
@@ -540,6 +620,7 @@ export interface EnsureClipRowsLoadedOptions {
   titleFallbackMap?: Map<string, string>;
 }
 
+// fallow-ignore-next-line complexity
 export async function ensureClipRowsLoadedByIds(
   targetIds: string[],
   options: EnsureClipRowsLoadedOptions
@@ -557,9 +638,7 @@ export async function ensureClipRowsLoadedByIds(
     titleFallbackMap,
   } = options;
 
-  const scroller = document.querySelector<HTMLElement>(
-    CLIP_LIST_SCROLLER_SELECTOR
-  );
+  const scroller = resolveClipListScroller();
   if (!scroller) {
     throw new Error(clipRowNotFoundMessage());
   }
@@ -633,6 +712,7 @@ export async function ensureClipRowsLoadedByIds(
  * 追加ロードが止まった（リスト末尾）のに count に届かない場合も fail-loud throw する
  * （silent slice を廃止し、追加漏れを検出境界で即顕在化させる）。
  */
+// fallow-ignore-next-line complexity
 export async function ensureClipRowsLoaded(
   count: number,
   options: EnsureClipRowsLoadedOptions
@@ -842,17 +922,51 @@ async function settleVirtualClipWindow(
   }
 }
 
-async function scanVirtualClipWindows(
+/**
+ * ページネーション UI で次ページへ進み、新しいウィンドウが描画されたら true (#5220)。
+ * 次ページボタンが無い / 無効 / 描画が変わらない場合は false（走査終端）。
+ */
+async function advanceClipListPage(
   scroller: HTMLElement,
+  options: VirtualWindowScanOptions
+): Promise<boolean> {
+  const next = findClipListNextPageButton();
+  if (!next) {
+    return false;
+  }
+  const prevSignature = computeClipWindowSignature(scroller).signature;
+  next.click();
+  const deadline = Date.now() + options.hydrationWaitMs;
+  for (;;) {
+    await sleep(options.renderWaitMs);
+    if (options.isAborted() || Date.now() >= options.deadline) {
+      return false;
+    }
+    const { signature, rowCount } = computeClipWindowSignature(
+      ensureConnectedScroller(scroller)
+    );
+    if (rowCount > 0 && signature !== prevSignature) {
+      return true;
+    }
+    if (Date.now() >= deadline) {
+      return false;
+    }
+  }
+}
+
+async function scanVirtualClipWindows(
+  initialScroller: HTMLElement,
   options: VirtualWindowScanOptions,
   onWindow: () => Promise<boolean> | boolean
 ): Promise<void> {
+  let scroller = initialScroller;
   let prevSignature: string | null = null;
   let pos = 0;
   for (;;) {
     if (options.isAborted()) {
       return;
     }
+    scroller = ensureConnectedScroller(scroller);
     scroller.scrollTop = Math.min(
       pos,
       Math.max(0, scroller.scrollHeight - scroller.clientHeight)
@@ -876,6 +990,14 @@ async function scanVirtualClipWindows(
       scroller.scrollHeight - scroller.clientHeight
     );
     if (pos >= maxScroll) {
+      // 現在ページの底まで到達。ページネーション UI があれば次ページへ進んで走査を継続し、
+      // 無ければ走査終了（全ページ走査済み or そもそも単一ページ）(#5220)。
+      if (await advanceClipListPage(scroller, options)) {
+        scroller = ensureConnectedScroller(scroller);
+        pos = 0;
+        prevSignature = null;
+        continue;
+      }
       return;
     }
     pos +=
@@ -904,6 +1026,7 @@ export interface ScrollAndMultiSelectOptions {
  * マッチする row を発見次第 Select click する。Suno は選択状態を内部 state で保持するため、
  * row がスクロールアウトしても選択は維持される。
  */
+// fallow-ignore-next-line complexity
 export async function scrollAndMultiSelectByIds(
   targetIds: string[],
   options: ScrollAndMultiSelectOptions
@@ -920,19 +1043,20 @@ export async function scrollAndMultiSelectByIds(
     hydrationWaitMs = VIRTUAL_WINDOW_HYDRATION_WAIT_MS,
   } = options;
 
-  const scroller = document.querySelector<HTMLElement>(
-    CLIP_LIST_SCROLLER_SELECTOR
-  );
-  if (!scroller) {
+  const initialScroller = resolveClipListScroller();
+  if (!initialScroller) {
     throw new Error(clipRowNotFoundMessage());
   }
+  let scroller = initialScroller;
 
   const foundIds = new Set<string>();
   const titleMatchedRows = new WeakSet<HTMLElement>();
   const titleMatchedRowIds = new Set<string>();
 
+  // fallow-ignore-next-line complexity
   async function selectMatchingRows(): Promise<void> {
-    const buttons = queryClipSelectButtons(scroller!);
+    scroller = ensureConnectedScroller(scroller);
+    const buttons = queryClipSelectButtons(scroller);
     const seen = new Set<HTMLElement>();
     for (const button of buttons) {
       if (isAborted()) return;
@@ -1041,12 +1165,42 @@ export async function scrollAndMultiSelectByIds(
 
   restoreClipListHead(scroller);
 
+  // 全件走査で見つからない clip は、タイトルが既知なら Library 検索で
+  // 対象曲だけを描画させて選択を試みる (#5220)。ページネーションや
+  // 完全仮想化（row 0 件の空シェル）で走査が届かない場合の fallback。
+  if (!isAborted() && !allFound() && titleFallbackMap) {
+    const search = findLibrarySearchInput();
+    if (search) {
+      const searchable = [...uniqueTargetIds].filter(
+        (id) => !foundIds.has(id) && titleFallbackMap.get(id)
+      );
+      for (const id of searchable) {
+        if (isAborted()) {
+          break;
+        }
+        setNativeValue(search, titleFallbackMap.get(id) ?? "");
+        const searchDeadline = Date.now() + hydrationWaitMs;
+        for (;;) {
+          await sleep(renderWaitMs);
+          await selectMatchingRows();
+          if (foundIds.has(id) || isAborted()) {
+            break;
+          }
+          if (Date.now() >= searchDeadline) {
+            break;
+          }
+        }
+      }
+      setNativeValue(search, "");
+    }
+  }
+
   if (!allFound()) {
     const missing = [...uniqueTargetIds]
       .filter((id) => !foundIds.has(id))
       .join(", ");
     throw new Error(
-      `playlist 対象 clip row が見つかりませんでした。missing clip ID: ${missing}`
+      `playlist 対象 clip row が見つかりませんでした。missing clip ID: ${missing}。Suno で対象曲だけの一覧（Library 検索や playlist の絞り込み）を開いてから再実行してください。`
     );
   }
 
@@ -1091,17 +1245,17 @@ export async function readSelectedClipIds(
     skipUnresolvedIds = false,
   } = options;
 
-  const scroller = document.querySelector<HTMLElement>(
-    CLIP_LIST_SCROLLER_SELECTOR
-  );
-  if (!scroller) {
+  const initialScroller = resolveClipListScroller();
+  if (!initialScroller) {
     throw new Error(clipRowNotFoundMessage());
   }
+  let scroller = initialScroller;
 
   const selectedIds = new Set<string>();
 
   function collectVisibleSelectedRows(): void {
-    const buttons = scroller!.querySelectorAll<HTMLElement>(
+    scroller = ensureConnectedScroller(scroller);
+    const buttons = scroller.querySelectorAll<HTMLElement>(
       DESELECT_CLIP_BUTTON_ANY_SELECTOR
     );
     const seenRows = new Set<HTMLElement>();
@@ -1182,6 +1336,7 @@ export async function readSelectedClipIds(
  * 出現した dialog を返す (#854)。cookie consent dialog は findPlaylistDialog の除外フィルタで拾わない。
  * 上限まで待っても出なければ throw（silent に続行しない）。
  */
+// fallow-ignore-next-line complexity
 export async function openAddToPlaylistDialogViaCmdP(
   dispatchCmdP?: () => Promise<void>
 ): Promise<HTMLElement> {

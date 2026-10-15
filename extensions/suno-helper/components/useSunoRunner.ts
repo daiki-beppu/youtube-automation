@@ -210,6 +210,7 @@ function resolveInitialServerUrl(
   );
 }
 
+// fallow-ignore-next-line complexity
 export function useSunoRunner(): RunnerState {
   const [reloadRequired, setReloadRequired] = useState(false);
   const [url, setUrlState] = useState("");
@@ -1028,6 +1029,7 @@ export function useSunoRunner(): RunnerState {
     })();
   }, [report, setRunning]);
 
+  // fallow-ignore-next-line complexity
   const fetchData = useCallback(
     async (targetUrl: string, preferredCollectionId: string) => {
       const requestId = ++fetchRequestIdRef.current;
@@ -1219,6 +1221,7 @@ export function useSunoRunner(): RunnerState {
     []
   );
 
+  // fallow-ignore-next-line complexity
   const refreshServerSources = useCallback(async () => {
     if (isRunningRef.current) return;
     await initializationRef.current;
@@ -1378,6 +1381,7 @@ export function useSunoRunner(): RunnerState {
     }, [reportStorageFailure]);
 
   const run = useCallback(
+    // fallow-ignore-next-line complexity
     async (overrides?: RunOverrides) => {
       // 二重実行ガード (#892 要件7)。実行中の再入（「再開」連打等）を no-op で弾く。
       if (isRunningRef.current) {
@@ -1443,6 +1447,7 @@ export function useSunoRunner(): RunnerState {
   );
 
   // playlist 追加のみ再実行。entries 不要のため retryPlaylist 専用メッセージを送る。
+  // fallow-ignore-next-line complexity
   const retryPlaylist = useCallback(async () => {
     if (isRunning) {
       return;
@@ -1621,6 +1626,7 @@ export function useSunoRunner(): RunnerState {
     ]
   );
 
+  // fallow-ignore-next-line complexity
   const adoptSelectedClips = useCallback(async () => {
     if (isRunning) {
       return;
@@ -1721,10 +1727,18 @@ export function useSunoRunner(): RunnerState {
   ]);
 
   const downloadOnly = useCallback(async () => {
-    const clipIds = await adoptSelectedClips();
-    if (!clipIds) return;
+    // 採用済み clip ID は resume state（extension storage）へ永続化済みのため、
+    // 保存値があれば再採用せず再利用する。ページ再読み込みで Suno 側の選択状態が
+    // 消えても download-only を継続できるようにする (#5220)。
+    const clipIds =
+      submittedClipIdsForResume.length > 0
+        ? submittedClipIdsForResume
+        : await adoptSelectedClips();
+    if (!clipIds || clipIds.length === 0) {
+      return;
+    }
     await retryDownload(clipIds);
-  }, [adoptSelectedClips, retryDownload]);
+  }, [adoptSelectedClips, retryDownload, submittedClipIdsForResume]);
 
   // 失敗分のみ再実行 (#948)。failedEntries を indices として run へ渡す。
   // 完走すると content 側が playlist 追加まで実行し resume state を消す。
