@@ -16,15 +16,37 @@ def _find_channel_ancestor(start: Path) -> Path | None:
     return None
 
 
+# config/channel/ が未生成の開設直後チャンネルを示すルート目印
+# (yt-setup-dirs が作る SETUP_DIRECTORIES のうち、汎用名でないもの。
+# commands/system/progress_hook/workflow_state.py の _find_channel_root と同じく
+# collections/ を主判定とし、auth/・branding/ も許容する)
+_CHANNEL_ROOT_MARKERS = ("collections", "auth", "branding")
+
+
+def _find_channel_root_ancestor(start: Path) -> Path | None:
+    current = start.expanduser().resolve()
+    for parent in [current, *current.parents]:
+        if any((parent / marker).is_dir() for marker in _CHANNEL_ROOT_MARKERS):
+            return parent
+    return None
+
+
 def _resolve_channel_dir() -> Path:
     """設定ルートを CHANNEL_DIR → cwd 祖先の優先順で解決する."""
     env_dir = os.environ.get("CHANNEL_DIR")
     if env_dir:
         return Path(env_dir).expanduser()
-    cwd_channel = _find_channel_ancestor(Path.cwd())
+    cwd = Path.cwd()
+    cwd_channel = _find_channel_ancestor(cwd)
     if cwd_channel is not None:
         return cwd_channel
-    raise ConfigError("CHANNEL_DIR 環境変数を設定するか、config/channel/ を持つディレクトリ配下で実行してください")
+    cwd_root = _find_channel_root_ancestor(cwd)
+    if cwd_root is not None:
+        return cwd_root
+    raise ConfigError(
+        "CHANNEL_DIR 環境変数を設定するか、config/channel/ または collections/・auth/ 等の"
+        "チャンネルルートを持つディレクトリ配下で実行してください"
+    )
 
 
 def channel_dir() -> Path:

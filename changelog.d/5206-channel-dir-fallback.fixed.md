@@ -1,0 +1,1 @@
+- `config/channel/` 未生成の開設直後チャンネルでも、cwd または祖先に `collections/`・`auth/`・`branding/` などのチャンネルルート目印があればそのディレクトリを `channel_dir()` として解決するようにした (#5206)。これにより `uv run yt-oauth` や `yt-doctor --apply` 経由の `uv run yt-analytics --reporting-create-job` が `CHANNEL_DIR` 未設定でも動作する
