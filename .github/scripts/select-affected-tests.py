@@ -58,7 +58,6 @@ PATH_TEST_MAP: Final = (
         ),
     ),
     (".github/workflows/ci-autofix.yml", ("tests/repo/test_ci_autofix_workflow.py",)),
-    (".github/workflows/code-review.yml", ("tests/repo/test_code_review_workflow.py",)),
     (
         ".github/workflows/dashboard.yml",
         ("tests/contracts/architecture/test_repository_reorganization_contract.py",),
