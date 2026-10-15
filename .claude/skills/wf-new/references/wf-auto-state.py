@@ -524,6 +524,64 @@ def _artifact_file(collection: Path, directory: str, value: object) -> bool:
     return path.is_file()
 
 
+def _music_audio_file_count(collection: Path) -> int | None:
+    music_dir = collection / "02-Individual-music"
+    try:
+        music_dir = _confined_path(collection, music_dir, "02-Individual-music")
+    except ValueError:
+        return None
+    if not music_dir.is_dir():
+        return None
+    return sum(
+        1
+        for path in music_dir.iterdir()
+        if path.is_file() and not path.is_symlink() and path.suffix.lower() in AUDIO_SUFFIXES
+    )
+
+
+def _approved_incomplete_download(
+    state: dict,
+    music: dict,
+    *,
+    expected: int,
+    actual: object,
+    missing: object,
+    count: int,
+) -> bool:
+    """承認済み incomplete-download 例外（music_pair_selection 記録）を完了とみなす。
+
+    yt-suno-select-tracks --allow-incomplete-download の非 dry-run が記録する
+    allow_incomplete_download / incomplete_download_prompts を根拠に、記録された
+    不足分だけが欠けている download を完了扱いにする。0 clip の prompt や
+    apply_skipped（未適用の DL 済み clip）が残る場合は完了にしない。
+    """
+    selection = state.get("music_pair_selection")
+    if not isinstance(selection, dict) or selection.get("allow_incomplete_download") is not True:
+        return False
+    prompts = selection.get("incomplete_download_prompts")
+    if (
+        not isinstance(prompts, list)
+        or not prompts
+        or any(not isinstance(index, int) or isinstance(index, bool) for index in prompts)
+    ):
+        return False
+    if (
+        isinstance(actual, bool)
+        or not isinstance(actual, int)
+        or isinstance(missing, bool)
+        or not isinstance(missing, int)
+        or missing <= 0
+        or actual + missing != expected
+        or missing != len(prompts)
+        or count < actual
+    ):
+        return False
+    reasons = music.get("missing_reasons")
+    return not isinstance(reasons, dict) or (
+        reasons.get("suno_unfulfilled") == missing and reasons.get("apply_skipped") == 0
+    )
+
+
 def _suno_download_complete(collection: Path, state: dict) -> bool:
     assets = state.get("assets")
     planning = state.get("planning")
@@ -547,23 +605,16 @@ def _suno_download_complete(collection: Path, state: dict) -> bool:
         or expected <= 0
         or minimum_expected <= 0
         or expected != minimum_expected
-        or music.get("actual_file_count") != expected
-        or music.get("missing_file_count") != 0
     ):
         return False
-    music_dir = collection / "02-Individual-music"
-    try:
-        music_dir = _confined_path(collection, music_dir, "02-Individual-music")
-    except ValueError:
+    count = _music_audio_file_count(collection)
+    if count is None:
         return False
-    if not music_dir.is_dir():
-        return False
-    count = sum(
-        1
-        for path in music_dir.iterdir()
-        if path.is_file() and not path.is_symlink() and path.suffix.lower() in AUDIO_SUFFIXES
-    )
-    return count >= expected
+    actual = music.get("actual_file_count")
+    missing = music.get("missing_file_count")
+    if actual == expected and missing == 0:
+        return count >= expected
+    return _approved_incomplete_download(state, music, expected=expected, actual=actual, missing=missing, count=count)
 
 
 def _completed_tracking_matches(collection: Path, video_id: str) -> bool:

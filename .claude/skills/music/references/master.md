@@ -285,6 +285,8 @@ uv run yt-suno-select-tracks <collection-path> --allow-incomplete-download
 
 このフラグが無効化するのは初期の 2 clip 完了検査だけである。`pair_selection.min_song_sec` / `max_song_sec` の尺フィルタ、命名・duration probe、尺フィルタ後に候補 0 件となる prompt の停止は維持する。dry-run で `[dropped_under_min]` が出た場合は、通常どおり本実行前に別途続行確認を取る。
 
+非 dry-run の実行は承認された不足 prompt を `workflow-state.json::music_pair_selection.allow_incomplete_download` / `incomplete_download_prompts` へ記録するため、subagent へは委譲せずメインエージェントが実行する。この記録があると、記録分の欠損だけを残す download は wf-auto-state が `suno_download_complete` として扱い、`/wf-new --auto` 等が masterup へ進める。0 clip の prompt（承認時点で音源なし）や未適用の DL 済み clip が残る場合は完了扱いにならない。
+
 **max_song_sec 超過だけで全落ちした場合の復旧**:
 
 この復旧は例外採用の承認を必要とし、非 dry-run の CLI が `workflow-state.json::music_pair_selection` と `updated_at` を更新する。subagent へは委譲せず、対象 prompt・候補・duration を提示して承認を得た後、メインエージェントが次のコマンドを実行する。

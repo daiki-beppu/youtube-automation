@@ -212,6 +212,115 @@ def test_cloud_executor_resumes_suno_after_manifest_handoff(tmp_path: Path, runn
     assert local["reason"] == "cloud_ownership"
 
 
+def _suno_collection_with_incomplete_download(
+    tmp_path: Path,
+    *,
+    music_pair_selection: dict | None,
+    missing_reasons: dict | None,
+) -> Path:
+    collection = _collection(
+        tmp_path,
+        "20260721-incomplete-download",
+        phase="cloud_owned",
+        engine="suno",
+        assets={"music_downloaded": True},
+    )
+    state_path = collection / "workflow-state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    state["planning"]["music"].update(
+        {
+            "expected_file_count": 4,
+            "actual_file_count": 3,
+            "missing_file_count": 1,
+        }
+    )
+    if missing_reasons is not None:
+        state["planning"]["music"]["missing_reasons"] = missing_reasons
+    if music_pair_selection is not None:
+        state["music_pair_selection"] = music_pair_selection
+    state["handoff"] = {
+        "point": "suno_download",
+        "owner": "cloud",
+        "manifest_key": "002ch/sample/suno-download/manifest.json",
+        "root_sha256": "e" * 64,
+    }
+    state_path.write_text(json.dumps(state), encoding="utf-8")
+    (collection / "20-documentation" / "suno-prompts.json").write_text(
+        json.dumps({"entries": [{"prompt": "one"}, {"prompt": "two"}]}),
+        encoding="utf-8",
+    )
+    (collection / "02-Individual-music" / "one-a.mp3").write_bytes(b"one-a")
+    (collection / "02-Individual-music" / "one-b.mp3").write_bytes(b"one-b")
+    (collection / "02-Individual-music" / "two-a.mp3").write_bytes(b"two-a")
+    return collection
+
+
+def test_suno_approved_incomplete_download_counts_as_complete(tmp_path: Path, runner: ModuleType) -> None:
+    collection = _suno_collection_with_incomplete_download(
+        tmp_path,
+        music_pair_selection={
+            "updated_at": "2026-07-21T00:00:00Z",
+            "allow_incomplete_download": True,
+            "incomplete_download_prompts": [2],
+            "exceptions_over_limit_count": 0,
+            "exceptions_over_limit": [],
+        },
+        missing_reasons={"suno_unfulfilled": 1, "apply_skipped": 0},
+    )
+
+    decision = runner.resolve_action(
+        tmp_path,
+        collection.name,
+        config=_config(runner),
+        executor="cloud",
+    )
+
+    assert decision["action"] == "masterup"
+    assert decision["reason"] == "suno_download_complete"
+
+
+def test_suno_incomplete_download_without_approval_stays_incomplete(tmp_path: Path, runner: ModuleType) -> None:
+    collection = _suno_collection_with_incomplete_download(
+        tmp_path,
+        music_pair_selection=None,
+        missing_reasons={"suno_unfulfilled": 1, "apply_skipped": 0},
+    )
+
+    decision = runner.resolve_action(
+        tmp_path,
+        collection.name,
+        config=_config(runner),
+        executor="cloud",
+    )
+
+    assert decision["action"] == "suno-helper"
+    assert decision["reason"] == "suno_artifacts_incomplete"
+
+
+def test_suno_apply_skipped_shortage_is_not_approved_incomplete(tmp_path: Path, runner: ModuleType) -> None:
+    collection = _suno_collection_with_incomplete_download(
+        tmp_path,
+        music_pair_selection={
+            "updated_at": "2026-07-21T00:00:00Z",
+            "allow_incomplete_download": True,
+            "incomplete_download_prompts": [2],
+            "exceptions_over_limit_count": 0,
+            "exceptions_over_limit": [],
+        },
+        missing_reasons={"suno_unfulfilled": 0, "apply_skipped": 1},
+    )
+
+    decision = runner.resolve_action(
+        tmp_path,
+        collection.name,
+        config=_config(runner),
+        executor="cloud",
+    )
+
+    assert decision["action"] == "suno-helper"
+    assert decision["reason"] == "suno_artifacts_incomplete"
+
+
 def test_legacy_music_engine_only_state_remains_routable(tmp_path: Path, runner: ModuleType) -> None:
     collection = _collection(tmp_path, "20260721-legacy", engine="lyria")
     state_path = collection / "workflow-state.json"

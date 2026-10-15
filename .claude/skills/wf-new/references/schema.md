@@ -81,6 +81,8 @@ Phase 3: 公開             /wf-next    動画→概要欄→アップロード�
   },
   "music_pair_selection": {
     "updated_at": "ISO 8601",
+    "allow_incomplete_download": true,
+    "incomplete_download_prompts": [3],
     "exceptions_over_limit_count": 1,
     "exceptions_over_limit": [
       {
@@ -234,11 +236,13 @@ top-level `music_engine` は既存 state の読み取り専用互換 field で�
 
 ### music_pair_selection フィールド
 
-`uv run yt-suno-select-tracks --allow-best-effort-over-max` で、全候補が `pair_selection.max_song_sec` を超過した prompt から最短候補を例外採用した場合のみ populate される optional top-level state。通常選曲成功時は読み書きしない。
+`uv run yt-suno-select-tracks --allow-best-effort-over-max` で、全候補が `pair_selection.max_song_sec` を超過した prompt から最短候補を例外採用した場合、または `--allow-incomplete-download` で 2 clip 未満の prompt を含む続行を承認・実行した場合に populate される optional top-level state。通常選曲成功時は読み書きしない。
 
 | フィールド | 型 | 説明 |
 |-----------|-----|------|
 | `updated_at` | string | 例外採用情報を記録した日時（ISO 8601 UTC） |
+| `allow_incomplete_download` | boolean | `--allow-incomplete-download` による承認済み続行が記録されているとき `true` |
+| `incomplete_download_prompts` | integer[] | 2 clip 未満のまま続行が承認された Suno prompt の 1-based index 一覧 |
 | `exceptions_over_limit_count` | integer | `max_song_sec` 超過を例外採用した候補数 |
 | `exceptions_over_limit` | object[] | 例外採用候補の詳細 |
 | `exceptions_over_limit[].prompt_index` | integer | Suno prompt の 1-based index |

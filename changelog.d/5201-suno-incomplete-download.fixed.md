@@ -1,0 +1,1 @@
+- yt-suno-select-tracks `--allow-incomplete-download` の非 dry-run が承認済みの不足 prompt を `workflow-state.json::music_pair_selection` へ記録するようになり、wf-auto-state は記録分の欠損だけを残す download を `suno_download_complete` として masterup へ進める（#5201）。

@@ -385,11 +385,16 @@ def collect_candidates(collection_dir: Path, prompts: Mapping[int, PromptEntry])
     return candidates
 
 
-def _validate_download_complete(prompts: Mapping[int, PromptEntry], candidates: list[Candidate]) -> None:
+def _download_clip_counts(prompts: Mapping[int, PromptEntry], candidates: list[Candidate]) -> dict[int, int]:
     counts = {prompt_index: 0 for prompt_index in prompts}
     for candidate in candidates:
         if candidate.prompt_index in counts:
             counts[candidate.prompt_index] += 1
+    return counts
+
+
+def _validate_download_complete(prompts: Mapping[int, PromptEntry], candidates: list[Candidate]) -> None:
+    counts = _download_clip_counts(prompts, candidates)
     missing = [prompt_index for prompt_index, count in counts.items() if count < 2]
     if missing:
         details = ", ".join(f"{prompt_index:02d}={counts[prompt_index]}/2" for prompt_index in missing)
@@ -673,10 +678,11 @@ def _apply_plan(
     plan: SelectionPlan,
     stock_cfg: StockConfig,
     min_song_sec: float | None,
+    incomplete_downloads: list[int],
 ) -> SelectionResult:
     workflow_state = (
         _read_workflow_state(CollectionPaths(collection_dir).workflow_state_path)
-        if plan.exceptions_over_limit
+        if plan.exceptions_over_limit or incomplete_downloads
         else None
     )
     _prepare_log_destination(plan.log_path)
@@ -749,7 +755,7 @@ def _apply_plan(
             dry_run=False,
         )
         if workflow_state is not None:
-            _sync_workflow_state_music_pair_selection(workflow_state, result)
+            _sync_workflow_state_music_pair_selection(workflow_state, result, incomplete_downloads=incomplete_downloads)
     except Exception:
         _rollback(
             stocked_new=stocked_new,
@@ -867,18 +873,27 @@ def _read_workflow_state(workflow_state_path: Path) -> WorkflowStateSnapshot:
     return WorkflowStateSnapshot(path=workflow_state_path)
 
 
-def _sync_workflow_state_music_pair_selection(snapshot: WorkflowStateSnapshot, result: SelectionResult) -> None:
-    if not result.exceptions_over_limit:
+def _sync_workflow_state_music_pair_selection(
+    snapshot: WorkflowStateSnapshot,
+    result: SelectionResult,
+    *,
+    incomplete_downloads: list[int],
+) -> None:
+    if not result.exceptions_over_limit and not incomplete_downloads:
         return
     updated_at = datetime.now(timezone.utc).isoformat()
 
     def record_selection(state: WorkflowState) -> None:
         state["updated_at"] = updated_at
-        state["music_pair_selection"] = {
+        selection: dict[str, object] = {
             "updated_at": updated_at,
             "exceptions_over_limit_count": len(result.exceptions_over_limit),
             "exceptions_over_limit": [_exception_payload(exception) for exception in result.exceptions_over_limit],
         }
+        if incomplete_downloads:
+            selection["allow_incomplete_download"] = True
+            selection["incomplete_download_prompts"] = list(incomplete_downloads)
+        state["music_pair_selection"] = selection
 
     try:
         update_workflow_state(snapshot.path, record_selection)
@@ -905,8 +920,13 @@ def select_suno_tracks(
         candidates = collect_candidates(collection_dir, prompts)
     except AmbiguousSunoNameError as exc:
         raise ValidationError(str(exc)) from exc
-    if not allow_incomplete_download:
+    if allow_incomplete_download:
+        incomplete_downloads = sorted(
+            index for index, count in _download_clip_counts(prompts, candidates).items() if count < 2
+        )
+    else:
         _validate_download_complete(prompts, candidates)
+        incomplete_downloads = []
     plan = _plan_suno_selection(
         collection_dir=collection_dir,
         prompts=prompts,
@@ -946,5 +966,6 @@ def select_suno_tracks(
             plan=plan,
             stock_cfg=parsed_cfg.stock,
             min_song_sec=parsed_cfg.pair.min_song_sec,
+            incomplete_downloads=incomplete_downloads,
         )
     return result
