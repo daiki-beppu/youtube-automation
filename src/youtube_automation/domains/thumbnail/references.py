@@ -224,6 +224,7 @@ def plan_ttp_reference_assignments(
     benchmark_root: Path | None = None,
     channel_dir: Path | None = None,
     dedup_recent_collections: int = 0,
+    warn_pick_dominant_channel: bool = False,
 ) -> list[Path | None]:
     """Plan strict TTP assignments, excluding references used by recent collections."""
     if not reference_images:
@@ -237,6 +238,11 @@ def plan_ttp_reference_assignments(
             "single_step TTP 生成で複数候補を出す場合、--no-rotate は使えません。"
             "候補ごとに別参照画像を割り当てるため、参照画像を候補数分指定してください。"
         )
+
+    # config 由来の参照プールが複数ベンチマークチャンネルに跨る場合、多数派の
+    # 対象チャンネルだけに絞って継続する (#5230)。CLI 明示指定は従来どおり厳格に弾く。
+    if warn_pick_dominant_channel and benchmark_root is not None:
+        reference_images = _select_dominant_channel_references(reference_images, benchmark_root)
 
     if len(reference_images) < count:
         raise ConfigError(
@@ -274,6 +280,26 @@ def _prioritize_reference_history(reference_images: list[Path], channel_dir: Pat
     return selected_references
 
 
+def _select_dominant_channel_references(reference_images: list[Path], benchmark_root: Path) -> list[Path]:
+    """Keep references from the majority benchmark channel, warning about the drop."""
+    channels = [infer_benchmark_channel(ref, benchmark_root) for ref in reference_images]
+    counts: dict[str, int] = {}
+    for channel in channels:
+        if channel != "unknown":
+            counts[channel] = counts.get(channel, 0) + 1
+    if len(counts) <= 1:
+        return reference_images
+    # dict は挿入順を保持するため、同数はプールで先に現れたチャンネルが選ばれる
+    dominant = max(counts, key=lambda channel: counts[channel])
+    picked = [ref for ref, channel in zip(reference_images, channels, strict=True) if channel in {dominant, "unknown"}]
+    dropped = len(reference_images) - len(picked)
+    print(
+        f"[WARN] reference_images.default が複数のベンチマークチャンネル ({', '.join(sorted(counts))}) "
+        f"に跨るため、{dominant} の参照画像 {len(picked)} 件を使います (skipped={dropped})"
+    )
+    return picked
+
+
 def _validate_ttp_reference_selection(selected_references: list[Path], benchmark_root: Path | None) -> None:
     seen: set[Path] = set()
     duplicates: list[Path] = []
@@ -302,5 +328,6 @@ def _validate_ttp_reference_selection(selected_references: list[Path], benchmark
         raise ConfigError(
             "single_step TTP 生成の複数候補では同じベンチマークチャンネル内の参照画像だけを使ってください "
             f"(detected={', '.join(sorted(detected_channels))})。"
-            "別チャンネル由来の参照画像は別スコープとして明示してください。"
+            "config/skills/thumbnail.yaml の image_generation.gemini.reference_images.default に"
+            "複数チャンネルの参照画像が混在している場合は対象チャンネルのものだけに絞ってください。"
         )

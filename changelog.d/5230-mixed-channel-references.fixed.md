@@ -1,0 +1,1 @@
+- `config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.default` に複数ベンチマークチャンネルの参照画像が混在する場合、`plan_ttp_reference_assignments` の config 経由の呼び出し（`select-ttp-references.py` / uploads preflight）で多数派チャンネルの参照だけを採用して警告付きで継続するようにした (#5230)。CLI 明示指定の strict 経路は従来どおり `ConfigError` で弾く。混在エラーの文言に `reference_images.default` の設定キー名を明記した

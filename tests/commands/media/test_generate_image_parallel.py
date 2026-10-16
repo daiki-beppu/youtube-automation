@@ -659,6 +659,72 @@ class TestPlanReferenceAssignments:
         with pytest.raises(ConfigError, match="benchmark サムネイルに限定"):
             plan_ttp_reference_assignments([valid, escaped], 2, rotate=True, benchmark_root=benchmark_root)
 
+    def test_warn_pick_dominant_channel_selects_majority(self, tmp_path: Path, capsys) -> None:
+        benchmark_root = tmp_path / "data" / "thumbnail_compare" / "benchmark"
+        prod_dir = benchmark_root / "productivityonyt"
+        founder_dir = benchmark_root / "founder_fm"
+        refs: list[Path] = []
+        for directory, names in ((prod_dir, ["a.jpg", "b.jpg", "c.jpg"]), (founder_dir, ["d.jpg"])):
+            directory.mkdir(parents=True)
+            for name in names:
+                ref = directory / name
+                ref.write_bytes(b"ref")
+                refs.append(ref)
+
+        selected = plan_ttp_reference_assignments(
+            refs,
+            2,
+            rotate=True,
+            benchmark_root=benchmark_root,
+            warn_pick_dominant_channel=True,
+        )
+
+        assert all("productivityonyt" in str(ref) for ref in selected)
+        assert len(selected) == 2
+        assert "productivityonyt" in capsys.readouterr().out
+
+    def test_warn_pick_dominant_channel_tie_breaks_by_first_seen(self, tmp_path: Path) -> None:
+        benchmark_root = tmp_path / "data" / "thumbnail_compare" / "benchmark"
+        first_dir = benchmark_root / "alpha"
+        second_dir = benchmark_root / "beta"
+        refs: list[Path] = []
+        for directory, name in ((first_dir, "a.jpg"), (second_dir, "b.jpg")):
+            directory.mkdir(parents=True)
+            ref = directory / name
+            ref.write_bytes(b"ref")
+            refs.append(ref)
+
+        selected = plan_ttp_reference_assignments(
+            refs,
+            1,
+            rotate=True,
+            benchmark_root=benchmark_root,
+            warn_pick_dominant_channel=True,
+        )
+
+        assert selected == [refs[0].resolve()]
+
+    def test_warn_pick_dominant_channel_requires_enough_refs_in_channel(self, tmp_path: Path) -> None:
+        benchmark_root = tmp_path / "data" / "thumbnail_compare" / "benchmark"
+        prod_dir = benchmark_root / "productivityonyt"
+        founder_dir = benchmark_root / "founder_fm"
+        refs: list[Path] = []
+        for directory, names in ((prod_dir, ["a.jpg", "b.jpg"]), (founder_dir, ["c.jpg", "d.jpg"])):
+            directory.mkdir(parents=True)
+            for name in names:
+                ref = directory / name
+                ref.write_bytes(b"ref")
+                refs.append(ref)
+
+        with pytest.raises(ConfigError, match="ユニークな参照画像が必要"):
+            plan_ttp_reference_assignments(
+                refs,
+                3,
+                rotate=True,
+                benchmark_root=benchmark_root,
+                warn_pick_dominant_channel=True,
+            )
+
 
 # ---- build_requests --------------------------------------------------------
 

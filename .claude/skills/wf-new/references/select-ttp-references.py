@@ -26,6 +26,7 @@ def main() -> None:
         benchmark_root=root / "data" / "thumbnail_compare" / "benchmark",
         channel_dir=root,
         dedup_recent_collections=resolve_dedup_recent_collections(reference_config.get("dedup_recent_collections")),
+        warn_pick_dominant_channel=True,
     )
     for reference in selected:
         print(reference)

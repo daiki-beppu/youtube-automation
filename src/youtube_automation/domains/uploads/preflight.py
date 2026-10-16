@@ -158,6 +158,7 @@ def _check_single_step_references(channel_dir: Path, gemini: Mapping[str, object
                 dedup_recent_collections=resolve_dedup_recent_collections(
                     reference_images.get("dedup_recent_collections")
                 ),
+                warn_pick_dominant_channel=True,
             )
         except ConfigError as exc:
             issues.append(
