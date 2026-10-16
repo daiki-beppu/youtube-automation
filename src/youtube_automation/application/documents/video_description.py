@@ -25,11 +25,15 @@ from youtube_automation.domains.documents.video_description import (
 
 def write_video_description_document(
     json_path: Path,
-    workflow_state_path: Path,
+    workflow_state_path: Path | None,
     build_document: Callable[[], object],
     migration_decision: MarkdownMigrationDecision,
 ) -> DocumentWriteResult:
-    """検証済み description pair の公開後だけ description state を完了する。"""
+    """検証済み description pair の公開後だけ description state を完了する。
+
+    workflow_state_path=None は state 投影を行わない公開（subagent 契約向け）。
+    assets.description の確定は呼び出し側が owner CLI で後追い実行する前提。
+    """
     if json_path.name != "descriptions.json":
         raise DocumentMigrationError("動画説明正本の filename は descriptions.json である必要があります")
 
@@ -52,7 +56,7 @@ def write_video_description_document(
         return result
 
     def project(result: DocumentWriteResult) -> None:
-        if result is DocumentWriteResult.DECLINED:
+        if result is DocumentWriteResult.DECLINED or workflow_state_path is None:
             return
 
         def transition(state):

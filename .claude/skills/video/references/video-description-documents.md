@@ -14,6 +14,12 @@ uv run yt-document-migrate <candidate.json> \
   --workflow-state <collection-path>/workflow-state.json
 ```
 
+`workflow-state.json` を書き込めない文脈（`/wf-next` の subagent など）では `--workflow-state` の代わりに
+`--no-project` を指定し、pair の公開だけを行う。この場合 `assets.description` は更新されないため、
+メインエージェントが pair 再読込後に
+`uv run yt-workflow-state --collection <collection-path> set-description-generated true`
+を実行して整合させる。`--no-project` と `--workflow-state` の併用はエラー。
+
 既存 `descriptions.md` がある場合は、利用者へ移行の Yes / No を確認する。Yes の場合だけ
 `--migration-decision yes`、No の場合は `--migration-decision no` を指定する。pair の schema 検証、
 HTML 再生成照合、JSON/HTML 再読込が成功した後だけ Markdown を削除し、workflow-state owner 経由で

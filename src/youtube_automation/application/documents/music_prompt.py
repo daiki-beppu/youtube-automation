@@ -40,7 +40,7 @@ def require_recorded_machine_verification(document: object) -> None:
 
 def write_music_prompt_document(
     json_path: Path,
-    workflow_state_path: Path,
+    workflow_state_path: Path | None,
     build_document: Callable[[], object],
     migration_decision: MarkdownMigrationDecision,
     *,
