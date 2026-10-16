@@ -86,7 +86,7 @@ gh repo create <repo-name> --private --source . --remote origin
 uv run yt-doctor --json
 ```
 
-必須 check は `ffmpeg` / `ffprobe` / `uv` / `uv_project` / `automation_package` / `skills_synced` / `gcloud` / `gcloud_account` / `gcp_project` / `billing_linked` / `apis_enabled` / `adc` / `adc_quota_project` / `iam_aiplatform_user` / `env_file` / `client_secrets` / `oauth_token`。いずれかが `ok` でなければ `/setup` を案内して停止し、認証とツール導入が完了するまで Step 4 以降へ進まない。
+必須 check は `ffmpeg` / `ffprobe` / `uv` / `uv_project` / `automation_package` / `skills_synced` / `gcloud` / `gcloud_account` / `gcp_project` / `billing_linked` / `apis_enabled` / `adc` / `adc_quota_project` / `iam_aiplatform_user` / `client_secrets` / `oauth_token`。いずれかが `ok` でなければ `/setup` を案内して停止し、認証とツール導入が完了するまで Step 4 以降へ進まない。
 
 Step 4 で解消するため、`channel_config`: `config/channel/ ディレクトリが存在しない (新規チャンネル、setup 用ディレクトリのみでは未生成)`、`upload_ready`: `config/channel/meta.json が存在しない`、`upload_ready`: `channel.channel_id が未設定` は許容する。その他の許容分類は reference に従う。`upload_ready` が `auth/token.json が存在しない`、`upload 必須 scope 不足`、`token.json 読み込み失敗` のいずれかなら許容せず `/setup` に戻る。その他の fail / warn / unknown は表示された `next_action` に従って解消してから進む。
 
