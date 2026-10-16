@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import threading
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,6 +36,10 @@ from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
 _TITLE_SOURCE_ERROR = (
     "playlist 曲名の入力元は --titles / --titles-file / --music-dir / stdin のいずれか 1 つにしてください"
 )
+
+# 非対話 shell の stdin は writer が開いたまま入力も EOF も来ないため、
+# read() の完了待ちはこの秒数で打ち切る（pipe 入力があれば EOF で即完了する）。
+_STDIN_READ_TIMEOUT_SECONDS = 5.0
 
 
 @dataclass(frozen=True)
@@ -153,8 +158,8 @@ def _validate_title_sources(args: argparse.Namespace) -> None:
     if len(explicit_sources) > 1:
         raise ValidationError(_TITLE_SOURCE_ERROR)
 
-    if args.music_dir and not sys.stdin.isatty():
-        stdin_titles = _nonblank_titles(sys.stdin.read().splitlines())
+    if args.music_dir:
+        stdin_titles = _stdin_titles()
         if stdin_titles:
             raise ValidationError(_TITLE_SOURCE_ERROR)
 
@@ -162,6 +167,31 @@ def _validate_title_sources(args: argparse.Namespace) -> None:
 def _nonblank_titles(titles: Iterable[str]) -> list[str]:
     """Exclude blank titles without trimming or reordering the supplied names."""
     return [title for title in titles if title.strip()]
+
+
+def _stdin_titles() -> list[str]:
+    """Drain piped stdin titles without blocking past a bounded wait.
+
+    非対話 shell（Bash tool 等）は stdin が TTY でなくても開いたまま入力が来ない。
+    その idle stream への read() は無期限に待つため、daemon thread に切り出して
+    _STDIN_READ_TIMEOUT_SECONDS で打ち切り、入力なしとして扱う。
+    """
+    if sys.stdin.isatty():
+        return []
+    lines: list[str] = []
+
+    def _drain() -> None:
+        try:
+            lines.extend(sys.stdin.read().splitlines())
+        except (OSError, ValueError):
+            pass
+
+    reader = threading.Thread(target=_drain, daemon=True)
+    reader.start()
+    reader.join(_STDIN_READ_TIMEOUT_SECONDS)
+    if reader.is_alive():
+        return []
+    return _nonblank_titles(lines)
 
 
 def _read_titles_file(path: Path) -> list[str]:
@@ -193,10 +223,9 @@ def _read_titles(
         return _read_titles_file(Path(args.titles_file))
     if args.music_dir:
         return _read_music_dir_titles(args.music_dir, collection_dir, identities)
-    if not sys.stdin.isatty():
-        titles = _nonblank_titles(sys.stdin.read().splitlines())
-        if titles:
-            return titles
+    stdin_titles = _stdin_titles()
+    if stdin_titles:
+        return stdin_titles
     raise ValidationError("playlist 曲名を --titles / --titles-file / --music-dir / stdin のいずれかで渡してください")
 
 

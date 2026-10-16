@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 import zipfile
 from functools import partial
 from io import StringIO
@@ -276,7 +277,7 @@ def _write_prompt_entries(collection_dir, entries):
 
 def _run_cli(monkeypatch, capsys, argv, stdin=""):
     monkeypatch.setattr(sys, "argv", ["yt-suno-verify-playlist", *argv])
-    monkeypatch.setattr(sys, "stdin", StringIO(stdin))
+    monkeypatch.setattr(sys, "stdin", stdin if hasattr(stdin, "read") else StringIO(stdin))
     code = suno_verify_playlist.main()
     captured = capsys.readouterr()
     return code, captured.out, captured.err
@@ -916,6 +917,56 @@ def test_cli_rejects_music_directory_with_stdin(tmp_path, monkeypatch, capsys):
     assert code == 1
     assert out == ""
     assert "入力元" in err
+
+
+class _IdleStdin:
+    """stdin that never delivers data or EOF, like an agent shell's open pipe."""
+
+    def isatty(self) -> bool:
+        return False
+
+    def read(self, *_args) -> str:
+        threading.Event().wait()
+        return ""
+
+
+def test_cli_does_not_block_on_idle_stdin_with_music_dir(tmp_path, monkeypatch, capsys):
+    """Given 入力も EOF も来ない非対話 stdin と --music-dir
+    When CLI main を実行する
+    Then stdin の読み取り待ちで止まらず突合を完走し exit 0。
+    """
+    _write_prompts_json(tmp_path, [ENTRIES[0]])
+    music_dir = tmp_path / "02-Individual-music"
+    music_dir.mkdir()
+    (music_dir / f"01a-{ENTRIES[0]}.mp3").touch()
+    (music_dir / f"01b-{ENTRIES[0]}.mp3").touch()
+    monkeypatch.setattr(suno_verify_playlist, "_STDIN_READ_TIMEOUT_SECONDS", 0.05)
+
+    code, out, err = _run_cli(
+        monkeypatch,
+        capsys,
+        [str(tmp_path), "--music-dir", str(music_dir)],
+        stdin=_IdleStdin(),
+    )
+
+    assert code == 0
+    assert "→ OK" in out
+    assert err == ""
+
+
+def test_cli_fails_fast_without_title_source_on_idle_stdin(tmp_path, monkeypatch, capsys):
+    """Given 入力も EOF も来ない非対話 stdin で title 入力元なし
+    When CLI main を実行する
+    Then stdin 待ちでハングせず入力元の用法を示すエラーで exit 1。
+    """
+    _write_prompts_json(tmp_path, [ENTRIES[0]])
+    monkeypatch.setattr(suno_verify_playlist, "_STDIN_READ_TIMEOUT_SECONDS", 0.05)
+
+    code, out, err = _run_cli(monkeypatch, capsys, [str(tmp_path)], stdin=_IdleStdin())
+
+    assert code == 1
+    assert out == ""
+    assert "--titles" in err
 
 
 def test_cli_returns_one_for_ng_result(tmp_path, monkeypatch, capsys):
