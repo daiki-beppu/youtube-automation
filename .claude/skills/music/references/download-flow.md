@@ -17,6 +17,10 @@ playlist 追加完了後、拡張は以下の手順で ZIP export を実行す�
 
 download watcher は `blob:` の場合は origin が `https://suno.com` と一致するものだけを許可し、HTTPS の場合は Studio export 専用の `suno-ai--studio-bounce-prod-web.modal.run` を exact hostname で許可する。旧 Download all 用の `suno-ai--bulk-download-prod-web.modal.run` や任意の `modal.run` subdomain は許可しない。
 
+watcher の完了判定は `state === "complete"` に加えて「`interrupted` だがファイルが完全保存済み」(`exists === true` かつ `bytesReceived >= fileSize`) も採用する。Chrome は ZIP の書き込み完了後に `ERR_ABORTED` 等で `interrupted` を通知することがあり、その場合でもディスク上の ZIP を採用して取り込みを継続する（内容検証はサーバー側の `POST /downloaded` が担う）。`interrupted` で未保存のときは他の終端 ZIP を直近 download で探索してから失敗を宣言し、失敗メッセージには `error` / 受信 bytes / 保存ファイル有無を含める。
+
+Download 再開（`retryDownload`）では、前回 run の resume state の時刻から探索窓（`timestamp - 監視上限` 〜 `timestamp + 60 秒`）を導き、窓内に信頼済み Suno ZIP が保存済みなら Studio project / export を作り直さず、その ZIP で `POST /downloaded` を再実行する。監視上限到達（30 分）や完了待ちタイムアウト後の再実行でも、ZIP が残っていれば二重に project を作らない。
+
 Suno Studio は Premier プラン限定。Studio を開けない、project を作れない、配置数が一致しない、
 または Multitrack が無効な場合は export せず、overlay に具体的な理由を表示して `ERROR` で停止する。
 作成した project は手動確認・復旧に利用できるよう削除しない。

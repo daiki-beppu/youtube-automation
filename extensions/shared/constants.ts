@@ -126,6 +126,11 @@ export const STUDIO_EXPORT_WATCH_TIMEOUT_MS = 1_800_000;
  * 書き出し済みなのに取り込めなくなる。完了待ちは必ず監視上限 + 本猶予とする。 */
 export const STUDIO_EXPORT_RESULT_GRACE_MS = 60_000;
 
+/** download 中断 run の再実行で「すでに保存済みの Studio export ZIP」を拾うとき、
+ * 中断時刻から後方へ許容する探索余白 (#5143)。ZIP の download 開始は中断時刻より
+ * 必ず前なので、書き込み時刻の丸めずれを吸収する小さな値でよい。 */
+export const STUDIO_EXPORT_RESUME_END_SLACK_MS = 60_000;
+
 /** inject 後に in-flight が CLIPS_PER_REQUEST 増えるまで poll wait する上限 (#864 root cause 3)。 */
 export const INJECT_ACK_TIMEOUT_MS = 30000;
 

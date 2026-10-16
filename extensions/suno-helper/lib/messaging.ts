@@ -101,7 +101,16 @@ interface DownloadFailedPayload {
   message: string;
 }
 
-type StartDownloadResult = { ok: true } | { ok: false; message: string };
+/** runner → background: retry 時に「前回 export で保存済みの ZIP」を拾う探索窓 (#5143)。
+ * sinceMs 未指定のときは探索しない（従来どおり監視のみ開始する）。 */
+interface StartDownloadPayload {
+  savedExportSinceMs?: number;
+  savedExportUntilMs?: number;
+}
+
+type StartDownloadResult =
+  | { ok: true; savedFilename?: string }
+  | { ok: false; message: string };
 
 /** background → runner: 成功時は close 責務を渡すため Studio tab の id を返す。 */
 type StartStudioExportResult =
@@ -154,8 +163,10 @@ interface ProtocolMap {
   /** background → overlay content: action クリックで overlay 表示を toggle する (#892)。 */
   toggleOverlay(): void;
   /** runner → background: Studio export 開始前に chrome.downloads 監視を起動する (#1146)。
-   *  content script は chrome.downloads API にアクセスできないため background に委譲する。 */
-  startDownload(): StartDownloadResult;
+   *  content script は chrome.downloads API にアクセスできないため background に委譲する。
+   *  savedExportSinceMs を渡すと、監視開始前に保存済みの完了 ZIP を探索し、見つかれば
+   *  その filename を返す (#5143)。 */
+  startDownload(payload?: StartDownloadPayload): StartDownloadResult;
   /** runner → background: Studio tab を開いて Multitrack export を開始する。 */
   startStudioExport(payload: StudioExportRequest): StartStudioExportResult;
   /** runner → background: ZIP 完了・失敗・中断のいずれでも Studio tab を閉じる。 */

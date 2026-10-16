@@ -23,10 +23,19 @@ interface DownloadWatcherState {
   targetDownloadId: number | null;
 }
 
+/** 監視開始前に「すでに保存済みの Studio export ZIP」を拾う探索窓 (#5143)。 */
+export interface SavedExportWindow {
+  sinceMs: number;
+  untilMs?: number;
+}
+
 export interface DownloadWatcherController {
   start: (
-    tabId: number
-  ) => Promise<{ ok: true } | { ok: false; message: string }>;
+    tabId: number,
+    savedExport?: SavedExportWindow
+  ) => Promise<
+    { ok: true; savedFilename?: string } | { ok: false; message: string }
+  >;
   cancelForTab: (tabId: number) => Promise<void>;
 }
 
@@ -61,9 +70,9 @@ export function installDownloadWatcher(deps: {
     isTrustedSunoDownloadUrl(item.url) ||
     isTrustedSunoDownloadUrl(item.finalUrl);
 
-  const isZipStartedAfterMonitor = (
+  const isZipStartedAfter = (
     item: chrome.downloads.DownloadItem,
-    monitorStartedAt: number
+    startedAfterMs: number
   ): boolean => {
     const filename = item.filename ?? "";
     if (!filename.toLowerCase().endsWith(".zip")) {
@@ -75,8 +84,36 @@ export function installDownloadWatcher(deps: {
     const downloadStartMs = new Date(item.startTime).getTime();
     return (
       Number.isFinite(downloadStartMs) &&
-      downloadStartMs >= monitorStartedAt - 5000
+      downloadStartMs >= startedAfterMs - 5000
     );
+  };
+
+  /** 中断通知されてもファイルが完全に保存済みなら採用する (#5143)。
+   *  Chrome は書き込み完了後に ERR_ABORTED 等で interrupted 化することがあり、
+   *  その場合の item は exists=true・受信バイト数 >= fileSize になる。
+   *  サーバー側が ZIP 内容を検証するため、ここでは「保存済みか」の判定だけ行う。 */
+  const isFullySavedZip = (item: chrome.downloads.DownloadItem): boolean =>
+    item.exists === true &&
+    item.fileSize > 0 &&
+    item.bytesReceived >= item.fileSize;
+
+  /** 採用できる終端 ZIP: 完了、または「中断扱いだがファイルは保存済み」。 */
+  const isFinishedStudioZip = (
+    item: chrome.downloads.DownloadItem,
+    startedAfterMs: number
+  ): boolean =>
+    isZipStartedAfter(item, startedAfterMs) &&
+    (item.state === "complete" || isFullySavedZip(item));
+
+  const describeInterruptedItem = (
+    item: chrome.downloads.DownloadItem
+  ): string => {
+    const expected = item.fileSize > 0 ? item.fileSize : item.totalBytes;
+    const received =
+      expected > 0
+        ? `${item.bytesReceived}/${expected}`
+        : `${item.bytesReceived}/不明`;
+    return `error=${item.error ?? "不明"}, 受信 ${received} bytes, 保存ファイル${item.exists ? "あり" : "なし"}`;
   };
 
   const normalizeWatcherState = (
@@ -138,11 +175,7 @@ export function installDownloadWatcher(deps: {
     }
     completedPoll.id = setInterval(() => {
       findTargetDownload(watcher, (item) => {
-        if (
-          item &&
-          item.state === "complete" &&
-          isZipStartedAfterMonitor(item, watcher.monitorStartedAt)
-        ) {
+        if (item && isFinishedStudioZip(item, watcher.monitorStartedAt)) {
           const currentWatcher =
             watcher.targetDownloadId === null
               ? replaceActiveDownloadWatcher(watcher, {
@@ -159,11 +192,7 @@ export function installDownloadWatcher(deps: {
     watchTimeout.id = setTimeout(
       () => {
         findTargetDownload(watcher, (item) => {
-          if (
-            item &&
-            item.state === "complete" &&
-            isZipStartedAfterMonitor(item, watcher.monitorStartedAt)
-          ) {
+          if (item && isFinishedStudioZip(item, watcher.monitorStartedAt)) {
             const currentWatcher =
               watcher.targetDownloadId === null
                 ? replaceActiveDownloadWatcher(watcher, {
@@ -258,12 +287,13 @@ export function installDownloadWatcher(deps: {
     callback: (item: chrome.downloads.DownloadItem | null) => void
   ): void => {
     if (watcher.targetDownloadId === null) {
+      // state を絞らず直近 50 件を取り、「中断だが保存済み」の ZIP も拾う (#5143)。
       chrome.downloads.search(
-        { state: "complete", limit: 50, orderBy: ["-startTime"] },
+        { limit: 50, orderBy: ["-startTime"] },
         (results) => {
           callback(
             results.find((item) =>
-              isZipStartedAfterMonitor(item, watcher.monitorStartedAt)
+              isFinishedStudioZip(item, watcher.monitorStartedAt)
             ) ?? null
           );
         }
@@ -274,6 +304,32 @@ export function installDownloadWatcher(deps: {
       callback(results[0] ?? null);
     });
   };
+
+  /** 中断 run の再実行時に、監視開始前から保存済みの Studio export ZIP を探す (#5143)。 */
+  const findSavedStudioExport = (
+    windowBounds: SavedExportWindow
+  ): Promise<chrome.downloads.DownloadItem | null> =>
+    new Promise((resolve) => {
+      chrome.downloads.search(
+        { limit: 50, orderBy: ["-startTime"] },
+        (results) => {
+          resolve(
+            results.find((item) => {
+              if (!isFinishedStudioZip(item, windowBounds.sinceMs)) {
+                return false;
+              }
+              if (windowBounds.untilMs === undefined) {
+                return true;
+              }
+              const startMs = new Date(item.startTime).getTime();
+              return (
+                Number.isFinite(startMs) && startMs <= windowBounds.untilMs
+              );
+            }) ?? null
+          );
+        }
+      );
+    });
 
   const hydration = readStoredWatcherState().then((watcher) => {
     if (watcher !== null) {
@@ -296,7 +352,7 @@ export function installDownloadWatcher(deps: {
     withWatcherState((watcher) => {
       if (
         watcher.targetDownloadId !== null ||
-        !isZipStartedAfterMonitor(item, watcher.monitorStartedAt)
+        !isZipStartedAfter(item, watcher.monitorStartedAt)
       ) {
         return;
       }
@@ -313,7 +369,7 @@ export function installDownloadWatcher(deps: {
     state: "complete" | "interrupted"
   ): void => {
     const filename = item.filename ?? "";
-    if (!isZipStartedAfterMonitor(item, watcher.monitorStartedAt)) {
+    if (!isZipStartedAfter(item, watcher.monitorStartedAt)) {
       console.debug(
         "[suno-helper] Studio export 監視対象外の download event を無視:",
         {
@@ -333,13 +389,50 @@ export function installDownloadWatcher(deps: {
           })
         : watcher;
     if (state === "interrupted") {
-      const message = `ZIP ダウンロードが中断されました: ${filename} (id=${item.id})`;
-      console.warn(`[suno-helper] ${message}`);
-      cleanupWatcher(currentWatcher);
-      notifyDownloadFailed(currentWatcher, message);
+      handleInterruptedDownload(currentWatcher, item);
       return;
     }
     notifyDownloadComplete(currentWatcher, filename, item.id);
+  };
+
+  /** interrupted を即失敗にしない。実ファイルの保存状況と他の終端 ZIP を
+   * 別途確認してから失敗を宣言する (#5143)。 */
+  const handleInterruptedDownload = (
+    watcher: DownloadWatcherState,
+    item: chrome.downloads.DownloadItem
+  ): void => {
+    const filename = item.filename ?? "";
+    if (isFullySavedZip(item)) {
+      console.info(
+        `[suno-helper] 中断通知だがファイルは保存済み。完了として継続: ${filename} (id=${item.id})`
+      );
+      notifyDownloadComplete(watcher, filename, item.id);
+      return;
+    }
+    chrome.downloads.search(
+      { limit: 50, orderBy: ["-startTime"] },
+      (results) => {
+        if (activeDownloadWatcher !== watcher) {
+          return;
+        }
+        const fallback = results.find(
+          (candidate) =>
+            candidate.id !== item.id &&
+            isFinishedStudioZip(candidate, watcher.monitorStartedAt)
+        );
+        if (fallback) {
+          console.info(
+            `[suno-helper] 中断イベントの代わりに保存済み ZIP を採用: ${fallback.filename} (id=${fallback.id})`
+          );
+          notifyDownloadComplete(watcher, fallback.filename ?? "", fallback.id);
+          return;
+        }
+        const message = `ZIP ダウンロードが中断されました: ${filename} (id=${item.id}, ${describeInterruptedItem(item)})。Download から export を再実行できます`;
+        console.warn(`[suno-helper] ${message}`);
+        cleanupWatcher(watcher);
+        notifyDownloadFailed(watcher, message);
+      }
+    );
   };
 
   const changedListener = (delta: chrome.downloads.DownloadDelta): void => {
@@ -367,7 +460,7 @@ export function installDownloadWatcher(deps: {
   chrome.downloads.onChanged.addListener(changedListener);
 
   return {
-    start: async (tabId) => {
+    start: async (tabId, savedExport) => {
       await hydration;
       if (activeDownloadWatcher !== null) {
         if (
@@ -392,6 +485,16 @@ export function installDownloadWatcher(deps: {
           message:
             "別の Studio export 監視が進行中です。完了後に再実行してください。",
         } as const;
+      }
+      if (savedExport !== undefined) {
+        const saved = await findSavedStudioExport(savedExport);
+        if (saved !== null) {
+          const filename = saved.filename ?? "";
+          console.info(
+            `[suno-helper] 保存済み Studio export ZIP を検出。再 export せず取り込みを再開: ${filename} (id=${saved.id})`
+          );
+          return { ok: true, savedFilename: filename } as const;
+        }
       }
       console.info("[suno-helper] Studio export 監視を開始します");
       setActiveDownloadWatcher({

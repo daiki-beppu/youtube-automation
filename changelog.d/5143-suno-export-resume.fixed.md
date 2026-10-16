@@ -1,0 +1,4 @@
+- suno-helper: Chrome が ZIP の書き込み完了後に `interrupted`（ERR_ABORTED 等）を返すケースで、`exists` と `bytesReceived >= fileSize` から保存済みを判定し、完了として取り込みを継続するよう修正（`downloaded_count` が 0 のまま止まる不具合を解消）
+- suno-helper: `interrupted` 通知時に直近の download を再探索し、完了済みまたは保存済みの別 ZIP を fallback 採用するよう修正
+- suno-helper: download 失敗メッセージに `error` / 受信 bytes / 保存ファイル有無を含め、画面表示のエラーだけに頼らず「実際に保存されたか」を診断できるようにした
+- suno-helper: Download 再開（retryDownload）で resume state の時刻窓内に保存済みの Studio export ZIP があれば検出し、Studio project / export を作り直さずその ZIP で `POST /downloaded` を再実行するよう修正（Untitled Project が retry ごとに残る不具合を解消）
