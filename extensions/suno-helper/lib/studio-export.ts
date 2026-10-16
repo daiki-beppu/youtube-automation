@@ -1,9 +1,12 @@
+import { setNativeValue } from "../../shared/dom";
 import {
   attributeEqualsSelector,
+  includesLabel,
   matchesLabel,
   PLAY_BUTTON_SELECTOR,
   SUNO_LABELS,
 } from "../../shared/suno-labels";
+import { sleep } from "../../shared/worker-sleep";
 import { sendMessage } from "./messaging";
 
 const STUDIO_CLIP_DRAG_TYPE = "application/x-suno-studio-clip";
@@ -26,6 +29,8 @@ const STUDIO_PATIENT_WAIT_MS = 60_000;
 export interface StudioExportRequest {
   collectionId: string;
   clipIds: string[];
+  /** clip ID → 曲タイトル。Studio Library の検索 fallback に使う (#5221)。 */
+  clipTitleById?: Record<string, string>;
 }
 
 export interface StudioExportDeps {
@@ -151,7 +156,7 @@ async function waitForElementOrNull<T extends Element>(
   while (Date.now() < deadline) {
     const element = find();
     if (element && isVisible(element)) return element;
-    await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
+    await sleep(DOM_POLL_MS);
   }
   return null;
 }
@@ -196,20 +201,6 @@ function buttonByAriaLabel(labels: string | readonly string[]): Button | null {
   return findButtonByAriaLabel(labels);
 }
 
-async function clickButtonByName(
-  names: string | readonly string[]
-): Promise<void> {
-  const name = toLabelList(names)[0];
-  const button = await waitForElement(
-    () => buttonByName(names),
-    `${name} ボタン`
-  );
-  if (button.disabled) {
-    throw new Error(`Studio の ${name} ボタンが無効です`);
-  }
-  dispatchStudioPointerClick(button);
-}
-
 export async function waitForTrackCount(
   expected: number
 ): Promise<HTMLElement[]> {
@@ -246,6 +237,11 @@ export function commitStudioInputValue(
   value: string
 ): void {
   setInputValue(input, value);
+  // 現行 Studio の rename 入力は Enter keydown/keyup でのみ確定する。
+  // blur だけだと編集が破棄される (#5221)。
+  const init: KeyboardEventInit = { key: "Enter", bubbles: true };
+  input.dispatchEvent(new KeyboardEvent("keydown", init));
+  input.dispatchEvent(new KeyboardEvent("keyup", init));
   input.blur();
 }
 
@@ -334,7 +330,7 @@ export async function clickStudioButtonUntil<T extends HTMLElement>(
         await dispatchTrustedStudioClick(button);
       }
     }
-    await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
+    await sleep(DOM_POLL_MS);
   }
   const button = findButtonByName(buttonName, false);
   const buttonDiagnosis =
@@ -362,14 +358,12 @@ export async function clickStudioAriaButtonUntil<T extends HTMLElement>(
     if (button && !button.disabled) {
       await dispatchTrustedStudioClick(button);
       if (options.postClickDelayMs) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, options.postClickDelayMs)
-        );
+        await sleep(options.postClickDelayMs);
       }
     } else if (options.recoverButton) {
       await options.recoverButton();
     }
-    await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
+    await sleep(DOM_POLL_MS);
   }
   const button = findButtonByAriaLabel(ariaLabel, false);
   const buttonDiagnosis =
@@ -401,16 +395,26 @@ function countLibraryClips(): number {
   return document.querySelectorAll(LIBRARY_CLIP_SELECTOR).length;
 }
 
-export async function findLibraryClip(clipId: string): Promise<HTMLElement> {
-  const selector = `[draggable="true"][data-clip-id="${CSS.escape(clipId)}"]`;
-  const firstVisibleClip = await waitForElement(
-    () => document.querySelector<HTMLElement>(LIBRARY_CLIP_SELECTOR),
-    "Library の clip 一覧"
+function findLibrarySearchInput(): HTMLInputElement | null {
+  return (
+    Array.from(
+      document.querySelectorAll<HTMLInputElement>("input[placeholder]")
+    ).find(
+      (input) =>
+        isVisible(input) &&
+        includesLabel(
+          input.getAttribute("placeholder"),
+          SUNO_LABELS.librarySearchPlaceholder
+        )
+    ) ?? null
   );
-  const scroller = findLibraryScroller(firstVisibleClip);
-  if (!scroller)
-    throw new Error("Studio の Library scroll 領域が見つかりません");
-  const deadline = Date.now() + DOM_TIMEOUT_MS;
+}
+
+async function scrollLibraryForClip(
+  scroller: HTMLElement,
+  selector: string,
+  deadline: number
+): Promise<HTMLElement | null> {
   scroller.scrollTop = 0;
   while (Date.now() < deadline) {
     const clip = document.querySelector<HTMLElement>(selector);
@@ -423,7 +427,7 @@ export async function findLibraryClip(clipId: string): Promise<HTMLElement> {
       before + Math.max(200, scroller.clientHeight * 0.8)
     );
     scroller.dispatchEvent(new Event("scroll", { bubbles: true }));
-    await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
+    await sleep(DOM_POLL_MS);
     if (scroller.scrollTop !== before) continue;
 
     const lazyLoadDeadline = Math.min(
@@ -439,11 +443,64 @@ export async function findLibraryClip(clipId: string): Promise<HTMLElement> {
         libraryGrew = true;
         break;
       }
-      await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
+      await sleep(DOM_POLL_MS);
     }
     if (!libraryGrew) break;
   }
-  throw new Error(`Studio Library に clip ${clipId} が見つかりません`);
+  return null;
+}
+
+// Studio Library / In Project / /create の一覧は ~20 件表示で infinite scroll が
+// 効かず clip 件数が多いと scroll だけでは対象が描画されない (#5221)。
+// タイトルが分かる clip は Library 検索で単体描画してから拾う。
+async function findLibraryClipByTitleSearch(
+  title: string,
+  selector: string
+): Promise<HTMLElement | null> {
+  const search = findLibrarySearchInput();
+  if (!search) return null;
+  const deadline = Date.now() + LIBRARY_LAZY_LOAD_WAIT_MS;
+  setNativeValue(search, title);
+  try {
+    while (Date.now() < deadline) {
+      const clip = document.querySelector<HTMLElement>(selector);
+      if (clip && isVisible(clip)) return clip;
+      await sleep(DOM_POLL_MS);
+    }
+    return null;
+  } finally {
+    setNativeValue(search, "");
+  }
+}
+
+export async function findLibraryClip(
+  clipId: string,
+  title?: string
+): Promise<HTMLElement> {
+  const selector = `[draggable="true"][data-clip-id="${CSS.escape(clipId)}"]`;
+  const firstVisibleClip = await waitForElement(
+    () => document.querySelector<HTMLElement>(LIBRARY_CLIP_SELECTOR),
+    "Library の clip 一覧"
+  );
+  const scroller = findLibraryScroller(firstVisibleClip);
+  if (!scroller)
+    throw new Error("Studio の Library scroll 領域が見つかりません");
+  const clip = await scrollLibraryForClip(
+    scroller,
+    selector,
+    Date.now() + DOM_TIMEOUT_MS
+  );
+  if (clip) return clip;
+  const searched = title
+    ? await findLibraryClipByTitleSearch(title, selector)
+    : null;
+  if (searched) return searched;
+  throw new Error(
+    `Studio Library に clip ${clipId} が見つかりません` +
+      (title
+        ? ""
+        : "（タイトル不明のため検索 fallback も使えません）。Studio で対象曲が見える一覧を開いてから再実行してください")
+  );
 }
 
 function dispatchClipDrop(
@@ -623,7 +680,7 @@ export async function verifyPlacedClipLength(
         }
       }
     }
-    await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
+    await sleep(DOM_POLL_MS);
   }
   if (!measured) return false;
   throw new Error(
@@ -651,7 +708,7 @@ export async function waitForEmptyStudioProject(): Promise<void> {
         `内容を持つ Untitled Project（track ${trackCount} 件 / clip ${clipCount} 件）が開かれました。Studio で新規の空 project を作成してから再実行してください。`
       );
     }
-    await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
+    await sleep(DOM_POLL_MS);
   }
 }
 
@@ -686,7 +743,9 @@ export async function openStudioLibraryAllSongs(): Promise<HTMLElement> {
   );
 }
 
-function createBrowserStudioExportDeps(): StudioExportDeps {
+export function createBrowserStudioExportDeps(
+  request?: StudioExportRequest
+): StudioExportDeps {
   // 配置済み clip に曲長表示が無い DOM では verifyPlacedClipLength が毎回
   // タイムアウトまで待ってしまうため、初回の検証不能をもって以後の照合を止める (#5199)。
   let placedClipLengthCheckEnabled = true;
@@ -770,7 +829,7 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
         // The menu animates from the trigger. Its item is already "visible"
         // before the final transform settles, so clicking immediately can hit
         // the backdrop at the stale center point and only close the menu.
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await sleep(500);
         await clickStudioAriaButtonUntil(
           SUNO_LABELS.studioAddAudioTrack,
           () =>
@@ -790,14 +849,17 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
               const trigger = buttonByAriaLabel(SUNO_LABELS.studioAddNewTrack);
               if (trigger && !trigger.disabled) {
                 await dispatchTrustedStudioClick(trigger);
-                await new Promise((resolve) => setTimeout(resolve, 500));
+                await sleep(500);
               }
             },
           }
         );
       }
       const tracks = await waitForTrackCount(trackIndex + 1);
-      const source = await findLibraryClip(clipId);
+      const source = await findLibraryClip(
+        clipId,
+        request?.clipTitleById?.[clipId]
+      );
       const title = libraryClipTitle(source, clipId);
       const expectedSeconds = clipDurationSeconds(source);
       dispatchClipDrop(source, tracks[trackIndex], clipId);
@@ -817,10 +879,9 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
       return title;
     },
     async countPlacedClips() {
-      await clickButtonByName(SUNO_LABELS.studioInProject);
-      await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
-      return document.querySelectorAll('[draggable="true"][data-clip-id]')
-        .length;
+      // In Project 一覧は ~20 件表示上限があるため、配置済み clip は
+      // timeline 側の track 内 [data-clip-id] 要素から数える (#5221)。
+      return document.querySelectorAll("[data-track-id] [data-clip-id]").length;
     },
     async readTrackNames() {
       return Array.from(
@@ -893,7 +954,10 @@ export async function exportStudioMultitrack(
 export function performStudioMultitrackExport(
   request: StudioExportRequest
 ): Promise<void> {
-  return exportStudioMultitrack(request, createBrowserStudioExportDeps());
+  return exportStudioMultitrack(
+    request,
+    createBrowserStudioExportDeps(request)
+  );
 }
 
 /** 開いた Studio tab の id を返す。呼び出し側は ZIP 完了後に必ず closeStudioExportTab で閉じる。 */

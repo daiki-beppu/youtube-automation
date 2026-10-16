@@ -10,6 +10,7 @@ import {
   clickStudioAriaButtonUntil,
   clickStudioButtonUntil,
   commitStudioInputValue,
+  createBrowserStudioExportDeps,
   dispatchStudioContextMenu,
   dispatchStudioPointerClick,
   exportStudioMultitrack,
@@ -172,6 +173,54 @@ describe("Studio multitrack export", () => {
     document.body.replaceChildren();
   });
 
+  it("Given scroll で辿りつかない clip When タイトル付きで探索 Then Library 検索で描画して拾う (#5221)", async () => {
+    vi.useFakeTimers();
+    try {
+      const { scroller } = createLibrary();
+      appendLibraryClip(scroller, "other-clip");
+      const search = document.createElement("input");
+      search.placeholder = "Search songs…";
+      search.getBoundingClientRect = () =>
+        ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+      search.addEventListener("input", () => {
+        if (search.value === "Target Title") {
+          appendLibraryClip(scroller, "searched-clip");
+        }
+      });
+      document.body.append(search);
+
+      const resultPromise = findLibraryClip("searched-clip", "Target Title");
+      const assertion = expect(resultPromise).resolves.toHaveProperty(
+        "dataset.clipId",
+        "searched-clip"
+      );
+      await vi.runAllTimersAsync();
+      await assertion;
+      expect(search.value).toBe("");
+    } finally {
+      vi.useRealTimers();
+      document.body.replaceChildren();
+    }
+  });
+
+  it("Given In Project 一覧が ~20 件上限で欠ける When countPlacedClips Then timeline の clip 数を返す (#5221)", async () => {
+    const track = document.createElement("div");
+    track.dataset.trackId = "track-1";
+    for (let i = 0; i < 3; i++) {
+      const placed = document.createElement("div");
+      placed.dataset.clipId = `placed-${i}`;
+      track.append(placed);
+    }
+    const otherTrack = document.createElement("div");
+    otherTrack.dataset.trackId = "track-2";
+    document.body.append(track, otherTrack);
+
+    await expect(
+      createBrowserStudioExportDeps().countPlacedClips()
+    ).resolves.toBe(3);
+    document.body.replaceChildren();
+  });
+
   it("Given pointerdown で開く Studio menu When 操作 Then click() ではなく pointer sequence で開く", () => {
     const button = document.createElement("button");
     const menu = document.createElement("div");
@@ -314,9 +363,16 @@ describe("Studio multitrack export", () => {
     }
   });
 
-  it("Given Studio の inline rename When 値を確定 Then blur で保存を発火する", () => {
+  it("Given Studio の inline rename When 値を確定 Then Enter key で保存を発火する", () => {
     const input = document.createElement("input");
     let committed = "";
+    const keys: string[] = [];
+    input.addEventListener("keydown", (event) => {
+      keys.push(`keydown:${event.key}`);
+    });
+    input.addEventListener("keyup", (event) => {
+      keys.push(`keyup:${event.key}`);
+    });
     input.addEventListener("blur", () => {
       committed = input.value;
     });
@@ -325,6 +381,7 @@ describe("Studio multitrack export", () => {
 
     commitStudioInputValue(input, "collection-2026");
 
+    expect(keys).toEqual(["keydown:Enter", "keyup:Enter"]);
     expect(committed).toBe("collection-2026");
     input.remove();
   });

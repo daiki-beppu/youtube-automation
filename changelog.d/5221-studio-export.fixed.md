@@ -1,0 +1,3 @@
+- suno-helper: Studio の track / project rename を Enter keydown/keyup で確定するよう変更し、blur では確定しない現行 Studio で名前付けが反映されない問題を修正
+- suno-helper: Studio Library / In Project の ~20 件表示上限により clip が描画されない問題を修正（タイトルが分かる clip は Library 検索で描画して配置、配置済み clip 数は timeline 側から集計）
+- suno-helper: 非表示タブで setTimeout が throttle され Studio export や clip 走査が停滞する問題を、Worker ベースの sleep に切り替えて修正（Worker 非対応環境では従来の setTimeout にフォールバック）
