@@ -1,4 +1,4 @@
-"""`infrastructure/vcs/` 内の adapter が共有する git subprocess 実行 helper。"""
+"""`infrastructure/vcs/` 内の adapter と automation update が共有する git subprocess / status 解析 helper。"""
 
 from __future__ import annotations
 

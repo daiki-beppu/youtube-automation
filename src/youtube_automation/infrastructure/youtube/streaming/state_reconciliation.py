@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import json
-import urllib.error
-import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,12 +10,12 @@ from typing import cast
 from urllib.parse import urlencode
 
 from youtube_automation.core.errors import ConfigError, YouTubeAPIError
+from youtube_automation.infrastructure.youtube.streaming._vultr_api import get_vultr_json
 
 _VULTR_INSTANCES_ENDPOINT = "https://api.vultr.com/v2/instances"
 _VULTR_PAGE_SIZE = 500
 _VULTR_INSTANCES_URL = f"{_VULTR_INSTANCES_ENDPOINT}?{urlencode({'per_page': _VULTR_PAGE_SIZE})}"
 _STREAMING_TAG = "youtube-stream"
-_HTTP_TIMEOUT_SECONDS = 30
 _COMMAND_TIMEOUT_SECONDS = 30
 _GCLOUD_EMPTY_STATE_MESSAGES = ("matched no URLs", "One or more URLs matched no objects.")
 
@@ -52,12 +50,7 @@ def fetch_tagged_instance_ids(*, api_key: str) -> frozenset[str]:
 
 
 def _fetch_vultr_page(*, url: str, api_key: str) -> dict[str, object]:
-    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}"})
-    try:
-        with urllib.request.urlopen(request, timeout=_HTTP_TIMEOUT_SECONDS) as response:
-            payload: object = json.loads(response.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise YouTubeAPIError(f"Vultr instances API request failed: {error}") from error
+    payload = get_vultr_json(url, api_key=api_key, api_label="Vultr instances API")
     if not isinstance(payload, dict) or not all(isinstance(key, str) for key in payload):
         raise _unexpected_vultr_shape("$")
     return cast(dict[str, object], payload)

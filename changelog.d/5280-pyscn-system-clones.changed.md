@@ -1,0 +1,1 @@
+- `yt-automation-update` の git status パースを `infrastructure.vcs` の共通 helper に、配信用 Vultr API の GET 処理（認証ヘッダ・timeout・通信失敗の正規化）を streaming 内の共通 helper に寄せた。CLI 引数・出力・エラーメッセージ・終了コード・公開 import パスは変わらない。

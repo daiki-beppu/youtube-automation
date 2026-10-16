@@ -41,6 +41,7 @@ from youtube_automation.commands.system.automation_update_remote import _github_
 from youtube_automation.commands.system.automation_update_remote import _locked_git_sha
 from youtube_automation.commands.system.skills_sync import bundled_skill_names
 from youtube_automation.core.errors import ConfigError
+from youtube_automation.infrastructure.vcs._git import parse_status_paths
 
 EXIT_UP_TO_DATE = 0
 EXIT_DIFF = 1
@@ -180,20 +181,7 @@ def _git_status_porcelain(root: Path) -> str:
 def _git_status_paths(root: Path) -> set[str]:
     """Return all paths currently reported by status, including untracked files."""
     output = _git_status_output(root, ["--porcelain=v1", "-z", "--untracked-files=all"])
-    records = output.split("\0")
-    paths: set[str] = set()
-    index = 0
-    while index < len(records):
-        record = records[index]
-        if not record:
-            index += 1
-            continue
-        status = record[:2]
-        paths.add(record[3:])
-        if "R" in status:
-            paths.add(records[index + 1])
-        index += 2 if "R" in status or "C" in status else 1
-    return paths
+    return set(parse_status_paths(output))
 
 
 def _commit_apply_changes(root: Path, before_paths: set[str], ref: str) -> None:

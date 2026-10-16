@@ -42,7 +42,7 @@ def test_fetch_tagged_instances_filters_vultr_tags_and_paginates() -> None:
     ]
 
     with patch(
-        "youtube_automation.infrastructure.youtube.streaming.state_reconciliation.urllib.request.urlopen",
+        "youtube_automation.infrastructure.youtube.streaming._vultr_api.urllib.request.urlopen",
         side_effect=pages,
     ) as mock_open:
         result = state_reconciliation.fetch_tagged_instance_ids(api_key="secret")
@@ -78,7 +78,7 @@ def test_fetch_tagged_instances_filters_vultr_tags_and_paginates() -> None:
 )
 def test_fetch_tagged_instances_rejects_unexpected_api_shapes(payload: object) -> None:
     with patch(
-        "youtube_automation.infrastructure.youtube.streaming.state_reconciliation.urllib.request.urlopen",
+        "youtube_automation.infrastructure.youtube.streaming._vultr_api.urllib.request.urlopen",
         return_value=_Response(payload),
     ):
         with pytest.raises(YouTubeAPIError, match="unexpected shape"):
@@ -100,7 +100,7 @@ def test_fetch_tagged_instances_rejects_unexpected_api_shapes(payload: object) -
 )
 def test_fetch_tagged_instances_does_not_expose_response_secrets(payload: object, field_path: str) -> None:
     with patch(
-        "youtube_automation.infrastructure.youtube.streaming.state_reconciliation.urllib.request.urlopen",
+        "youtube_automation.infrastructure.youtube.streaming._vultr_api.urllib.request.urlopen",
         return_value=_Response(payload),
     ):
         with pytest.raises(YouTubeAPIError) as exc_info:

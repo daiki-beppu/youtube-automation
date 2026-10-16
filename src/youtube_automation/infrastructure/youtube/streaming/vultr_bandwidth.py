@@ -9,16 +9,12 @@
 
 from __future__ import annotations
 
-import json
-import urllib.error
-import urllib.request
-from typing import Any
 from urllib.parse import quote
 
 from youtube_automation.core.errors import YouTubeAPIError
+from youtube_automation.infrastructure.youtube.streaming._vultr_api import get_vultr_json
 
 _VULTR_API_BASE = "https://api.vultr.com/v2"
-_HTTP_TIMEOUT_SEC = 30
 _BYTES_PER_GB = 1024**3
 
 
@@ -37,12 +33,7 @@ def fetch_bandwidth(*, instance_id: str, api_key: str) -> dict[str, dict[str, in
         YouTubeAPIError: HTTP エラーまたはレスポンス形式が想定外の場合
     """
     url = f"{_VULTR_API_BASE}/instances/{quote(instance_id, safe='')}/bandwidth"
-    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}"})
-    try:
-        with urllib.request.urlopen(request, timeout=_HTTP_TIMEOUT_SEC) as resp:
-            payload: Any = json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
-        raise YouTubeAPIError(f"Vultr bandwidth API request failed: {e}") from e
+    payload = get_vultr_json(url, api_key=api_key, api_label="Vultr bandwidth API")
 
     if not isinstance(payload, dict) or "bandwidth" not in payload:
         raise YouTubeAPIError(f"Vultr bandwidth API returned unexpected shape: {payload!r}")
