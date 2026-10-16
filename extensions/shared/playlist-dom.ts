@@ -1217,9 +1217,18 @@ export async function fillPlaylistNameAndCreate(
   dialog: HTMLElement,
   name: string
 ): Promise<void> {
-  const input = dialog.querySelector<HTMLInputElement>(
-    PLAYLIST_NAME_INPUT_SELECTOR
-  );
+  // dialog 出現直後は入力欄が未描画のことがあるため、DIALOG_OPEN_TIMEOUT_MS までは poll する (#5199)。
+  // placeholder の大小文字揺れ ("Playlist Name" / "Playlist name") は
+  // PLAYLIST_NAME_INPUT_SELECTOR の case-insensitive 照合で吸収済み。
+  const deadline = Date.now() + DIALOG_OPEN_TIMEOUT_MS;
+  let input: HTMLInputElement | null = null;
+  for (;;) {
+    input = dialog.querySelector<HTMLInputElement>(
+      PLAYLIST_NAME_INPUT_SELECTOR
+    );
+    if (input || Date.now() >= deadline) break;
+    await sleep(DIALOG_OPEN_POLL_MS);
+  }
   if (!input) {
     throw new Error("Playlist Name 入力欄が dialog 内に見つかりません。");
   }

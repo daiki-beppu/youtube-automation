@@ -12,6 +12,14 @@ const DOM_POLL_MS = 200;
 const LIBRARY_LAZY_LOAD_WAIT_MS = 2_000;
 const LIBRARY_TRANSITION_WAIT_MS = 500;
 const LIBRARY_CLIP_SELECTOR = '[draggable="true"][data-clip-id]';
+/** track 見出しの右クリックで context menu が開くまでの初回待ち。開かなければ ︙ ボタン click にフォールバックする (#5199)。 */
+const TRACK_CONTEXT_MENU_FIRST_WAIT_MS = 5_000;
+/** 配置済み clip の長さを再計測する上限。Suno 側の生成が終わるまでは短いまま置かれることがある (#5199)。 */
+const PLACED_CLIP_VERIFY_WAIT_MS = 10_000;
+/** 配置済み clip 長と library 曲長の比較で許容する秒差（表示の丸め誤差を吸収する）。 */
+const PLACED_CLIP_LENGTH_TOLERANCE_SEC = 2;
+/** clip 表示に含まれる "M:SS" 形式の曲長。 */
+const CLIP_DURATION_TEXT_RE = /(\d+):(\d{2})/;
 
 export interface StudioExportRequest {
   collectionId: string;
@@ -122,17 +130,28 @@ function diagnoseElement(element: Element | null): string {
 
 async function waitForElement<T extends Element>(
   find: () => T | null,
-  description: string
+  description: string,
+  timeoutMs = DOM_TIMEOUT_MS
 ): Promise<T> {
-  const deadline = Date.now() + DOM_TIMEOUT_MS;
+  const element = await waitForElementOrNull(find, timeoutMs);
+  if (element) return element;
+  throw new Error(
+    `Studio の ${description} が見つかりません（${diagnoseElement(find())}）`
+  );
+}
+
+/** timeout まで見つからなければ throw せず null を返す。フォールバック分岐に使う。 */
+async function waitForElementOrNull<T extends Element>(
+  find: () => T | null,
+  timeoutMs: number
+): Promise<T | null> {
+  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     const element = find();
     if (element && isVisible(element)) return element;
     await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
   }
-  throw new Error(
-    `Studio の ${description} が見つかりません（${diagnoseElement(find())}）`
-  );
+  return null;
 }
 
 function toLabelList(labels: string | readonly string[]): readonly string[] {
@@ -247,6 +266,35 @@ export function dispatchStudioPointerClick(element: HTMLElement): void {
   element.dispatchEvent(new PointerEvent("pointerup", pointer));
   element.dispatchEvent(new MouseEvent("mouseup", common));
   element.dispatchEvent(new MouseEvent("click", common));
+}
+
+/**
+ * track 見出しへの右クリック sequence。track の ︙ ボタン
+ * (button.track-menu-reveal[data-context-menu-trigger]) は hover-only で幅 0 のため
+ * 通常 click では開けず、heading への contextmenu 系 event が正規の開き方 (#5199)。
+ */
+export function dispatchStudioContextMenu(element: HTMLElement): void {
+  const rect = element.getBoundingClientRect();
+  const common = {
+    bubbles: true,
+    cancelable: true,
+    composed: true,
+    clientX: rect.left + rect.width / 2,
+    clientY: rect.top + rect.height / 2,
+    button: 2,
+  };
+  const pointer = {
+    ...common,
+    pointerId: 1,
+    pointerType: "mouse",
+    isPrimary: true,
+  };
+  element.dispatchEvent(
+    new PointerEvent("pointerdown", { ...pointer, buttons: 2 })
+  );
+  element.dispatchEvent(new MouseEvent("mousedown", { ...common, buttons: 2 }));
+  element.dispatchEvent(new MouseEvent("contextmenu", common));
+  element.dispatchEvent(new MouseEvent("mouseup", { ...common, buttons: 0 }));
 }
 
 async function dispatchTrustedStudioClick(element: HTMLElement): Promise<void> {
@@ -437,42 +485,138 @@ function libraryClipTitle(source: HTMLElement, clipId: string): string {
   return title;
 }
 
-function trackName(track: HTMLElement): string | null {
+function trackHeading(track: HTMLElement): HTMLElement | null {
   return (
-    Array.from(track.querySelectorAll<HTMLElement>('[role="button"]'))
-      .find((element) => element.textContent?.trim())
-      ?.textContent?.trim() ?? null
+    Array.from(track.querySelectorAll<HTMLElement>('[role="button"]')).find(
+      (element) => element.textContent?.trim()
+    ) ?? null
   );
 }
 
-async function renameTrack(track: HTMLElement, name: string): Promise<void> {
-  const currentName = trackName(track);
-  if (!currentName) throw new Error("Studio の track 名を読めません");
-  const menu = track.querySelector<HTMLButtonElement>(
-    'button.track-menu-reveal[data-context-menu-trigger="true"]'
+function trackName(track: HTMLElement): string | null {
+  return trackHeading(track)?.textContent?.trim() ?? null;
+}
+
+/**
+ * Rename click で開く入力欄。focus を持つため document.activeElement でも拾える。
+ * 従来の body 直下走査（value が現行名と一致する input）と併用する (#5199)。
+ */
+function findRenameTrackInput(currentName: string): HTMLInputElement | null {
+  const active = document.activeElement;
+  if (
+    active instanceof HTMLInputElement &&
+    isVisible(active) &&
+    active.value === currentName
+  ) {
+    return active;
+  }
+  const direct = Array.from(document.body.children).find(
+    (element): element is HTMLInputElement =>
+      element instanceof HTMLInputElement &&
+      element.value === currentName &&
+      isVisible(element)
   );
-  if (!menu) throw new Error("Studio の track menu が見つかりません");
-  dispatchStudioPointerClick(menu);
+  if (direct) return direct;
+  return active instanceof HTMLInputElement && isVisible(active)
+    ? active
+    : null;
+}
+
+export async function renameTrack(
+  track: HTMLElement,
+  name: string
+): Promise<void> {
+  const heading = trackHeading(track);
+  const currentName = heading?.textContent?.trim() ?? null;
+  if (!currentName || !heading) {
+    throw new Error("Studio の track 名を読めません");
+  }
+  dispatchStudioContextMenu(heading);
   // 大小文字揺れ ("Rename Track" / "Rename track") は照合の case-insensitive で吸収する (#5198, #5209)。
-  const renameButton = await waitForElement(
+  let renameButton = await waitForElementOrNull(
     () => buttonByName(SUNO_LABELS.studioRenameTrack),
-    "Rename Track ボタン"
+    TRACK_CONTEXT_MENU_FIRST_WAIT_MS
   );
+  if (!renameButton) {
+    // 右クリックで開かない環境向けのフォールバック。幅 0 の ︙ ボタンを pointer click する。
+    const menu = track.querySelector<HTMLButtonElement>(
+      'button.track-menu-reveal[data-context-menu-trigger="true"]'
+    );
+    if (menu) dispatchStudioPointerClick(menu);
+    renameButton = await waitForElement(
+      () => buttonByName(SUNO_LABELS.studioRenameTrack),
+      "Rename Track ボタン"
+    );
+  }
   dispatchStudioPointerClick(renameButton);
   const input = await waitForElement(
-    () =>
-      Array.from(document.body.children).find(
-        (element): element is HTMLInputElement =>
-          element instanceof HTMLInputElement &&
-          element.value === currentName &&
-          isVisible(element)
-      ) ?? null,
+    () => findRenameTrackInput(currentName),
     "track 名入力"
   );
   commitStudioInputValue(input, name);
   await waitForElement(
     () => (trackName(track) === name ? track : null),
     `track 名 ${name}`
+  );
+}
+
+/** clip 要素の text から "M:SS" の曲長を秒で読む。表示が無ければ null。 */
+function clipDurationSeconds(element: HTMLElement): number | null {
+  const toSeconds = (match: RegExpMatchArray) =>
+    Number(match[1]) * 60 + Number(match[2]);
+  // 曲長 badge らしい要素（text 全体が M:SS）を優先し、見つからなければ
+  // clip 全体の text から最初の M:SS 表記を拾う。
+  const badge = Array.from(element.querySelectorAll<HTMLElement>("*")).find(
+    (child) => {
+      const text = child.textContent?.trim();
+      return text !== undefined && /^\d+:\d{2}$/.test(text);
+    }
+  );
+  const match =
+    badge?.textContent?.trim().match(CLIP_DURATION_TEXT_RE) ??
+    element.textContent?.match(CLIP_DURATION_TEXT_RE);
+  if (!match) return null;
+  return toSeconds(match);
+}
+
+/**
+ * 配置済み clip の長さを library 曲長と照合する (#5199)。
+ * Suno が曲を仕上げる前に配置すると約 2 分で切れた clip が置かれ、書き出し WAV も
+ * その長さで無音になる。配置後の長さが library 曲長より短いままなら bounded に
+ * 再計測して、伸びなければ operator 向けに明示的なエラーで止める。
+ * 戻り値: true = 照合できた / false = clip 要素や曲長表示を読めず検証不能。
+ */
+export async function verifyPlacedClipLength(
+  track: HTMLElement,
+  clipId: string,
+  expectedSeconds: number | null
+): Promise<boolean> {
+  if (expectedSeconds === null) return false;
+  const selector = `[data-clip-id="${CSS.escape(clipId)}"]`;
+  const deadline = Date.now() + PLACED_CLIP_VERIFY_WAIT_MS;
+  let measured = false;
+  let placedSeconds: number | null = null;
+  while (Date.now() < deadline) {
+    const placed =
+      track.querySelector<HTMLElement>(selector) ??
+      document.querySelector<HTMLElement>(
+        `[data-studio-main-canvas] ${selector}`
+      );
+    if (placed) {
+      const seconds = clipDurationSeconds(placed);
+      if (seconds !== null) {
+        measured = true;
+        placedSeconds = seconds;
+        if (seconds + PLACED_CLIP_LENGTH_TOLERANCE_SEC >= expectedSeconds) {
+          return true;
+        }
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, DOM_POLL_MS));
+  }
+  if (!measured) return false;
+  throw new Error(
+    `Studio に配置した clip の長さがライブラリの曲長より短いままです（placed ${placedSeconds}s / library ${expectedSeconds}s）。Suno 側の生成完了を待ってから再実行してください`
   );
 }
 
@@ -508,6 +652,9 @@ export async function openStudioLibraryAllSongs(): Promise<HTMLElement> {
 }
 
 function createBrowserStudioExportDeps(): StudioExportDeps {
+  // 配置済み clip に曲長表示が無い DOM では verifyPlacedClipLength が毎回
+  // タイムアウトまで待ってしまうため、初回の検証不能をもって以後の照合を止める (#5199)。
+  let placedClipLengthCheckEnabled = true;
   return {
     async createEmptyProject() {
       const location = new URL(window.location.href);
@@ -611,8 +758,21 @@ function createBrowserStudioExportDeps(): StudioExportDeps {
       const tracks = await waitForTrackCount(trackIndex + 1);
       const source = await findLibraryClip(clipId);
       const title = libraryClipTitle(source, clipId);
+      const expectedSeconds = clipDurationSeconds(source);
       dispatchClipDrop(source, tracks[trackIndex], clipId);
       await renameTrack(tracks[trackIndex], title);
+      if (placedClipLengthCheckEnabled) {
+        placedClipLengthCheckEnabled = await verifyPlacedClipLength(
+          tracks[trackIndex],
+          clipId,
+          expectedSeconds
+        );
+        if (!placedClipLengthCheckEnabled) {
+          console.warn(
+            `[suno-helper] clip ${clipId} の配置後の長さを計測できません。以後の曲長照合をスキップします`
+          );
+        }
+      }
       return title;
     },
     async countPlacedClips() {

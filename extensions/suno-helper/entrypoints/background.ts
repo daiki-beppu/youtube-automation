@@ -29,6 +29,9 @@ import {
 
 export default defineBackground(() => {
   const extensionOrigin = browser.runtime.getURL("").replace(/\/+$/, "");
+  // Studio tab の content script 注入待ち。background 化された tab では起動が
+  // 遅く 30 秒では足りないことがあるため 60 秒まで poll する (#5199)。
+  const STUDIO_TAB_READY_TIMEOUT_MS = 60_000;
   const leaseStorageKey = "sunoUnattendedLeases";
   let leaseMutation: Promise<unknown> = Promise.resolve();
   const mutateLeases = <T>(
@@ -186,7 +189,7 @@ export default defineBackground(() => {
       } as const;
     }
     const studioTabId = tab.id;
-    const deadline = Date.now() + 30_000;
+    const deadline = Date.now() + STUDIO_TAB_READY_TIMEOUT_MS;
     let lastError: unknown;
     while (Date.now() < deadline) {
       try {
