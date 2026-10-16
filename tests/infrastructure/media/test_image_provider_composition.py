@@ -127,6 +127,23 @@ class TestResolveCostPerImage:
         assert result == pytest.approx(0.21)
         assert isinstance(result, float)
 
+    @pytest.mark.parametrize(
+        "cfg",
+        [
+            {"image_generation": None},
+            {"image_generation": ["gemini"]},
+            {"image_generation": {"gemini": None}},
+            {"image_generation": {"gemini": "0.07"}},
+            {"image_generation": {"openai": {"cost_per_image_usd": 0.21}}},
+        ],
+    )
+    def test_returns_none_when_namespace_is_not_a_provider_mapping(self, cfg):
+        """Given image_generation / provider section が dict でない、または別 provider のみ
+        When resolve_cost_per_image(..., provider="gemini")
+        Then None を返す (resolve_composition_source と同じ namespace 解決規則)。
+        """
+        assert resolve_cost_per_image(cfg, "gemini") is None
+
 
 # ============================================================
 # confirm_cost (Test #30-34)

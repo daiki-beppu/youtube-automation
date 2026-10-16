@@ -34,6 +34,7 @@ from typing import Any
 
 from youtube_automation.commands._shared.arguments import add_optional_collection_argument
 from youtube_automation.commands._shared.cli_harness import run_validated_command
+from youtube_automation.commands.media.finalize_master import find_ambient_layers
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.channel_context import channel_dir
 from youtube_automation.core.errors import (
@@ -67,11 +68,9 @@ def find_rain_layers(channel: Path) -> list[Path]:
 
     `yt-finalize-master` 側は `rain_*.wav` glob だが、本 CLI は issue #510 で
     要求された「`branding/rain_layers/*.wav`」（prefix 制約なし）を採用する。
+    探索とソート・不在時の空リストは `find_ambient_layers` の規則を共有する。
     """
-    rain_dir = channel / _BRANDING_DIRNAME / _RAIN_LAYERS_DIRNAME
-    if not rain_dir.is_dir():
-        return []
-    return sorted(rain_dir.glob(_RAIN_GLOB))
+    return find_ambient_layers(channel, layers_dirname=_RAIN_LAYERS_DIRNAME, glob_pattern=_RAIN_GLOB)
 
 
 def _resolve_post_processing_config(skill_cfg: dict[str, Any]) -> dict[str, Any]:

@@ -150,12 +150,7 @@ def resolve_cost_per_image(
 
     ``skill_cfg["image_generation"][provider]["cost_per_image_usd"]`` を返す。
     """
-    custom = None
-    image_gen = skill_cfg.get("image_generation")
-    if isinstance(image_gen, dict):
-        provider_section = image_gen.get(provider)
-        if isinstance(provider_section, dict):
-            custom = provider_section.get("cost_per_image_usd")
+    custom = resolve_composition_source(skill_cfg, provider).get("cost_per_image_usd")
     if custom is None:
         return None
     return float(custom)

@@ -21,15 +21,50 @@ from youtube_automation.commands.media.generate_lyria_master import (
     _MAX_SEGMENT_COUNT,
     _generate_one_segment,
     _load_lyria_prompt_inputs,
+    _resolve_model,
+    _resolve_padding_min,
     _resolve_segment_count,
 )
-from youtube_automation.core.errors import ValidationError
+from youtube_automation.core.errors import ConfigError, ValidationError
 
 
 @pytest.fixture(autouse=True)
 def _isolate_channel_dir(tmp_path, monkeypatch):
     """`CHANNEL_DIR` を tmp_path に向けて cost_tracker の data/ 書き込みを隔離する。"""
     monkeypatch.setenv("CHANNEL_DIR", str(tmp_path))
+
+
+class TestResolveLyriaSkillConfig:
+    """`--padding-min` / `--model` と skill-config lyria の解決規則。"""
+
+    def test_padding_cli_value_wins_even_when_zero(self):
+        assert _resolve_padding_min(0.0, {"duration_padding_min": 3}) == 0.0
+
+    def test_padding_falls_back_to_skill_config(self):
+        assert _resolve_padding_min(None, {"duration_padding_min": 3}) == 3.0
+
+    def test_padding_missing_raises_config_error(self):
+        with pytest.raises(ConfigError) as exc_info:
+            _resolve_padding_min(None, {})
+
+        assert str(exc_info.value) == (
+            "skill-config lyria.duration_padding_min が未設定です (config.default.yaml が壊れている可能性があります)"
+        )
+
+    def test_model_cli_value_wins(self):
+        assert _resolve_model("cli-model", {"model": "cfg-model"}) == "cli-model"
+
+    def test_model_falls_back_to_skill_config_when_cli_empty(self):
+        assert _resolve_model("", {"model": "cfg-model"}) == "cfg-model"
+
+    @pytest.mark.parametrize("lyria_cfg", [{}, {"model": ""}])
+    def test_model_missing_or_empty_raises_config_error(self, lyria_cfg):
+        with pytest.raises(ConfigError) as exc_info:
+            _resolve_model(None, lyria_cfg)
+
+        assert str(exc_info.value) == (
+            "skill-config lyria.model が未設定です (config.default.yaml が壊れている可能性があります)"
+        )
 
 
 def _make_collection(root: Path) -> Path:
