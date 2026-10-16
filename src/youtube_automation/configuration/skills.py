@@ -445,7 +445,8 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return result
 
 
-def _load_yaml(path: Path) -> dict[str, Any]:
+def load_skill_config_yaml(path: Path) -> dict[str, object]:
+    """skill-config YAML を読み、空は {}、root が mapping 以外は ConfigError にする。"""
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = yaml.safe_load(f)
@@ -472,7 +473,7 @@ def _load_json(path: Path) -> dict[str, Any]:
 def _load_override(path: Path) -> dict[str, Any]:
     if path.suffix == ".json":
         return _load_json(path)
-    return _load_yaml(path)
+    return load_skill_config_yaml(path)
 
 
 def _validate_thumbnail_text_render(config: Mapping[str, object]) -> None:
@@ -636,7 +637,7 @@ def load_skill_config(
         return _cache[skill]
 
     owner, section = _split_skill_config_key(skill)
-    defaults = _load_yaml(_default_path(owner))
+    defaults = load_skill_config_yaml(_default_path(owner))
     defaults = _select_moved_default_section(owner, defaults)
 
     merged = _merge_skill_channel_override(skill, owner, section, defaults, channel_dir)

@@ -93,13 +93,18 @@ def _replace_file(source: Path, destination: Path) -> None:
     os.replace(source, destination)
 
 
-def _write_journal(path: Path, payload: dict[str, object]) -> None:
-    content = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8") + b"\n"
+def write_bytes_atomic(path: Path, content: bytes) -> None:
+    """fsync 済み temp を既存 mode のまま置き換え、失敗時は temp を残さない。"""
     temporary = _temp_file(path, content)
     try:
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _write_journal(path: Path, payload: dict[str, object]) -> None:
+    content = json.dumps(payload, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8") + b"\n"
+    write_bytes_atomic(path, content)
 
 
 def _payload(

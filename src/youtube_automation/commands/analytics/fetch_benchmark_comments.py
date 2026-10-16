@@ -19,9 +19,7 @@ Usage:
 import argparse
 import json
 import logging
-import os
 import sys
-import tempfile
 from datetime import date, datetime
 from pathlib import Path
 
@@ -37,6 +35,7 @@ from youtube_automation.commands.analytics.benchmark_collector import (
 from youtube_automation.core.channel_context import channel_dir as _channel_dir
 from youtube_automation.core.errors import AutomationError, YouTubeAPIError
 from youtube_automation.infrastructure.cost_tracker import log_quota
+from youtube_automation.infrastructure.filesystem import write_file_text_atomically
 
 logger = logging.getLogger(__name__)
 
@@ -208,15 +207,7 @@ class BenchmarkCommentCollector:
 
 
 def _write_json_atomic(path: Path, data: dict) -> None:
-    fd, temp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as file:
-            json.dump(data, file, ensure_ascii=False, indent=2)
-            file.write("\n")
-        os.replace(temp_name, path)
-    except BaseException:
-        Path(temp_name).unlink(missing_ok=True)
-        raise
+    write_file_text_atomically(path, json.dumps(data, ensure_ascii=False, indent=2) + "\n", mode=0o600)
 
 
 def print_summary(data: dict):

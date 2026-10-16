@@ -6,17 +6,15 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
 import re
-import stat
 import sys
-import tempfile
 from collections.abc import Callable, Sequence
 from datetime import date, datetime, timezone
 from pathlib import Path
 from statistics import median
 
 from youtube_automation.commands.analytics import experiment_judge, vpd_rank
+from youtube_automation.commands.analytics.experiment_transaction import write_bytes_atomic
 from youtube_automation.configuration import load_config
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.channel_context import channel_dir
@@ -150,23 +148,9 @@ def _judge_threshold_percent(config: dict[str, object]) -> object:
 
 
 def _atomic_append(path: Path, original: bytes, record: dict[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
     separator = b"" if not original or original.endswith(b"\n") else b"\n"
     encoded = json.dumps(record, ensure_ascii=False, separators=(",", ":")).encode("utf-8") + b"\n"
-    descriptor, temporary_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
-    temporary = Path(temporary_name)
-    try:
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(original)
-            stream.write(separator)
-            stream.write(encoded)
-            stream.flush()
-            os.fsync(stream.fileno())
-        if path.exists():
-            os.chmod(temporary, stat.S_IMODE(path.stat().st_mode))
-        os.replace(temporary, path)
-    finally:
-        temporary.unlink(missing_ok=True)
+    write_bytes_atomic(path, original + separator + encoded)
 
 
 def register_experiment(

@@ -300,6 +300,21 @@ def test_write_distrokid_release_leaves_no_temp_file(tmp_path):
     assert files == ["distrokid-releases.json"]
 
 
+def test_write_distrokid_release_keeps_json_bytes_and_owner_only_mode(tmp_path):
+    """Given write_distrokid_release の atomic write
+    When 書き込み後の bytes と permission を読む
+    Then indent=2・非 ASCII そのまま・末尾改行なしの JSON が 0o600 で置かれる。
+    """
+    root = tmp_path / "channel"
+    write_distrokid_release(root, "20260526-abc-collection", "disc1-alpha", "アルファ")
+    target = distrokid_releases_output_path(root)
+
+    data = json.loads(target.read_text(encoding="utf-8"))
+
+    assert target.read_bytes() == json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
+    assert target.stat().st_mode & 0o777 == 0o600
+
+
 # ---------------------------------------------------------------------------
 # build_distrokid_collections_index: disc 一覧構築
 # ---------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import date
 from pathlib import Path
 from types import SimpleNamespace
@@ -397,7 +398,7 @@ def test_replace_failure_preserves_original_bytes(tmp_path, monkeypatch) -> None
     path = tmp_path / "experiments.jsonl"
     _register(path, _ranking([_item("a", 1), _item("b", 2)]), target="first")
     before = path.read_bytes()
-    monkeypatch.setattr(cli.os, "replace", lambda *_args: (_ for _ in ()).throw(OSError("replace failed")))
+    monkeypatch.setattr(os, "replace", lambda *_args: (_ for _ in ()).throw(OSError("replace failed")))
 
     with pytest.raises(OSError, match="replace failed"):
         _register(path, _ranking([_item("a", 1), _item("b", 2)]), target="second")

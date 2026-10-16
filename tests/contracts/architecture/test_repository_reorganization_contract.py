@@ -850,7 +850,7 @@ _LEGACY_FACADE_SYMBOL_ALIASES = {
         "_override_candidate_exists": "_override_candidate_exists",
         "_resolve_channel_override": "_resolve_channel_override",
         "_deep_merge": "_deep_merge",
-        "_load_yaml": "_load_yaml",
+        "_load_yaml": "load_skill_config_yaml",
         "_load_json": "_load_json",
         "_load_override": "_load_override",
         "THUMBNAIL_MODE_PARALLEL": "THUMBNAIL_MODE_PARALLEL",

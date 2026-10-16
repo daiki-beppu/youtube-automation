@@ -455,6 +455,16 @@ def test_atomic_save_failure_preserves_existing_artifact_and_cleans_temp(monkeyp
     assert not list(tmp_path.glob(".comments.json.*.tmp"))
 
 
+def test_atomic_save_writes_indented_json_with_trailing_newline_and_owner_only_mode(tmp_path):
+    output = tmp_path / "comments.json"
+
+    mod._write_json_atomic(output, {"text": "こんにちは", "count": 1})
+
+    assert output.read_bytes() == '{\n  "text": "こんにちは",\n  "count": 1\n}\n'.encode()
+    assert output.stat().st_mode & 0o777 == 0o600
+    assert not list(tmp_path.glob(".comments.json.*.tmp"))
+
+
 @pytest.mark.parametrize(
     "error",
     [YouTubeAPIError("api unavailable"), OSError("disk full")],
