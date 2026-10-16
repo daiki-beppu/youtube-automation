@@ -102,6 +102,7 @@ function makeAriaButton(
  *   - generating=true: Remix btn を disabled にする（= 生成中。音源未完成で Remix 不可）
  *   - generating=false: Remix btn enabled（= 完了。Remix 可能）
  *   - generatingVia="aria-disabled": disabled 属性ではなく aria-disabled="true" で生成中を表す
+ *   - clipStatus: card 自体に data-clip-status を付ける（#5210。status が一次シグナル）
  *   - visible=false: display:none + bbox 0×0（strict isVisible で除外される card）
  */
 export function buildClipCard(
@@ -109,10 +110,14 @@ export function buildClipCard(
     generating?: boolean;
     visible?: boolean;
     generatingVia?: "disabled" | "aria-disabled";
+    clipStatus?: string;
   } = {}
 ): HTMLElement {
   const via = opts.generatingVia ?? "disabled";
   const card = document.createElement("div");
+  if (opts.clipStatus !== undefined) {
+    card.setAttribute("data-clip-status", opts.clipStatus);
+  }
   card.append(
     makeAriaButton("Select clip"),
     makeAriaButton("Remix clip", {
@@ -142,6 +147,7 @@ export function addClipCard(
     generating?: boolean;
     visible?: boolean;
     generatingVia?: "disabled" | "aria-disabled";
+    clipStatus?: string;
   } = {}
 ): HTMLElement {
   const card = buildClipCard(opts);

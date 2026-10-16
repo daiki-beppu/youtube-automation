@@ -105,12 +105,16 @@ function addViewVariantCard(opts: {
 function addStatusOnlyCard(opts: {
   ariaBusy?: boolean;
   progressbar?: boolean;
+  clipStatus?: string;
   visible?: boolean;
 }): HTMLElement {
   const card = document.createElement("article");
   const select = document.createElement("button");
   select.setAttribute("aria-label", "Select clip");
   card.appendChild(select);
+  if (opts.clipStatus !== undefined) {
+    card.setAttribute("data-clip-status", opts.clipStatus);
+  }
   if (opts.ariaBusy === true) {
     card.setAttribute("aria-busy", "true");
   }
@@ -374,6 +378,52 @@ describe("isClipGenerating: 1 card の生成中判定 (Remix btn disabled)", () 
   });
 });
 
+describe("isClipGenerating: data-clip-status を一次シグナルにする (#5210)", () => {
+  it.each(["complete", "error", "failed"])(
+    "Given 終端 status=%s の card (Remix enabled) When 判定する Then false (終端は in-flight でない)",
+    (status) => {
+      const card = addClipCard({ generating: false, clipStatus: status });
+      expect(isClipGenerating(card)).toBe(false);
+    }
+  );
+
+  it.each(["submitted", "queued", "streaming", "processing"])(
+    "Given 非終端 status=%s の card (Remix enabled) When 判定する Then true (in-flight)",
+    (status) => {
+      const card = addClipCard({ generating: false, clipStatus: status });
+      expect(isClipGenerating(card)).toBe(true);
+    }
+  );
+
+  it("Given status=complete だが Remix btn が disabled のまま When 判定する Then false (status が Remix より優先)", () => {
+    const card = addClipCard({ generating: true, clipStatus: "complete" });
+    expect(isClipGenerating(card)).toBe(false);
+  });
+
+  it("Given status=streaming の card が非可視 When 判定する Then false (strict isVisible で除外)", () => {
+    const card = addClipCard({
+      generating: false,
+      clipStatus: "streaming",
+      visible: false,
+    });
+    expect(isClipGenerating(card)).toBe(false);
+  });
+
+  it("Given data-clip-status が空値 When 判定する Then Remix 判定へ fallback する", () => {
+    const card = addClipCard({ generating: true, clipStatus: "" });
+    expect(isClipGenerating(card)).toBe(true);
+  });
+
+  it("Given status 持ちだが Remix btn が無い card When 判定する Then throw せず status で判定する", () => {
+    const card = document.createElement("div");
+    card.setAttribute("data-clip-status", "queued");
+    document.body.appendChild(card);
+    markBbox(card, 240, 80);
+
+    expect(isClipGenerating(card)).toBe(true);
+  });
+});
+
 describe("getInFlightClipCount: in-flight な distinct card 数", () => {
   it("Given 生成中 3 / 完了 1 / 非可視生成中 1 When 数える Then 可視生成中の 3 を返す", () => {
     addClipCard({ generating: true });
@@ -463,6 +513,67 @@ describe("getInFlightClipCount: in-flight な distinct card 数", () => {
       expect(() => getInFlightClipCount()).toThrow();
     }
   );
+});
+
+describe("getInFlightClipCount: data-clip-status 一次シグナル (#5210)", () => {
+  it("Given status 持ち card の生成中/終端混在 When 数える Then 非終端 status の数を返す", () => {
+    addClipCard({ generating: false, clipStatus: "streaming" });
+    addClipCard({ generating: false, clipStatus: "queued" });
+    addClipCard({ generating: false, clipStatus: "complete" });
+    addClipCard({ generating: false, clipStatus: "error" });
+
+    expect(getInFlightClipCount()).toBe(2);
+  });
+
+  it("Given status=complete で Remix disabled の card When 数える Then in-flight に数えない (status 優先)", () => {
+    addClipCard({ generating: true, clipStatus: "complete" });
+    addClipCard({ generating: false, clipStatus: "submitted" });
+
+    expect(getInFlightClipCount()).toBe(1);
+  });
+
+  it("Given Remix btn 不在で status のみの clip 行 When 数える Then status で数える", () => {
+    addStatusOnlyCard({ clipStatus: "streaming" });
+    addStatusOnlyCard({ clipStatus: "complete" });
+    addStatusOnlyCard({ clipStatus: "failed" });
+    addStatusOnlyCard({ clipStatus: "queued", visible: false });
+
+    expect(getInFlightClipCount()).toBe(1);
+  });
+
+  it("Given ボタンを全く持たない status 行だけの clip-row When 数える Then status で数える", () => {
+    for (const status of ["streaming", "complete"]) {
+      const row = document.createElement("div");
+      row.className = "clip-row";
+      row.setAttribute("data-testid", "clip-row");
+      row.setAttribute("data-clip-status", status);
+      document.body.appendChild(row);
+      markBbox(row, 240, 80);
+    }
+
+    expect(getInFlightClipCount()).toBe(1);
+  });
+
+  it("Given 全て終端 status で Remix btn が 1 件も無い When 数える Then throw せず 0 を返す", () => {
+    addStatusOnlyCard({ clipStatus: "complete" });
+    addStatusOnlyCard({ clipStatus: "error" });
+
+    expect(getInFlightClipCount()).toBe(0);
+  });
+
+  it("Given status 持ち card と status 無し card が混在 When 数える Then 両経路の union を返す", () => {
+    addClipCard({ generating: false, clipStatus: "submitted" });
+    addClipCard({ generating: true }); // status 無し → Remix fallback
+
+    expect(getInFlightClipCount()).toBe(2);
+  });
+
+  it("Given status 無し card は従来通り Remix 判定 When 数える Then 従来結果を返す (fallback 回帰)", () => {
+    addClipCard({ generating: true });
+    addClipCard({ generating: false });
+
+    expect(getInFlightClipCount()).toBe(1);
+  });
 });
 
 describe("waitForQueueSlot: in-flight < maxClips まで待機", () => {
