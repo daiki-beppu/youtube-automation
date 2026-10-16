@@ -7,6 +7,7 @@ sample_channel の新構造化は S3（コミット 3）で実施する予定。
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -2591,6 +2592,37 @@ def test_core_and_configuration_share_root_cache_and_reset(tmp_path, monkeypatch
     reset()
     assert channel_context.channel_dir() == second
     assert channel_dir() == second
+
+
+def test_temporary_channel_dir_switches_and_restores_previous_channel(tmp_path, monkeypatch):
+    from youtube_automation.configuration.loader import temporary_channel_dir
+
+    outer = _setup_channel(tmp_path / "outer", _minimal_sections())
+    sections = _minimal_sections()
+    sections["meta.json"]["channel"]["name"] = "Inner channel"
+    inner = _setup_channel(tmp_path / "inner", sections)
+    monkeypatch.setenv("CHANNEL_DIR", str(outer))
+    assert load_config().meta.channel_name == "Test Channel"
+
+    with temporary_channel_dir(inner):
+        assert channel_dir() == inner
+        assert load_config().meta.channel_name == "Inner channel"
+
+    assert os.environ["CHANNEL_DIR"] == str(outer)
+    assert channel_dir() == outer
+    assert load_config().meta.channel_name == "Test Channel"
+
+
+def test_temporary_channel_dir_removes_unset_env_even_on_error(tmp_path):
+    from youtube_automation.configuration.loader import temporary_channel_dir
+
+    channel = _setup_channel(tmp_path / "selected", _minimal_sections())
+
+    with pytest.raises(ConfigError), temporary_channel_dir(channel):
+        assert channel_dir() == channel
+        raise ConfigError("boom")
+
+    assert "CHANNEL_DIR" not in os.environ
 
 
 def test_first_config_load_refreshes_previously_resolved_root(tmp_path, monkeypatch):
