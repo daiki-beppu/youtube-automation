@@ -295,6 +295,59 @@ describe("Overlay shell", () => {
     ).not.toBeNull();
   });
 
+  it("実行系ボタンは通常の座標クリックイベント列で起動する", async () => {
+    Object.assign(runner, {
+      selectedCollectionId: "collection",
+      playlistName: "playlist",
+      downloadEnabled: true,
+      entries: [
+        { name: "pattern", style: "ambient", lyrics: "[Instrumental]" },
+      ],
+      itemStates: ["idle"],
+      canRun: true,
+    });
+    await act(async () => root.render(createElement(Overlay)));
+
+    // CDP の実座標クリックと同等の event 列を対象要素へ直接 dispatch する (#5233)。
+    const dispatchCoordinateClick = (target: HTMLElement): void => {
+      for (const type of [
+        "pointerdown",
+        "mousedown",
+        "pointerup",
+        "mouseup",
+        "click",
+      ]) {
+        target.dispatchEvent(
+          new MouseEvent(type, { bubbles: true, cancelable: true })
+        );
+      }
+    };
+
+    const clickControl = async (
+      selector: string,
+      called: ReturnType<typeof vi.fn>
+    ): Promise<void> => {
+      const button = container.querySelector<HTMLButtonElement>(selector);
+      expect(button).not.toBeNull();
+      await act(async () => dispatchCoordinateClick(button!));
+      expect(called).toHaveBeenCalled();
+    };
+
+    await clickControl(
+      'button[data-suno-control="download-only"]',
+      runner.downloadOnly
+    );
+    await clickControl(
+      'button[data-suno-control="retry-playlist"]',
+      runner.retryPlaylist
+    );
+    await clickControl(
+      'button[data-suno-control="retry-download"]',
+      runner.retryDownload
+    );
+    await clickControl('button[data-suno-control="run"]', runner.run);
+  });
+
   it("challenge履歴を総件数と直近5件で表示する", async () => {
     const sixRecords = [
       ...CHALLENGE_RECORDS,
