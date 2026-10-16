@@ -180,3 +180,17 @@ def test_manual_preserves_stop_without_skill_request(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert payload["outcome"] == "manual"
     assert payload["skills"] == []
+
+
+def test_sidecar_named_analysis_files_do_not_count_as_reports(tmp_path: Path) -> None:
+    _report(tmp_path)
+    reports = tmp_path / "reports"
+    sidecar = reports / "analysis_20260715.win-pattern.json"
+    sidecar.write_text((reports / "analysis_20260714.json").read_text(encoding="utf-8"), encoding="utf-8")
+    publish_json_document(sidecar, RepositorySchema.ANALYSIS_REPORT)
+
+    result, payload = _run(tmp_path, "--action", "ask", "--stale-kind", "relative")
+
+    assert result.returncode == 0
+    assert payload["report_count"] == 1
+    assert payload["estimate_usd"] == 0.01

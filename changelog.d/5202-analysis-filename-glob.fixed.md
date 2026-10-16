@@ -1,0 +1,1 @@
+- freshness 判定の `reports/analysis_*.json` 選択を `analysis_YYYYMMDD.json`（8 桁日付）だけに限定し、`analysis_YYYYMMDD.win-pattern.json` 等の sidecar を report として拾わないようにした（#5202）。

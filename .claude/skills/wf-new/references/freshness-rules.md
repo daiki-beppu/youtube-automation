@@ -97,7 +97,7 @@ latest_by_filename_date() {
 }
 
 LATEST_DATA=$(latest_by_filename_date "data/analytics_data_*.json")
-LATEST_REPORT=$(latest_by_filename_date "reports/analysis_*.json")
+LATEST_REPORT=$(latest_by_filename_date "reports/analysis_[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9].json")
 LATEST_BENCHMARK=$(latest_by_filename_date "data/benchmark_*.json")
 
 if [ -z "$LATEST_REPORT" ]; then
