@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import logging
-import os
-from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Protocol
 
+from youtube_automation.configuration.loader import temporary_channel_dir
 from youtube_automation.core.errors import AutomationError
 from youtube_automation.infrastructure.analytics.dashboard_publications import (
     build_dashboard_publications,
@@ -33,23 +32,6 @@ class _AnalyticsSystem(Protocol):
     def run_data_collection(self, *, days: int, depth: str) -> dict[str, object]: ...
 
 
-@contextmanager
-def _channel_context(channel: Path) -> Iterator[None]:
-    from youtube_automation.configuration import reset as reset_config
-
-    previous_dir = os.environ.get("CHANNEL_DIR")
-    os.environ["CHANNEL_DIR"] = str(channel)
-    reset_config()
-    try:
-        yield
-    finally:
-        if previous_dir is None:
-            os.environ.pop("CHANNEL_DIR", None)
-        else:
-            os.environ["CHANNEL_DIR"] = previous_dir
-        reset_config()
-
-
 def collect_channel_analytics(
     channel: Path,
     analytics_system_factory: Callable[[], _AnalyticsSystem],
@@ -60,7 +42,7 @@ def collect_channel_analytics(
     """同じ AnalyticsSystem で standard snapshot と公開履歴を保存する。"""
     from youtube_automation.configuration import load_config
 
-    with _channel_context(channel):
+    with temporary_channel_dir(channel):
         system = analytics_system_factory()
         result = system.run_data_collection(days=days, depth="standard")
         if not result.get("success"):

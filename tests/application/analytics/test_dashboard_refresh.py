@@ -15,6 +15,8 @@ from youtube_automation.application.analytics.dashboard_refresh import (
     collect_channel_analytics,
     refresh_dashboard_channels,
 )
+from youtube_automation.configuration import loader as configuration_loader
+from youtube_automation.configuration.loader import temporary_channel_dir
 from youtube_automation.core.errors import AutomationError, ConfigError, YouTubeAPIError
 
 
@@ -71,7 +73,7 @@ def test_collect_channel_restores_environment_and_configuration_after_success(
     else:
         monkeypatch.setenv("CHANNEL", initial_slug)
     reset = Mock(wraps=configuration.reset)
-    monkeypatch.setattr(configuration, "reset", reset)
+    monkeypatch.setattr(configuration_loader, "reset", reset)
     monkeypatch.setattr(
         configuration,
         "load_config",
@@ -114,7 +116,7 @@ def test_channel_context_resolves_channel_dir_when_stale_channel_slug_remains(
     monkeypatch.delenv("CHANNEL_DIR", raising=False)
     monkeypatch.setenv("CHANNEL", "stale-slug")
 
-    with dashboard_refresh._channel_context(channel):
+    with temporary_channel_dir(channel):
         assert configuration.channel_dir() == channel
 
     assert os.environ["CHANNEL"] == "stale-slug"
@@ -414,7 +416,7 @@ def test_collect_channel_restores_environment_and_raises_automation_error(
     monkeypatch.setenv("CHANNEL_DIR", "/previous/channel")
     monkeypatch.setenv("CHANNEL", "previous-slug")
     reset = Mock(wraps=configuration.reset)
-    monkeypatch.setattr(configuration, "reset", reset)
+    monkeypatch.setattr(configuration_loader, "reset", reset)
     system = Mock()
 
     def run_data_collection(*, days: int, depth: str) -> dict[str, object]:

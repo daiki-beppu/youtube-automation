@@ -33,6 +33,7 @@ from youtube_automation.application.channel_readiness.readiness import (
     evaluate_ttp_wf_new_readiness,
 )
 from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
+from youtube_automation.configuration.loader import temporary_channel_dir
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.display import format_terminal_text
 from youtube_automation.core.errors import (
@@ -1081,7 +1082,7 @@ def check_oauth_token(channel_dir: Path) -> CheckResult:
 
 def check_oauth_token_readonly(channel_dir: Path) -> CheckResult:
     """Check whether the independently issued read-only token is available."""
-    with _temporary_channel_dir(channel_dir):
+    with temporary_channel_dir(channel_dir):
         path = YouTubeOAuthHandler.readonly_token_path()
     if path is None or not path.is_file():
         return CheckResult(
@@ -1117,7 +1118,7 @@ def check_reporting_job(channel_dir: Path) -> CheckResult:
     credentials = state.credentials
 
     try:
-        with _temporary_channel_dir(channel_dir), redirect_stdout(io.StringIO()):
+        with temporary_channel_dir(channel_dir), redirect_stdout(io.StringIO()):
             service = build("youtubereporting", "v1", credentials=credentials)
             client = ReportingAPIClient(service)
             report_type_id = client.select_report_type()
@@ -1235,7 +1236,7 @@ def check_channel_config(channel_dir: Path) -> CheckResult:
     from youtube_automation.core.errors import ConfigError
     from youtube_automation.domains.metadata import validate_localizations_title_templates
 
-    with _temporary_channel_dir(channel_dir):
+    with temporary_channel_dir(channel_dir):
         try:
             config = load_config()
             localization_errors = validate_localizations_title_templates(config.localizations.data)
@@ -1410,7 +1411,7 @@ def check_playlist_create_dry_run(channel_dir: Path) -> CheckResult:
     from youtube_automation.core.errors import ConfigError
     from youtube_automation.domains.uploads.playlists import PlaylistManager
 
-    with _temporary_channel_dir(channel_dir):
+    with temporary_channel_dir(channel_dir):
         try:
             manager = PlaylistManager()
             missing_titles = [
@@ -1467,24 +1468,6 @@ def check_playlist_create_dry_run(channel_dir: Path) -> CheckResult:
         category=CHANNEL_CATEGORY,
         message="PlaylistManager.create_all_playlists(dry_run=True) 成功",
     )
-
-
-@contextmanager
-def _temporary_channel_dir(channel_dir: Path) -> Iterator[None]:
-    """Temporarily point config singleton consumers at ``channel_dir``."""
-    from youtube_automation.configuration import reset as reset_config
-
-    old_env = os.environ.get("CHANNEL_DIR")
-    os.environ["CHANNEL_DIR"] = str(channel_dir)
-    try:
-        reset_config()
-        yield
-    finally:
-        reset_config()
-        if old_env is None:
-            os.environ.pop("CHANNEL_DIR", None)
-        else:
-            os.environ["CHANNEL_DIR"] = old_env
 
 
 def check_analytics_report(channel_dir: Path) -> CheckResult:

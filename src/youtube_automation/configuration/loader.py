@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import math
+import os
 import warnings
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -115,6 +118,22 @@ def reset() -> None:
     global _instance
     _instance = None
     reset_channel_context()
+
+
+@contextmanager
+def temporary_channel_dir(target_dir: Path) -> Iterator[None]:
+    """設定シングルトンの参照先を一時的に ``target_dir`` へ切り替え、終了時に元へ戻す."""
+    previous_dir = os.environ.get("CHANNEL_DIR")
+    os.environ["CHANNEL_DIR"] = str(target_dir)
+    try:
+        reset()
+        yield
+    finally:
+        if previous_dir is None:
+            os.environ.pop("CHANNEL_DIR", None)
+        else:
+            os.environ["CHANNEL_DIR"] = previous_dir
+        reset()
 
 
 def load_config() -> ChannelConfig:
