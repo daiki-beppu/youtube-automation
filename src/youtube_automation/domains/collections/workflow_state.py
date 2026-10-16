@@ -91,6 +91,8 @@ class MusicPairSelectionExceptionDocument(TypedDict, total=False):
 
 class MusicPairSelectionDocument(TypedDict, total=False):
     updated_at: str
+    allow_incomplete_download: bool
+    incomplete_download_prompts: list[int]
     exceptions_over_limit_count: int
     exceptions_over_limit: list[MusicPairSelectionExceptionDocument]
 

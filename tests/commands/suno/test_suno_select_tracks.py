@@ -916,6 +916,68 @@ def test_should_enforce_duration_filter_when_incomplete_download_is_allowed(tmp_
     assert not (collection / "01-master" / ".selection.log").exists()
 
 
+def test_incomplete_download_records_approved_prompts_in_workflow_state(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        [
+            {"name": "夜明け — Dawn Groove", "lyrics": ""},
+            {"name": "深夜 — Midnight Rain", "lyrics": ""},
+        ],
+    )
+    _write_audio(collection, "01a-Dawn Groove.mp3")
+    _write_audio(collection, "01b-Dawn Groove.mp3")
+    _write_audio(collection, "02a-Midnight Rain.mp3")
+    (collection / "workflow-state.json").write_text(
+        json.dumps({"updated_at": "2000-01-01T00:00:00Z", "future_section": {"keep": True}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
+
+    suno_track_selection.select_suno_tracks(collection, _cfg(), allow_incomplete_download=True)
+
+    workflow_state = json.loads((collection / "workflow-state.json").read_text(encoding="utf-8"))
+    assert workflow_state["future_section"] == {"keep": True}
+    selection_state = workflow_state["music_pair_selection"]
+    assert workflow_state["updated_at"] != "2000-01-01T00:00:00Z"
+    assert workflow_state["updated_at"] == selection_state["updated_at"]
+    assert selection_state["allow_incomplete_download"] is True
+    assert selection_state["incomplete_download_prompts"] == [2]
+    assert selection_state["exceptions_over_limit_count"] == 0
+    assert selection_state["exceptions_over_limit"] == []
+
+
+def test_incomplete_download_dry_run_does_not_write_workflow_state(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": "夜明け — Dawn Groove", "lyrics": ""}],
+    )
+    _write_audio(collection, "01a-Dawn Groove.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
+
+    suno_track_selection.select_suno_tracks(
+        collection,
+        _cfg(),
+        dry_run=True,
+        allow_incomplete_download=True,
+    )
+
+    assert not (collection / "workflow-state.json").exists()
+
+
+def test_incomplete_download_without_shortage_does_not_write_workflow_state(tmp_path, monkeypatch):
+    collection = _make_collection(
+        tmp_path,
+        [{"name": "夜明け — Dawn Groove", "lyrics": ""}],
+    )
+    _write_audio(collection, "01a-Dawn Groove.mp3")
+    _write_audio(collection, "01b-Dawn Groove.mp3")
+    monkeypatch.setattr(suno_track_selection, "probe_duration", lambda _: 120.0)
+
+    suno_track_selection.select_suno_tracks(collection, _cfg(), allow_incomplete_download=True)
+
+    assert not (collection / "workflow-state.json").exists()
+
+
 def test_invalid_audio_filename_fails_loud(tmp_path, monkeypatch):
     collection = _make_collection(
         tmp_path,
