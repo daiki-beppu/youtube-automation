@@ -6,7 +6,7 @@ import json
 import math
 import re
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
@@ -15,6 +15,7 @@ import yaml
 from youtube_automation.core.errors import ConfigError
 from youtube_automation.domains.suno.config import check_suno_genre_line_char_limit
 from youtube_automation.domains.suno.downloaded.models import (
+    DEFAULT_FULL_STYLE_CHAR_LIMIT,
     DOCUMENTATION_DIRNAME,
     SUNO_LYRICS_JSON_FILENAME,
     SUNO_PATTERNS_FILENAME,
@@ -251,6 +252,7 @@ class ArtifactEntries:
     names: list[str]
     lyrics_by_name: dict[str, str]
     lyrics_entries: list[ArtifactLyrics]
+    styles_by_name: dict[str, str] = field(default_factory=dict)
 
 
 def load_pattern_contract(
@@ -445,6 +447,7 @@ def _collect_artifact_entries(
     names: list[str] = []
     lyrics_by_name: dict[str, str] = {}
     lyrics_entries: list[ArtifactLyrics] = []
+    styles_by_name: dict[str, str] = {}
     issues: list[str] = []
     for index, item in enumerate(raw, 1):
         if not isinstance(item, Mapping):
@@ -454,9 +457,15 @@ def _collect_artifact_entries(
         names.extend(entry.names)
         lyrics_by_name.update(entry.lyrics_by_name)
         lyrics_entries.extend(entry.lyrics_entries)
+        styles_by_name.update(entry.styles_by_name)
         issues.extend(entry_issues)
 
-    return ArtifactEntries(names=names, lyrics_by_name=lyrics_by_name, lyrics_entries=lyrics_entries), issues
+    return ArtifactEntries(
+        names=names,
+        lyrics_by_name=lyrics_by_name,
+        lyrics_entries=lyrics_entries,
+        styles_by_name=styles_by_name,
+    ), issues
 
 
 def _prompt_entries_from_json_list(raw: list[object]) -> tuple[ArtifactEntries, list[str]]:
@@ -496,19 +505,25 @@ def _named_lyrics_entry(
     issue = surrounding_whitespace_issue(source_name=source_name, field_path=f"entry {index}.name", value=name)
     if issue is not None:
         issues.append(issue)
+    styles_by_name: dict[str, str] = {}
     if require_style:
         style = item.get("style")
         if not isinstance(style, str) or not style.strip():
             issues.append(f"{source_name} entry '{name}' style must be a non-empty string")
+        else:
+            styles_by_name[name] = style
     lyrics = item.get("lyrics")
     if not isinstance(lyrics, str):
         issues.append(f"{source_name} entry '{name}' lyrics must be a string")
-        return ArtifactEntries(names=[name], lyrics_by_name={}, lyrics_entries=[]), issues
+        return ArtifactEntries(
+            names=[name], lyrics_by_name={}, lyrics_entries=[], styles_by_name=styles_by_name
+        ), issues
     lyrics = lyrics.rstrip() if trim_lyrics else lyrics
     return ArtifactEntries(
         names=[name],
         lyrics_by_name={name: lyrics},
         lyrics_entries=[ArtifactLyrics(name=name, lyrics=lyrics)],
+        styles_by_name=styles_by_name,
     ), issues
 
 
@@ -548,7 +563,7 @@ def verify_suno_collection(
     if expected_name_issue is not None:
         issues = [*issues, expected_name_issue]
 
-    prompts, prompt_issues = _validate_prompts(prompts_path, contract)
+    prompts, prompt_issues = _validate_prompts(prompts_path, contract, suno_cfg)
     issues = [*issues, *prompt_issues]
     if contract.mode == "vocal":
         vocal_issues, summary = _verify_vocal_artifacts(lyrics_path, contract, prompts)
@@ -601,7 +616,9 @@ def _style_char_limit_issues(suno_cfg: SunoConfig, genre_line: str, source: str)
     return [issue.replace("config/skills/music.yaml::prompt.genre_line", source)]
 
 
-def _validate_prompts(prompts_path: Path, contract: PatternContract) -> tuple[ArtifactEntries, list[str]]:
+def _validate_prompts(
+    prompts_path: Path, contract: PatternContract, suno_cfg: SunoConfig
+) -> tuple[ArtifactEntries, list[str]]:
     prompts_exist = prompts_path.exists()
     if not prompts_exist and contract.mode == "vocal":
         return ArtifactEntries(names=contract.expected_names, lyrics_by_name={}, lyrics_entries=[]), []
@@ -615,8 +632,61 @@ def _validate_prompts(prompts_path: Path, contract: PatternContract) -> tuple[Ar
             actual_names=set(prompts.names),
         ),
         *_prompt_count_issues(contract, prompts),
+        *_composed_style_issues(prompts, suno_cfg),
     ]
     return prompts, issues
+
+
+def _composed_style_issues(prompts: ArtifactEntries, suno_cfg: SunoConfig) -> list[str]:
+    """合成済み per-entry style の文字数上限と entry 間多様性を検証する (#5224).
+
+    `suno-prompts.json` の `style` フィールドは tempo + genre line + variation
+    descriptor + scene を合成した最終形で、Suno へそのまま渡される。生成後
+    プロンプトに対してここで上限超過と zero-diversity (全 entry 同一 style)
+    を検知する。
+    """
+    issues: list[str] = []
+    full_limit = _full_style_char_limit(suno_cfg)
+    for name, style in prompts.styles_by_name.items():
+        first_line = style.splitlines()[0]
+        issues.extend(
+            _style_char_limit_issues(
+                suno_cfg,
+                first_line,
+                f"{SUNO_PROMPTS_JSON_FILENAME} entry '{name}' style",
+            )
+        )
+        if len(style) > full_limit:
+            issues.append(
+                f"{SUNO_PROMPTS_JSON_FILENAME} entry '{name}' style が "
+                f"full_style_char_limit を超過: {len(style)} / {full_limit}"
+            )
+    issues.extend(_style_diversity_issues(prompts.styles_by_name))
+    return issues
+
+
+def _full_style_char_limit(suno_cfg: SunoConfig) -> int:
+    limit = suno_cfg.raw.get("full_style_char_limit")
+    if isinstance(limit, bool) or not isinstance(limit, int) or limit <= 0:
+        return DEFAULT_FULL_STYLE_CHAR_LIMIT
+    return limit
+
+
+def _style_diversity_issues(styles_by_name: Mapping[str, str]) -> list[str]:
+    issues: list[str] = []
+    styles = list(styles_by_name.items())
+    for index, (left_name, left_style) in enumerate(styles):
+        for right_name, right_style in styles[index + 1 :]:
+            if _style_distance(left_style, right_style) == 0:
+                issues.append(
+                    f"{SUNO_PROMPTS_JSON_FILENAME} entries '{left_name}' and "
+                    f"'{right_name}' have identical style (hamming distance 0)"
+                )
+    return issues
+
+
+def _style_distance(left: str, right: str) -> int:
+    return sum(a != b for a, b in zip(left, right, strict=False)) + abs(len(left) - len(right))
 
 
 def _verify_vocal_artifacts(

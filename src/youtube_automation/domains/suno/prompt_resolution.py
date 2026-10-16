@@ -17,6 +17,7 @@ from youtube_automation.core.errors import ConfigError, WorkflowStateError
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.suno.config import ResolvedSunoConfig, infer_suno_mode, resolve_suno_config
 from youtube_automation.domains.suno.downloaded.models import (
+    DEFAULT_FULL_STYLE_CHAR_LIMIT,
     DOCUMENTATION_DIRNAME,
     SUNO_LYRICS_JSON_FILENAME,
     SUNO_PATTERNS_FILENAME,
@@ -31,8 +32,6 @@ from youtube_automation.domains.suno.downloaded.validation import (
     require_vocal_track_count,
 )
 from youtube_automation.domains.suno.lyrics import load_suno_lyrics_by_name
-
-DEFAULT_FULL_STYLE_CHAR_LIMIT = 256
 
 _DURATION_SEC_KEY = "duration_sec"
 _ADVANCED_JSON_KEYS = ("style_influence", "weirdness", "exclude_styles", "vocal_gender", _DURATION_SEC_KEY)

@@ -101,6 +101,70 @@ def test_duplicate_prompt_entry_names_are_reported(channel_dir, tmp_path, monkey
     assert duplicate_name in output
 
 
+def _write_prompts_with_styles(docs: Path, styles: list[str]) -> list[str]:
+    names = prompt_names(mode="instrumental", scenes_count=len(styles))
+    entries = [
+        {"name": name, "style": style, "lyrics": "[Instrumental]\n"} for name, style in zip(names, styles, strict=True)
+    ]
+    (docs / "suno-prompts.json").write_text(json.dumps(entries, ensure_ascii=False, indent=2), encoding="utf-8")
+    return names
+
+
+def test_composed_style_first_line_over_style_char_limit_fails(channel_dir, tmp_path, monkeypatch, capsys):
+    """REQ-5224: 合成 style の 1 行目が style_char_limit を超過したら exit 1."""
+    write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    collection = tmp_path / "collection"
+    docs = docs_dir(collection)
+    write_patterns(docs, mode="instrumental", scenes=["scene one", "scene two"], tracks=4)
+    names = _write_prompts_with_styles(
+        docs,
+        ["a" * 130 + "\nscene one", "slow, lo-fi jazz,\nscene two"],
+    )
+
+    code = run_verify(monkeypatch, collection)
+    output = capsys.readouterr().out
+
+    assert code == 1
+    assert names[0] in output
+    assert "Suno Style 欄の文字数上限を超過" in output
+
+
+def test_composed_style_over_full_style_char_limit_fails(channel_dir, tmp_path, monkeypatch, capsys):
+    """REQ-5224: 合成 style 全体が full_style_char_limit を超過したら exit 1."""
+    write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    collection = tmp_path / "collection"
+    docs = docs_dir(collection)
+    write_patterns(docs, mode="instrumental", scenes=["scene one", "scene two"], tracks=4)
+    _write_prompts_with_styles(
+        docs,
+        ["slow, lo-fi jazz,\n" + "b" * 260, "slow, lo-fi jazz,\nscene two"],
+    )
+
+    code = run_verify(monkeypatch, collection)
+    output = capsys.readouterr().out
+
+    assert code == 1
+    assert "full_style_char_limit" in output
+
+
+def test_identical_composed_styles_fail_diversity(channel_dir, tmp_path, monkeypatch, capsys):
+    """REQ-5224: entry 間の最小 hamming distance が 0 (同一 style) なら exit 1."""
+    write_suno_override(channel_dir, genre_line="lo-fi jazz")
+    collection = tmp_path / "collection"
+    docs = docs_dir(collection)
+    write_patterns(docs, mode="instrumental", scenes=["scene one", "scene two"], tracks=4)
+    _write_prompts_with_styles(
+        docs,
+        ["slow, lo-fi jazz,\nsame scene", "slow, lo-fi jazz,\nsame scene"],
+    )
+
+    code = run_verify(monkeypatch, collection)
+    output = capsys.readouterr().out
+
+    assert code == 1
+    assert "hamming distance 0" in output
+
+
 def test_vocal_valid_collection_reports_prompt_entries_and_expected_entries(
     channel_dir,
     tmp_path,
