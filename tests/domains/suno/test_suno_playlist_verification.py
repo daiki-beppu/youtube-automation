@@ -263,6 +263,25 @@ def test_load_entry_names_fails_on_missing_name(tmp_path):
         load_entry_names(tmp_path)
 
 
+@pytest.mark.parametrize(
+    ("entry", "message"),
+    [
+        ({"title": "Song A"}, "suno-prompts.json: entry 1.name must be a non-empty string"),
+        ({"name": "Song A", "title": ["Song A"]}, "suno-prompts.json: entry 1.title must be a string"),
+    ],
+)
+def test_load_entry_names_reports_entry_identity_errors_like_selection(tmp_path, monkeypatch, entry, message):
+    """Given schema 検証を通らない entry が reader から返る
+    When load_entry_names する
+    Then 選曲と同じ suno-prompts.json entry 規則の文言で停止する。
+    """
+    monkeypatch.setattr("youtube_automation.domains.suno.playlist.read_suno_prompt_entries", lambda _: [entry])
+    with pytest.raises(ValidationError) as exc_info:
+        load_entry_names(tmp_path)
+
+    assert str(exc_info.value) == message
+
+
 def _write_prompts_json(collection_dir, names=ENTRIES):
     doc = collection_dir / "20-documentation"
     doc.mkdir()

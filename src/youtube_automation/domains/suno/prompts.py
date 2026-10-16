@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from youtube_automation.core.errors import DocumentRenderError, DocumentValidationError
+from youtube_automation.core.errors import DocumentRenderError, DocumentValidationError, ValidationError
 from youtube_automation.domains.documents.published import read_published_json_document
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
 
@@ -32,6 +32,19 @@ def normalize_suno_prompt_entries(data: Any) -> list[Any]:
     if isinstance(data, dict) and isinstance(data.get("entries"), list):
         return data["entries"]
     raise ValueError(f"invalid {SUNO_PROMPTS_JSON_FILENAME}: root must be a list or object with entries")
+
+
+def validate_suno_prompt_entry_identity(index: int, entry: object) -> tuple[str, str | None]:
+    """suno-prompts.json entry の name / title 規則を検査し、(name, title) を返す。"""
+    if not isinstance(entry, Mapping):
+        raise ValidationError(f"{SUNO_PROMPTS_JSON_FILENAME}: entry {index} must be an object")
+    name = entry.get("name")
+    title = entry.get("title")
+    if not isinstance(name, str) or not name.strip():
+        raise ValidationError(f"{SUNO_PROMPTS_JSON_FILENAME}: entry {index}.name must be a non-empty string")
+    if title is not None and not isinstance(title, str):
+        raise ValidationError(f"{SUNO_PROMPTS_JSON_FILENAME}: entry {index}.title must be a string")
+    return name, title
 
 
 def read_suno_prompt_entries(collection_dir: Path) -> list[Any]:
