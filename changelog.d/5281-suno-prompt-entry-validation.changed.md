@@ -1,0 +1,1 @@
+- `suno-prompts.json` entry の name / title 検証を `domains/suno/prompts.py` の共通 helper に集約し、選曲（`yt-suno-select-tracks`）と playlist 突合（`yt-suno-verify-playlist`）が同じ規則で検査するようにした。CLI 引数・出力形式・終了コード・公開 import パスは変えていない。

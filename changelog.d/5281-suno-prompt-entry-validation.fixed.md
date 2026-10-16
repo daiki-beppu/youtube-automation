@@ -1,0 +1,1 @@
+- playlist 突合が不正な `suno-prompts.json` entry を報告するときのエラー文言を、選曲と同じ `suno-prompts.json: entry N.name must be a non-empty string` / `suno-prompts.json: entry N.title must be a string` 形式に揃えた（旧文言は `entry N has no name` / `entry N title must be a string`）。検査順も name → title に揃えた。

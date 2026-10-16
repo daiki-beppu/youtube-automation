@@ -18,7 +18,7 @@ from typing import Iterable, Iterator, Mapping
 from youtube_automation.core.display import format_terminal_text
 from youtube_automation.core.errors import ValidationError
 from youtube_automation.domains.suno.name_matching import normalize_suno_name_for_lookup
-from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
+from youtube_automation.domains.suno.prompts import read_suno_prompt_entries, validate_suno_prompt_entry_identity
 
 _MAX_DISPLAY_TEXT_LEN = 200
 
@@ -61,14 +61,7 @@ def iter_entry_titles(collection_dir: Path) -> Iterator[tuple[str, str]]:
     except (OSError, ValueError) as exc:
         raise ValidationError(str(exc)) from exc
     for i, entry in enumerate(entries, 1):
-        if not isinstance(entry, Mapping):
-            raise ValidationError(f"suno-prompts.json: entry {i} must be an object")
-        name = entry.get("name")
-        title = entry.get("title")
-        if title is not None and not isinstance(title, str):
-            raise ValidationError(f"suno-prompts.json: entry {i} title must be a string")
-        if not isinstance(name, str) or not name.strip():
-            raise ValidationError(f"suno-prompts.json: entry {i} has no name")
+        name, title = validate_suno_prompt_entry_identity(i, entry)
         song_title = title if title is not None and title.strip() else name
         yield name, song_title
     if not entries:

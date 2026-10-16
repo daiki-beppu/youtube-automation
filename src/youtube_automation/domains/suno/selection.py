@@ -31,7 +31,7 @@ from youtube_automation.domains.suno.name_matching import (
     suno_name_lookup_candidates,
     suno_prompt_lookup_candidates,
 )
-from youtube_automation.domains.suno.prompts import read_suno_prompt_entries
+from youtube_automation.domains.suno.prompts import read_suno_prompt_entries, validate_suno_prompt_entry_identity
 
 DOCUMENTATION_DIRNAME = "20-documentation"
 SUNO_PROMPTS_JSON_FILENAME = "suno-prompts.json"
@@ -319,14 +319,7 @@ def load_prompts(collection_dir: Path) -> list[PromptEntry]:
         raise ValidationError(str(exc)) from exc
     prompts: list[PromptEntry] = []
     for i, entry in enumerate(data, 1):
-        if not isinstance(entry, Mapping):
-            raise ValidationError(f"{SUNO_PROMPTS_JSON_FILENAME}: entry {i} must be an object")
-        name = entry.get("name")
-        title = entry.get("title")
-        if not isinstance(name, str) or not name.strip():
-            raise ValidationError(f"{SUNO_PROMPTS_JSON_FILENAME}: entry {i}.name must be a non-empty string")
-        if title is not None and not isinstance(title, str):
-            raise ValidationError(f"{SUNO_PROMPTS_JSON_FILENAME}: entry {i}.title must be a string")
+        name, title = validate_suno_prompt_entry_identity(i, entry)
         options = entry.get("options")
         instrumental = isinstance(options, Mapping) and options.get("instrumental") is True
         prompts.append(
