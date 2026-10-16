@@ -103,6 +103,7 @@ function getOrCreateClipList(): HTMLElement {
  *       "href": a[href="/song/<id>"] リンク（旧 DOM 互換）
  *       "data-song-id" / "data-clip-id": data 属性（旧 DOM 互換）
  */
+// fallow-ignore-next-line complexity
 function addClipRow(
   opts: {
     selectLabel?: string;
@@ -2101,6 +2102,134 @@ describe("scrollAndMultiSelectByIds: 仮想スクロール対応の clip multi-s
       renderWaitMs: 10,
     });
     const expectation = expect(pending).rejects.toThrow(new RegExp(missingId));
+    await vi.runAllTimersAsync();
+    await expectation;
+  });
+});
+
+// ---------------------------------------------------------------------------
+// scrollAndMultiSelectByIds (#5220): ページネーション / 検索 fallback / actionable error
+// ---------------------------------------------------------------------------
+
+describe("scrollAndMultiSelectByIds: ページネーションと検索 fallback (#5220)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** scrollHeight == clientHeight の「現在ページ末尾まで到達済み」scroller にする。 */
+  function stubSinglePageScroller(scroller: HTMLElement): void {
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      get: () => 200,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      get: () => 200,
+    });
+    let st = 0;
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      get: () => st,
+      set: (v: number) => {
+        st = v;
+      },
+    });
+  }
+
+  it("Given target が 2 ページ目にある When 走査 Then Next page click で次ページを走査して選択する", async () => {
+    const otherId = "11111111-aaaa-bbbb-cccc-dddddddddddd";
+    const targetId = "22222222-aaaa-bbbb-cccc-dddddddddddd";
+    addClipRow({ songId: otherId, idSource: "image" });
+    const scroller = getOrCreateScroller();
+    stubSinglePageScroller(scroller);
+
+    const nextBtn = document.createElement("button");
+    nextBtn.setAttribute("aria-label", "Next page");
+    document.body.appendChild(nextBtn);
+    markBbox(nextBtn, 60, 24);
+    nextBtn.addEventListener("click", () => {
+      // 2 ページ目の描画を模擬: target row を挿入し最終ページとして Next を無効化
+      const r = addClipRow({ songId: targetId, idSource: "image" });
+      selectOnClick(r.btn);
+      nextBtn.disabled = true;
+    });
+
+    const pending = scrollAndMultiSelectByIds([targetId], {
+      isAborted: () => false,
+      renderWaitMs: 10,
+      hydrationWaitMs: 100,
+    });
+    await vi.runAllTimersAsync();
+
+    expect(await pending).toBe(1);
+  });
+
+  it("Given 走査で見つからない clip と Search songs 入力欄 When scrollAndMultiSelectByIds Then 検索で描画させて選択する", async () => {
+    const otherId = "33333333-aaaa-bbbb-cccc-dddddddddddd";
+    const targetId = "44444444-aaaa-bbbb-cccc-dddddddddddd";
+    addClipRow({ songId: otherId, idSource: "image" });
+    const scroller = getOrCreateScroller();
+    stubSinglePageScroller(scroller);
+
+    const search = document.createElement("input");
+    search.placeholder = "Search songs…";
+    document.body.appendChild(search);
+    markBbox(search, 200, 24);
+    search.addEventListener("input", () => {
+      // Suno の検索絞り込みを模擬: タイトル一致する row が描画される
+      if (
+        search.value === "Hidden Tune" &&
+        !document.querySelector(`img[src*="${targetId}"]`)
+      ) {
+        const r = addClipRow({ songId: targetId, idSource: "image" });
+        appendTitle(r.row, "Hidden Tune");
+        selectOnClick(r.btn);
+      }
+    });
+
+    const pending = scrollAndMultiSelectByIds([targetId], {
+      isAborted: () => false,
+      titleFallbackMap: new Map([[targetId, "Hidden Tune"]]),
+      renderWaitMs: 10,
+      hydrationWaitMs: 100,
+    });
+    await vi.runAllTimersAsync();
+
+    expect(await pending).toBe(1);
+    // 検索欄は最後にクリアされる
+    expect(search.value).toBe("");
+  });
+
+  it("Given clip row が 1 件も無い playlist ページ When 走査 Then 検出状況と復帰手順を含むエラーで throw する", async () => {
+    // scroller も選択ボタンも存在しない状態（playlist ページ相当）
+    await expect(
+      scrollAndMultiSelectByIds(["55555555-aaaa-bbbb-cccc-dddddddddddd"], {
+        isAborted: () => false,
+      })
+    ).rejects.toThrow(
+      /clip row が見つかりません（clip list scroller: なし, select button: 0 件）.*対象曲だけの一覧/
+    );
+  });
+
+  it("Given 走査・検索でも見つからない When scrollAndMultiSelectByIds Then 復帰手順を含むエラーで throw する", async () => {
+    const otherId = "66666666-aaaa-bbbb-cccc-dddddddddddd";
+    const missingId = "77777777-aaaa-bbbb-cccc-dddddddddddd";
+    addClipRow({ songId: otherId, idSource: "image" });
+    const scroller = getOrCreateScroller();
+    stubSinglePageScroller(scroller);
+
+    const pending = scrollAndMultiSelectByIds([missingId], {
+      isAborted: () => false,
+      renderWaitMs: 10,
+      hydrationWaitMs: 100,
+    });
+    const expectation = expect(pending).rejects.toThrow(
+      /missing clip ID: 77777777.*対象曲だけの一覧/
+    );
     await vi.runAllTimersAsync();
     await expectation;
   });

@@ -108,6 +108,7 @@ async function readJson(url: string): Promise<unknown> {
   return resp.json();
 }
 
+// fallow-ignore-next-line complexity
 function defaultSendMessage(
   message: string,
   payload?: Record<string, string>
@@ -2736,6 +2737,95 @@ describe("Suno popup compatibility check", () => {
       submittedClipIds: ["clip-a", "clip-b"],
       expectedClipCount: 2,
     });
+    await act(async () => {
+      downloadResponse.resolve({ ok: true });
+    });
+    await waitFor(() => {
+      expect(container.textContent).toContain(
+        "ダウンロードを再実行しています…"
+      );
+    });
+  });
+
+  it("ダウンロードのみ実行は永続化済み clip ID があれば再採用せず retryDownload へ直行する (#5220)", async () => {
+    const entries = [{ name: "p1", style: "lofi", lyrics: "" }];
+    // ページ再読み込み後の状態を模擬: resume state に採用済み clip ID が残っている
+    act(() => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    resumeStateMocks.readResumeState.mockResolvedValue({
+      collectionId: "20260601-clm-theme-a-collection",
+      failedIndex: 1,
+      total: 1,
+      timestamp: Date.now(),
+      submittedClipIds: ["clip-a", "clip-b"],
+    } as never);
+    const downloadResponse = deferred<unknown>();
+    fetchMock
+      .mockReset()
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          version: "5.5.7",
+          min_extension_version: MANIFEST_VERSION,
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+            expected_file_count: 2,
+          },
+        ])
+      )
+      .mockResolvedValueOnce(jsonResponse(200, entries));
+    messagingMocks.sendMessage.mockImplementation(
+      (message: string, payload?: Record<string, string>) => {
+        if (message === "queryProgress") {
+          throw new Error("runner unavailable");
+        }
+        if (message === "retryDownload") {
+          return downloadResponse.promise;
+        }
+        return defaultSendMessage(message, payload);
+      }
+    );
+
+    await act(async () => {
+      root.render(createElement(App));
+    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
+    await waitFor(() => {
+      expect(container.textContent).toContain("1 パターンを取得しました。");
+    });
+
+    const downloadToggle = expectControl(container, "download-enabled");
+    await act(async () => downloadToggle.click());
+    await waitFor(() => {
+      expect(downloadToggle.getAttribute("aria-checked")).toBe("false");
+      expectControl(container, "download-only");
+    });
+
+    await act(async () => {
+      buttonByText(container, "ダウンロードのみ実行").click();
+    });
+
+    await waitFor(() => {
+      expect(messagingMocks.sendMessage).toHaveBeenCalledWith("retryDownload", {
+        collectionId: "20260601-clm-theme-a-collection",
+        submittedClipIds: ["clip-a", "clip-b"],
+        expectedClipCount: 2,
+      });
+    });
+    // reload 後も採用状態は storage から復元されるため再採用（再走査）しない
+    expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith(
+      "adoptSelectedClips",
+      expect.anything()
+    );
     await act(async () => {
       downloadResponse.resolve({ ok: true });
     });

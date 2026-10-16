@@ -33,6 +33,15 @@ export const SUNO_LABELS = {
   durationCustom: ["Custom", "カスタム"],
   // create:createForm.generationInProgress（queue 上限 toast の見出し）
   generationInProgress: ["Generation in progress", "生成中"],
+  // 候補: clip browser の検索ボックス placeholder（songsAndPlaylists 系、キー未確定）
+  librarySearchPlaceholder: [
+    "Search songs…",
+    "Search songs",
+    "曲を検索…",
+    "曲を検索",
+  ],
+  // 候補: clip browser ページネーションの次ページボタン（aria-label / ボタン文言）
+  clipListNextPage: ["Next page", "次のページ", "次へ"],
 
   // ===== Studio (suno.com/studio)。確定済みキーは各行の正本コメント参照 (#5209)。 =====
   // studioTransport.projectMenu
