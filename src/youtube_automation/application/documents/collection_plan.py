@@ -206,15 +206,20 @@ def _preview_paths(json_path: Path, document: object) -> tuple[tuple[str, Path],
         for value in candidate["preview_assets"]:
             if not isinstance(value, str):
                 raise DocumentMigrationError("preview asset referenceはstringで指定してください")
-            relative = Path(value)
-            if relative.is_absolute() or ".." in relative.parts:
-                raise DocumentMigrationError(f"preview asset pathがcollection外です: {value}")
-            unresolved = collection_root / relative
-            preview = unresolved.resolve()
-            if unresolved.is_symlink() or not preview.is_relative_to(collection_root) or not preview.is_file():
-                raise DocumentMigrationError(f"preview assetを安全に解決できません: {value}")
-            result.append((value, preview))
+            result.append((value, resolve_preview_asset(collection_root, value)))
     return tuple(result)
+
+
+def resolve_preview_asset(collection_root: Path, reference: str) -> Path:
+    """Resolve one preview asset reference to a regular file inside the resolved collection root."""
+    relative = Path(reference)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise DocumentMigrationError(f"preview asset pathがcollection外です: {reference}")
+    unresolved = collection_root / relative
+    preview = unresolved.resolve()
+    if unresolved.is_symlink() or not preview.is_relative_to(collection_root) or not preview.is_file():
+        raise DocumentMigrationError(f"preview assetを安全に解決できません: {reference}")
+    return preview
 
 
 def _sha256_file(path: Path) -> str:
