@@ -148,6 +148,8 @@ agent が優先して使う DOM signal:
 | `[data-suno-control="run"]` / `[data-suno-control="stop"]` | 連続実行 / 停止 |
 | `[data-suno-control="resume"]` / `[data-suno-control="dismiss-resume"]` | 前回中断 resume バナーの再開 / 閉じる |
 | `[data-suno-control="adopt-selected-clips"]` | Suno 上の選択中 clip を採用 |
+| `[data-suno-control="download-enabled"]` | 連続実行時のダウンロード Switch（既定 ON） |
+| `[data-suno-control="download-only"]` | ダウンロードのみ実行。Switch が OFF でも実行可能 |
 | `[data-suno-control="retry-playlist"]` / `[data-suno-control="retry-download"]` | playlist / download phase から再開 |
 
 ### Step 3. 実行対象を決める

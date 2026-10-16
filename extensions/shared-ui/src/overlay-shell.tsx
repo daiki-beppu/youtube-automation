@@ -96,6 +96,10 @@ export function OverlayShell({
         zIndex: 2_147_483_647,
         // shadow host / コンテナが pointer-events: none でも panel 側は event を受ける (#5227)。
         pointerEvents: "auto",
+        // 下端が viewport 外へ出ると実行ボタン等に届かなくなるため、
+        // panel 高さを viewport 内に制限し内部スクロールする (#5232)。
+        maxHeight: "calc(100vh - 16px)",
+        overflowY: "auto",
         ...overlayHiddenStyle(controller.hidden),
       }}
     >
