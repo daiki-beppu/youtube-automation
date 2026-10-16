@@ -112,7 +112,7 @@ YouTube の第三者チャンネル由来データ（description、keywords、lo
 | Suno `exclude_styles`（排除する音楽要素）| | `config/skills/music.yaml::prompt.exclude_styles` |
 | TTP 対象サムネ（manual note、または `/channel-research --benchmark` 実行済みなら competitor 名 + 代表 video_id ×3）| | `config/skills/thumbnail.yaml::image_generation.gemini.reference_images.default` |
 | ブランド背景色 | | `config/skills/thumbnail.yaml::image_generation.gemini.brand_background` |
-| サムネ構図ルール（キャラサイズ / NG ポーズ 等）| | `config/skills/thumbnail.yaml::image_generation.gemini.composition_rules.*` |
+| サムネ構図ルール（キャラサイズ / NG ポーズ 等。数値閾値は TTP 参照サムネの実測から導出する）| | `config/skills/thumbnail.yaml::image_generation.gemini.composition_rules.*` |
 | テーマ → アクティビティ・シーン対応表 | | `config/channel/content.json::title.theme_scenes` |
 | 動画の長さ（分・固定 / 範囲）| | `config/channel/audio.json::audio.target_duration_min` / `target_duration_max` |
 | 1 コレクションあたりの楽曲数（track 戦略）| | `config/skills/collection-ideate.yaml`（または masterup 側）|

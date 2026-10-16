@@ -1,0 +1,1 @@
+- `composition_rules` の数値閾値（被写体帯・`size_hierarchy` 幅比）を参照サムネの実測から導出するよう生成ガイダンスを訂正した (#5234)。`config-generation-rules.md`・`config-template/skills/thumbnail.yaml`・`channel_init` scaffold・`direction.md` に、未計測時の較正済み目安（帯下端 65-80%・影分 +5%・幅比 3.5-5x）と出典（productivityonyt 実測 73.9/79.0/92.5%・3.73/4.42）を記載し、ベンチ自身が不合格になる閾値の再転記を防ぐ
