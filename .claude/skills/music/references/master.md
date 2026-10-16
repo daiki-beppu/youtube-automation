@@ -197,7 +197,7 @@ print(f'pattern_count={pattern_count} expected={expected} actual={actual}')
 
 > **Step 5 前の共通ゲート**: `02-Individual-music/` に音源がある場合も、Step 5 に進む前にこの突合を必ず完了させる。
 
-primary path では `02-Individual-music/` のローカルファイル名を第一手段とし、下記 CLI を実行する。`--music-dir` の相対パスは `<collection-path>` 基準で解決する。外部の title list 解決や対話確認は行わない。非正準形ファイル（Suno UI 手動 DL 由来の `Title.mp3` / `Title (1).mp3` / `Title_1.mp3` 等）は CLI が suno-prompts.json と照合して正準形 `NN{a|b}-Title.ext` へ自動リネームしてから突合する。照合できないファイルはリネームされず unknown として報告される。本ゲートは Suno URL を参照せず、ローカル音源と正準 prompt だけで完走する。音声ファイルが 1 件も無い場合は `/music --generate` の download 再開を案内して停止する。
+primary path では `02-Individual-music/` のローカルファイル名を第一手段とし、下記 CLI を実行する。`<collection-path>` はコレクション名だけでも指定でき、その場合は `collections/planning/` → `collections/live/` の順で解決する。`--music-dir` の相対パスは `<collection-path>` 基準で解決する。外部の title list 解決や対話確認は行わない。非正準形ファイル（Suno UI 手動 DL 由来の `Title.mp3` / `Title (1).mp3` / `Title_1.mp3` 等）は CLI が suno-prompts.json と照合して正準形 `NN{a|b}-Title.ext` へ自動リネームしてから突合する。照合できないファイルはリネームされず unknown として報告される。本ゲートは Suno URL を参照せず、ローカル音源と正準 prompt だけで完走する。音声ファイルが 1 件も無い場合は `/music --generate` の download 再開を案内して停止する。
 
 ```bash
 # primary path: 02-Individual-music/ の <2桁以上のentry index>{a|b}-<title>.<ext> を直接突合

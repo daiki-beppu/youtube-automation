@@ -1,0 +1,1 @@
+- `fix(masterup)`: `yt-suno-verify-playlist` がコレクション名だけの指定で `expected validated JSON+HTML pair` と失敗していた問題を修正した。bare name は `yt-suno-verify` と同様に `collections/planning/` → `collections/live/` の順で解決し、見つからない名前や存在しないパスは探索先・ディレクトリ不在を示すエラーで fail-fast する（#5226）。

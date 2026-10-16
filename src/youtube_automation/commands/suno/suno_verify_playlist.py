@@ -12,7 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from youtube_automation.commands._shared.arguments import add_optional_collection_argument
-from youtube_automation.core.errors import ValidationError
+from youtube_automation.core.channel_context import channel_dir
+from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.collections.paths import resolve_collection_dir
 from youtube_automation.domains.suno.downloaded.archive import (
     _AUDIO_EXTENSIONS,
@@ -229,6 +230,26 @@ def _read_titles(
     raise ValidationError("playlist 曲名を --titles / --titles-file / --music-dir / stdin のいずれかで渡してください")
 
 
+def _resolve_collection_argument(collection: str | None) -> Path:
+    """resolve_collection_dir の入口に、bare name の collections/{planning,live} 探索を足す."""
+    if collection is None:
+        return resolve_collection_dir(None)
+    explicit = Path(collection)
+    if explicit.is_absolute() or explicit.exists() or "/" in collection or "\\" in collection:
+        resolved = resolve_collection_dir(collection)
+        if not resolved.is_dir():
+            raise ValidationError(f"コレクションディレクトリが見つかりません: {collection}")
+        return resolved
+    collections_root = channel_dir() / "collections"
+    for stage in ("planning", "live"):
+        candidate = collections_root / stage / collection
+        if candidate.is_dir():
+            return candidate.resolve()
+    raise ValidationError(
+        f"コレクション '{collection}' が collections/planning/ にも collections/live/ にも見つかりません"
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -258,7 +279,7 @@ def main() -> int:
     try:
         if args.expected_clips_per_entry < 0:
             raise ValidationError("--expected-clips-per-entry は 0 以上にしてください")
-        collection_dir = resolve_collection_dir(args.collection)
+        collection_dir = _resolve_collection_argument(args.collection)
         if args.music_dir:
             identities = _load_entry_title_identities(collection_dir)
             entry_names = [identity.canonical_title for identity in identities]
@@ -271,7 +292,7 @@ def main() -> int:
             titles,
             expected_clips_per_entry=args.expected_clips_per_entry,
         )
-    except (ValidationError, OSError, json.JSONDecodeError) as exc:
+    except (ConfigError, ValidationError, OSError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 
