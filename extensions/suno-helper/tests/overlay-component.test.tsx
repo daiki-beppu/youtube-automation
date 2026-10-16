@@ -217,6 +217,7 @@ describe("Overlay shell", () => {
     expect(card.style.getPropertyValue("--primary-foreground")).toBe(
       "oklch(0.205 0 0)"
     );
+    expect(card.style.pointerEvents).toBe("auto");
     expect(header.style.pointerEvents).toBe("auto");
     expect(content.style.pointerEvents).toBe("auto");
     expect(content.style.display).toBe("block");
