@@ -17,6 +17,8 @@ import {
   openStudioLibraryAllSongs,
   renameTrack,
   verifyPlacedClipLength,
+  waitForEmptyStudioProject,
+  waitForTrackCount,
 } from "../lib/studio-export";
 
 function visibleButton(label: string, text?: string): HTMLButtonElement {
@@ -927,5 +929,127 @@ describe("配置済み clip の長さ検証 (#5199)", () => {
       false
     );
     document.body.replaceChildren();
+  });
+});
+
+describe("empty project 判定 (#5219)", () => {
+  function appendTrackWithClip(): { track: HTMLElement; clip: HTMLElement } {
+    const track = document.createElement("div");
+    track.dataset.trackId = "track-1";
+    const clip = document.createElement("div");
+    clip.dataset.clipId = "clip-a";
+    track.append(clip);
+    document.body.append(track);
+    return { track, clip };
+  }
+
+  it("Given project 領域が空 When waitForEmptyStudioProject Then 即 resolve する", async () => {
+    await expect(waitForEmptyStudioProject()).resolves.toBeUndefined();
+  });
+
+  it("Given 内容を持つ Untitled Project が残る When waitForEmptyStudioProject Then 観測件数つきで throw する", async () => {
+    vi.useFakeTimers();
+    try {
+      appendTrackWithClip();
+      const pending = waitForEmptyStudioProject();
+      const expectation = expect(pending).rejects.toThrow(
+        /内容を持つ Untitled Project（track 1 件 \/ clip 1 件）/
+      );
+      await vi.runAllTimersAsync();
+      await expectation;
+    } finally {
+      vi.useRealTimers();
+      document.body.replaceChildren();
+    }
+  });
+
+  it("Given 旧 project DOM が遅れて消える When waitForEmptyStudioProject Then 描画を待って resolve する", async () => {
+    vi.useFakeTimers();
+    try {
+      const { track } = appendTrackWithClip();
+      setTimeout(() => track.remove(), 2_000);
+      const pending = waitForEmptyStudioProject();
+      await vi.runAllTimersAsync();
+      await expect(pending).resolves.toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+      document.body.replaceChildren();
+    }
+  });
+});
+
+describe("track 検出 (#5219)", () => {
+  function appendTrack(name = "Track"): HTMLElement {
+    const track = document.createElement("div");
+    track.dataset.trackId = `track-${document.querySelectorAll("[data-track-id]").length + 1}`;
+    const heading = document.createElement("div");
+    heading.setAttribute("role", "button");
+    heading.textContent = name;
+    track.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+    track.append(heading);
+    document.body.append(track);
+    return track;
+  }
+
+  it("Given expected より多い track が mount 済み When waitForTrackCount Then 超過を許容して返す", async () => {
+    appendTrack("A");
+    appendTrack("B");
+    await expect(waitForTrackCount(1)).resolves.toHaveLength(2);
+    document.body.replaceChildren();
+  });
+
+  it("Given 長い待ちを超えて track が mount される When waitForTrackCount Then scroll retry で拾う", async () => {
+    vi.useFakeTimers();
+    try {
+      setTimeout(() => appendTrack("A"), 65_000);
+      const pending = waitForTrackCount(1);
+      await vi.advanceTimersByTimeAsync(70_000);
+      await expect(pending).resolves.toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+      document.body.replaceChildren();
+    }
+  });
+
+  it("Given track が足りないまま When waitForTrackCount Then retry 後も件数つきで throw する", async () => {
+    vi.useFakeTimers();
+    try {
+      appendTrack("A");
+      const pending = waitForTrackCount(2);
+      const expectation = expect(pending).rejects.toThrow(/track 2 件以上/);
+      await vi.runAllTimersAsync();
+      await expectation;
+    } finally {
+      vi.useRealTimers();
+      document.body.replaceChildren();
+    }
+  });
+});
+
+describe("clickStudioButtonUntil の延長待ち (#5219)", () => {
+  it("Given 結果が既定 timeout を超えて出る When timeoutMs 延長指定 Then 待ち続けて結果を返す", async () => {
+    vi.useFakeTimers();
+    try {
+      const button = visibleButton("Rename");
+      document.body.append(button);
+      const input = document.createElement("input");
+      input.getBoundingClientRect = () =>
+        ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+      setTimeout(() => document.body.append(input), 40_000);
+
+      const pending = clickStudioButtonUntil(
+        "Rename",
+        () => document.querySelector<HTMLInputElement>("input"),
+        "Project name 入力",
+        "pointer",
+        60_000
+      );
+      await vi.runAllTimersAsync();
+      await expect(pending).resolves.toBe(input);
+    } finally {
+      vi.useRealTimers();
+      document.body.replaceChildren();
+    }
   });
 });

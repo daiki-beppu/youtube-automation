@@ -2690,6 +2690,57 @@ describe("reported playlist/adoption regressions", () => {
     await vi.advanceTimersByTimeAsync(61000);
     expect(failure).toBeInstanceOf(Error);
     expect(String(failure)).toContain("タイムアウト");
+    expect(String(failure)).toContain("expected 20, scanned 0");
+    vi.clearAllTimers();
+  });
+
+  it("走査 timeout で件数不一致に至った場合、実測/期待件数を error message に載せる (#5219)", async () => {
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      value: 1000000,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    addClipRow({ selectLabel: "Deselect clip", songId: "selected-a" });
+    let failure: unknown;
+    const pending = readSelectedClipIds({
+      isAborted: () => false,
+      expectedClipCount: 60,
+    });
+    void pending.catch((error) => {
+      failure = error;
+    });
+    await vi.advanceTimersByTimeAsync(61000);
+    expect(failure).toBeInstanceOf(Error);
+    expect(String(failure)).toContain("タイムアウト");
+    expect(String(failure)).toContain("expected 60, scanned 1");
+    vi.clearAllTimers();
+  });
+
+  it("playlist 対象 clip の走査 timeout でも検出/対象件数を error message に載せる (#5219)", async () => {
+    const scroller = getOrCreateScroller();
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      value: 1000000,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      value: 200,
+    });
+    addClipRow({ songId: "unselected" });
+    let failure: unknown;
+    const pending = scrollAndMultiSelectByIds(["target-a", "target-b"], {
+      isAborted: () => false,
+    });
+    void pending.catch((error) => {
+      failure = error;
+    });
+    await vi.advanceTimersByTimeAsync(61000);
+    expect(failure).toBeInstanceOf(Error);
+    expect(String(failure)).toContain("対象 2 件中 0 件を検出");
     vi.clearAllTimers();
   });
 
