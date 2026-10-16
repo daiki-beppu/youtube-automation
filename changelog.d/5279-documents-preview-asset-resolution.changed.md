@@ -1,0 +1,1 @@
+- collection plan の preview asset 参照を collection 内の実ファイルへ解決する安全性判定を、digest 計算と review 表示で同じ helper に共通化した（外部仕様・エラーメッセージは不変）

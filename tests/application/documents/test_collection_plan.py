@@ -8,6 +8,7 @@ import pytest
 from youtube_automation.application.documents import migration
 from youtube_automation.application.documents.collection_plan import (
     collection_plan_artifact_digest,
+    collection_plan_candidate_digest,
     finalize_collection_plan_selection,
     write_collection_plan_document,
 )
@@ -285,6 +286,17 @@ def test_preview_symlink_is_rejected_by_digest_boundary(tmp_path: Path) -> None:
 
     with pytest.raises(DocumentMigrationError, match="安全に解決"):
         collection_plan_artifact_digest(target)
+
+
+@pytest.mark.parametrize("reference", ["../outside.png", "/tmp/outside.png"])
+def test_preview_reference_outside_collection_is_rejected_by_digest_boundary(tmp_path: Path, reference: str) -> None:
+    target = tmp_path / "20-documentation/plan_proposals.json"
+    target.parent.mkdir()
+    candidate = _candidate(status="proposed")
+    candidate["preview_assets"] = [reference]
+
+    with pytest.raises(DocumentMigrationError, match=f"preview asset pathがcollection外です: {reference}"):
+        collection_plan_candidate_digest(target, candidate)
 
 
 def test_markdown_decline_preserves_markdown_and_workflow_state(tmp_path: Path) -> None:

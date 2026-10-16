@@ -190,6 +190,47 @@ def test_selection_returns_only_revalidated_candidate_id(tmp_path: Path, monkeyp
     assert result.candidate_id == "candidate-1"
 
 
+@pytest.mark.parametrize(
+    ("reference", "prepare"),
+    [
+        ("../outside.png", lambda collection: (collection.parent / "outside.png").write_bytes(b"outside")),
+        ("10-assets/missing.png", lambda collection: None),
+        (
+            "10-assets/planning-preview.txt",
+            lambda collection: (collection / "10-assets" / "planning-preview.txt").write_bytes(b"text"),
+        ),
+        (
+            "10-assets/linked.png",
+            lambda collection: (collection / "10-assets" / "linked.png").symlink_to(
+                collection / "10-assets" / "real.png"
+            ),
+        ),
+    ],
+)
+def test_plan_media_rejects_unsafe_preview_reference(tmp_path: Path, reference: str, prepare) -> None:
+    collection = _collection(tmp_path)
+    (collection / "10-assets" / "real.png").write_bytes(b"real")
+    prepare(collection)
+    document = {"candidates": [{"plan_id": "plan-a", "preview_assets": [reference]}]}
+
+    with pytest.raises(ReviewError, match=f"collection plan preview assetを安全に表示できません: {reference}"):
+        review._plan_media(collection, document)
+
+
+def test_plan_media_resolves_first_preview_inside_collection(tmp_path: Path) -> None:
+    collection = _collection(tmp_path)
+    preview = collection / "10-assets" / "planning-preview.png"
+    preview.write_bytes(b"preview")
+    document = {
+        "candidates": [
+            {"plan_id": "plan-a", "preview_assets": ["10-assets/planning-preview.png", "../ignored.png"]},
+            {"plan_id": "plan-b", "preview_assets": []},
+        ]
+    }
+
+    assert review._plan_media(collection, document) == (("plan-a", preview.resolve()),)
+
+
 def test_plan_selection_page_compares_structured_fields_and_preview(tmp_path: Path, monkeypatch) -> None:
     collection = _collection(tmp_path)
     _published_plan(collection)

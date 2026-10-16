@@ -11,11 +11,12 @@ from typing import Literal
 from youtube_automation.application.documents.collection_plan import (
     collection_plan_artifact_digest,
     collection_plan_candidate_digest,
+    resolve_preview_asset,
 )
 from youtube_automation.application.documents.music_prompt import music_prompt_artifact_digest
 from youtube_automation.application.review_lifecycle import preview as preview_review
 from youtube_automation.application.review_lifecycle import review as execute_review
-from youtube_automation.core.errors import ReviewError
+from youtube_automation.core.errors import DocumentMigrationError, ReviewError
 from youtube_automation.domains.documents.review import ReviewArtifact, ReviewCandidate, SelectionManifest
 from youtube_automation.domains.documents.review_rendering import render_review_html, validate_review_html
 from youtube_automation.domains.documents.schema_registry import RepositorySchema
@@ -252,18 +253,13 @@ def _plan_media(collection_dir: Path, document: object) -> tuple[tuple[str, Path
         reference = assets[0]
         if not isinstance(reference, str):
             raise ReviewError("collection plan preview assetが不正です")
-        relative = Path(reference)
-        unresolved = root / relative
-        preview = unresolved.resolve()
-        if (
-            relative.is_absolute()
-            or ".." in relative.parts
-            or not preview.is_relative_to(root)
-            or unresolved.is_symlink()
-            or not preview.is_file()
-            or preview.suffix.lower() not in _MEDIA_SUFFIXES["thumbnail"]
-        ):
-            raise ReviewError(f"collection plan preview assetを安全に表示できません: {reference}")
+        unsafe = f"collection plan preview assetを安全に表示できません: {reference}"
+        try:
+            preview = resolve_preview_asset(root, reference)
+        except DocumentMigrationError as exc:
+            raise ReviewError(unsafe) from exc
+        if preview.suffix.lower() not in _MEDIA_SUFFIXES["thumbnail"]:
+            raise ReviewError(unsafe)
         result.append((candidate["plan_id"], preview))
     return tuple(result)
 
