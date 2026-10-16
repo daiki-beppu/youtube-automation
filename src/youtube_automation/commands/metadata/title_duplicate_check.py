@@ -9,7 +9,7 @@ from pathlib import Path
 
 from youtube_automation.configuration import load_config
 from youtube_automation.core.channel_context import channel_dir
-from youtube_automation.core.errors import ConfigError
+from youtube_automation.core.errors import ConfigError, ValidationError
 from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.documents.video_description import read_video_description_metadata
 from youtube_automation.domains.uploads.preflight import check_title_codepoint_limit, check_title_duplicate_warnings
@@ -37,7 +37,12 @@ def collect_live_titles(collections_root: Path, *, exclude_dir: Path | None = No
         desc_path = CollectionPaths(collection).descriptions_json_path
         if not desc_path.exists():
             continue
-        titles.append(str(read_video_description_metadata(desc_path)["title"]))
+        try:
+            titles.append(str(read_video_description_metadata(desc_path)["title"]))
+        except ValidationError as error:
+            # 1件の不整合で live 全件の読み取りを落とさない (#5231)
+            print(f"⚠️  {collection.name}: descriptions pair を読み飛ばしました ({error})")
+            print(f"   → 修復: uv run yt-document-render {desc_path} --schema video-description.schema.json")
     return titles
 
 

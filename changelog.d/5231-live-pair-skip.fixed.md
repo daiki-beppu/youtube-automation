@@ -1,0 +1,2 @@
+- live 全件を走査する descriptions pair の reader（yt-title-duplicate-check の collect_live_titles と upload preflight）が、JSON 直接編集で HTML と不整合になった collection を警告して skip し、残りの collection の処理を継続するようにした（#5231）。
+- 不整合 pair の修復経路として `uv run yt-document-render <descriptions.json> --schema video-description.schema.json`（HTML のみ再発行）を警告文に明示した（#5231）。

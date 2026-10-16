@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -109,6 +110,31 @@ def test_main_excludes_the_current_live_collection_from_duplicate_check(
     assert rc == 0
     assert "title duplicate check OK" in captured.out
     assert "title duplicate warning" not in captured.out
+
+
+def test_collect_live_titles_warns_and_skips_mismatched_pair(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """REQ-5231: JSON を直接編集して HTML と不整合になった pair は警告して skip し、
+    live 全件の読み取りを継続する."""
+    from youtube_automation.commands.metadata.title_duplicate_check import collect_live_titles
+
+    valid = tmp_path / "collections" / "live" / "valid"
+    _write_description_pair(valid, "Rainy Night Focus Mix")
+    broken = tmp_path / "collections" / "live" / "broken"
+    _write_description_pair(broken, "Original Title")
+    source = broken / "20-documentation" / "descriptions.json"
+    document = json.loads(source.read_text(encoding="utf-8"))
+    document["title"] = "Edited Without Html"
+    source.write_text(json.dumps(document), encoding="utf-8")
+
+    titles = collect_live_titles(tmp_path / "collections")
+
+    assert titles == ["Rainy Night Focus Mix"]
+    captured = capsys.readouterr().out
+    assert "broken" in captured
+    assert "yt-document-render" in captured
 
 
 def test_main_accepts_title_at_exactly_100_codepoints(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

@@ -85,7 +85,18 @@ class PreflightChecker:
             desc_path = CollectionPaths(col).descriptions_json_path
             if not path_exists(desc_path):
                 continue
-            metadata = read_video_description_metadata(desc_path)
+            try:
+                metadata = read_video_description_metadata(desc_path)
+            except ValidationError as error:
+                # 1件の不整合で live 全件の読み取りを落とさない (#5231)
+                logger.warning(
+                    "⚠️  %s: descriptions pair を読み飛ばしました (%s)。"
+                    "修復: uv run yt-document-render %s --schema video-description.schema.json",
+                    col.name,
+                    error,
+                    desc_path,
+                )
+                continue
             title = metadata["title"]
             if isinstance(title, str):
                 titles.append(title)
