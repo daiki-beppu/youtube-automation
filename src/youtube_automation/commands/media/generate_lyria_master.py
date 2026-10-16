@@ -372,6 +372,11 @@ def _resolve_target_duration_max() -> int | None:
     return int(cfg_max) if cfg_max is not None else None
 
 
+def _missing_lyria_key_error(key: str) -> ConfigError:
+    """config.default.yaml が必ず持つ skill-config lyria キーの欠落を示す例外を作る。"""
+    return ConfigError(f"skill-config lyria.{key} が未設定です (config.default.yaml が壊れている可能性があります)")
+
+
 def _resolve_padding_min(args_padding: float | None, lyria_cfg: dict) -> float:
     """`--padding-min` > skill-config の優先順位で余裕分を解決する。
 
@@ -382,10 +387,7 @@ def _resolve_padding_min(args_padding: float | None, lyria_cfg: dict) -> float:
         return args_padding
     value = lyria_cfg.get(_KEY_DURATION_PADDING_MIN)
     if value is None:
-        raise ConfigError(
-            f"skill-config lyria.{_KEY_DURATION_PADDING_MIN} が未設定です "
-            "(config.default.yaml が壊れている可能性があります)"
-        )
+        raise _missing_lyria_key_error(_KEY_DURATION_PADDING_MIN)
     return float(value)
 
 
@@ -395,9 +397,7 @@ def _resolve_model(args_model: str | None, lyria_cfg: dict) -> str:
         return args_model
     model = lyria_cfg.get(_KEY_MODEL)
     if not model:
-        raise ConfigError(
-            f"skill-config lyria.{_KEY_MODEL} が未設定です (config.default.yaml が壊れている可能性があります)"
-        )
+        raise _missing_lyria_key_error(_KEY_MODEL)
     return str(model)
 
 
