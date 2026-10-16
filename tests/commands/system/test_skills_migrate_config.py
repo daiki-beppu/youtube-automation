@@ -243,3 +243,25 @@ def test_production_cli_migrates_consolidated_skill_configs_without_orphans(
     assert _read_config(channel_dir, "channel-research")["benchmark"] == sources["benchmark"]
     assert all(not (channel_dir / "config" / "skills" / f"{name}.yaml").exists() for name in sources)
     assert "孤児 skill-config" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("content", ["- not\n- mapping\n", "plain scalar\n"])
+def test_migrate_config_rejects_non_mapping_root_with_loader_message(
+    channel_dir: Path, capsys: pytest.CaptureFixture[str], content: str
+) -> None:
+    source = channel_dir / "config" / "skills" / "suno.yaml"
+    source.write_text(content, encoding="utf-8")
+
+    assert main(["migrate-config", "--channel-dir", str(channel_dir)]) == 1
+
+    assert f"skill-config の root は dict である必要があります: {source}" in capsys.readouterr().err
+    assert source.read_text(encoding="utf-8") == content
+    assert not (channel_dir / "config" / "skills" / "music.yaml").exists()
+
+
+def test_migrate_config_treats_empty_source_as_empty_section(channel_dir: Path) -> None:
+    (channel_dir / "config" / "skills" / "suno.yaml").write_text("", encoding="utf-8")
+
+    assert main(["migrate-config", "--channel-dir", str(channel_dir)]) == 0
+
+    assert _read_config(channel_dir, "music") == {"prompt": {}}

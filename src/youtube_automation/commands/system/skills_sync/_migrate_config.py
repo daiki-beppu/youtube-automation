@@ -17,6 +17,7 @@ from youtube_automation.configuration.skills import (
     SKILL_CONFIG_MIGRATIONS,
     SkillConfigMigration,
     load_skill_config,
+    load_skill_config_yaml,
     skill_config_migration_section_path,
 )
 from youtube_automation.core.errors import ConfigError
@@ -42,18 +43,6 @@ class MigrationPlan:
 
 
 _COMPATIBLE_CONFIG_NAMES: Final[frozenset[str]] = frozenset({"postmortem"})
-
-
-def _load_mapping(path: Path) -> dict[str, object]:
-    try:
-        loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError) as exc:
-        raise ConfigError(f"skill-config 読み込み失敗: {path}: {exc}") from exc
-    if loaded is None:
-        return {}
-    if not isinstance(loaded, dict):
-        raise ConfigError(f"skill-config の root は mapping である必要があります: {path}")
-    return loaded
 
 
 def _dump_mapping(data: Mapping[str, object]) -> str:
@@ -126,9 +115,9 @@ def build_migration_plan(
         if destination == source:
             raise ConfigError(f"移行元と移行先が同じです: {source}")
 
-        source_data = _load_mapping(source)
+        source_data = load_skill_config_yaml(source)
         if destination not in destinations:
-            destinations[destination] = _load_mapping(destination) if destination.is_file() else {}
+            destinations[destination] = load_skill_config_yaml(destination) if destination.is_file() else {}
         section_path = skill_config_migration_section_path(source_name, migration)
         destinations[destination] = _merge_source_into_destination(
             destination,
@@ -159,7 +148,7 @@ def _stage_mapping(destination: Path, data: Mapping[str, object]) -> Path:
             stream.write(_dump_mapping(data))
             stream.flush()
             os.fsync(stream.fileno())
-        if _load_mapping(temporary) != data:
+        if load_skill_config_yaml(temporary) != data:
             raise ConfigError(f"一時ファイルの検証に失敗しました: {temporary}")
     except (ConfigError, OSError):
         temporary.unlink(missing_ok=True)

@@ -3471,7 +3471,7 @@ def test_extract_title_with_slash_uses_zip_member_stem_and_sanitized_output(tmp_
 
 def test_extract_rejects_zip_slip_audio_entry(tmp_path, monkeypatch):
     """ZIP entry 名に .. を含む音声ファイルは tmp_dir 外へ展開しない。"""
-    import youtube_automation.commands.collections.collection_serve as cs
+    import tempfile
 
     coll = _make_collection(
         tmp_path,
@@ -3479,7 +3479,7 @@ def test_extract_rejects_zip_slip_audio_entry(tmp_path, monkeypatch):
         entries=[{"name": "曲A — Song A", "style": "s", "lyrics": ""}],
     )
     extract_root = tmp_path / "extract"
-    monkeypatch.setattr(cs.tempfile, "mkdtemp", lambda prefix, **kwargs: str(extract_root))
+    monkeypatch.setattr(tempfile, "mkdtemp", lambda prefix, **kwargs: str(extract_root))
     zip_path = _make_zip(tmp_path / "zipslip.zip", {"../evil.mp3": b"bad"})
 
     result = extract_and_rename_music(coll, str(zip_path))

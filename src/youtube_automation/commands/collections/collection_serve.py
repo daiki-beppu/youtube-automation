@@ -36,7 +36,6 @@ import select
 import signal
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import urllib.parse
@@ -105,6 +104,7 @@ from youtube_automation.infrastructure.collections.chrome_extensions import (
     resolve_unpacked_extension_origin,
 )
 from youtube_automation.infrastructure.file_lock import file_lock
+from youtube_automation.infrastructure.filesystem import write_file_text_atomically
 from youtube_automation.infrastructure.localserver.app import (
     LocalHTTPServer,
     OriginDecision,
@@ -305,19 +305,6 @@ def _read_distrokid_releases(target: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
-def _atomic_json_write(target: Path, data: dict, *, prefix: str) -> None:
-    """JSON dict を target へ atomic に書く。失敗時は中間 temp を残さない。"""
-    fd, tmp_name = tempfile.mkstemp(dir=str(target.parent), prefix=prefix, suffix=".json")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            json.dump(data, fh, ensure_ascii=False, indent=2)
-        os.replace(tmp_name, target)
-    except BaseException:
-        if os.path.exists(tmp_name):
-            os.unlink(tmp_name)
-        raise
-
-
 def read_released_discs(root: Path) -> set[str]:
     """既存 `<root>/config/distrokid-releases.json` の `<collection_id>/<disc>` キー集合を返す（#934）.
 
@@ -341,7 +328,7 @@ def write_distrokid_release(root: Path, collection_id: str, disc: str, album_tit
     recorded_at = datetime.now().astimezone().isoformat()
     data[key] = {"album_title": album_title, "recorded_at": recorded_at}
 
-    _atomic_json_write(target, data, prefix=".distrokid-releases-")
+    write_file_text_atomically(target, json.dumps(data, ensure_ascii=False, indent=2), mode=0o600)
 
 
 def _read_disc_album_title(collection_dir: Path, disc: str) -> str | None:
