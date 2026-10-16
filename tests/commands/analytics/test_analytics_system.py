@@ -610,8 +610,8 @@ class TestMainDepth:
         assert payload["retention"] == [{"video_id": "VID_1", "average_retention": 0.62}]
         assert payload["playlist_analytics"]["playlists"]["PL_COMPLETE"]["views"] == 300
 
-    def test_full_depth_country_api_error_fails_without_persisting(self, monkeypatch, stub_analytics_boundaries):
-        """full の地域 API 失敗は CLI 成功や不完全 JSON に変換しない。"""
+    def test_full_depth_country_api_error_is_recorded_and_persisted(self, monkeypatch, stub_analytics_boundaries):
+        """full の地域 API 失敗は警告として記録し、取得済み分を保存する。"""
         from youtube_automation.commands.analytics import analytics_system
         from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
 
@@ -625,11 +625,15 @@ class TestMainDepth:
         with pytest.raises(SystemExit) as exit_info:
             analytics_system.main()
 
-        assert exit_info.value.code == 1
-        assert not list((stub_analytics_boundaries / "data").glob("analytics_data_*.json"))
+        assert exit_info.value.code == 0
+        saved_files = list((stub_analytics_boundaries / "data").glob("analytics_data_*.json"))
+        assert len(saved_files) == 1
+        payload = json.loads(saved_files[0].read_text(encoding="utf-8"))
+        assert payload["collection_errors"] == {"地域別分析": "country API failed"}
+        assert payload["retention"] == [{"video_id": "VID_1", "average_retention": 0.62}]
 
-    def test_full_depth_retention_api_error_fails_without_persisting(self, monkeypatch, stub_analytics_boundaries):
-        """full の動画別 retention API 失敗は不完全 JSON を保存しない。"""
+    def test_full_depth_retention_api_error_is_recorded_and_persisted(self, monkeypatch, stub_analytics_boundaries):
+        """full の動画別 retention API 失敗は警告として記録し、取得済み分を保存する。"""
         from youtube_automation.commands.analytics import analytics_system
         from youtube_automation.domains.analytics.service import YouTubeAnalyticsCollector
 
@@ -643,8 +647,11 @@ class TestMainDepth:
         with pytest.raises(SystemExit) as exit_info:
             analytics_system.main()
 
-        assert exit_info.value.code == 1
-        assert not list((stub_analytics_boundaries / "data").glob("analytics_data_*.json"))
+        assert exit_info.value.code == 0
+        saved_files = list((stub_analytics_boundaries / "data").glob("analytics_data_*.json"))
+        assert len(saved_files) == 1
+        payload = json.loads(saved_files[0].read_text(encoding="utf-8"))
+        assert payload["collection_errors"] == {"視聴維持率分析": "retention API failed"}
 
     def test_explicit_standard_depth_persists_standard_data(self, monkeypatch, stub_analytics_boundaries):
         """--depth standard は standard データを保存する。"""

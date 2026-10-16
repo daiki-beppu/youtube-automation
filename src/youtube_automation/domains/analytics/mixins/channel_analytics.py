@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Dict
 
@@ -19,19 +20,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _require_analytics_result(result: dict, context: str) -> dict:
-    """Promote a required report's embedded API failure to the collection boundary."""
-    if "error" in result:
-        raise YouTubeAPIError(f"{context}: {result['error']}")
+def _collect_report(
+    collection_errors: dict[str, str],
+    label: str,
+    collect: Callable[[], object],
+    fallback: object = None,
+) -> object:
+    """Run one report query; record its failure in ``collection_errors`` and keep collecting."""
+    try:
+        result = collect()
+    except YouTubeAPIError as error:
+        logger.warning("%s に失敗したため、この項目をスキップして収集を継続します: %s", label, error)
+        collection_errors[label] = str(error)
+        return fallback
+    if isinstance(result, dict) and result.get("error"):
+        collection_errors[label] = str(result["error"])
+    elif isinstance(result, list):
+        item_errors = [str(item["error"]) for item in result if isinstance(item, dict) and item.get("error")]
+        if item_errors:
+            collection_errors[label] = item_errors[0]
     return result
-
-
-def _require_retention_results(retention: list[dict]) -> list[dict]:
-    """Require every retention result to succeed before publishing the collected data."""
-    retention_errors = [item["error"] for item in retention if "error" in item]
-    if retention_errors:
-        raise YouTubeAPIError(f"視聴維持率分析収集失敗: {retention_errors[0]}")
-    return retention
 
 
 def _daily_row_metrics(row: list) -> Dict:
@@ -145,12 +153,24 @@ class ChannelAnalyticsMixin:
             # サービス初期化
             self.initialize()
 
+            collection_errors: dict[str, str] = {}
+
             # 基本データ収集
             logger.info("チャンネル統計データ収集中...")
-            channel_analytics = self.get_channel_analytics(start_date, end_date)
+            channel_analytics = _collect_report(
+                collection_errors,
+                "チャンネル統計",
+                lambda: self.get_channel_analytics(start_date, end_date),
+                {},
+            )
 
             logger.info("動画別パフォーマンス収集中...")
-            strategic_analytics = self.get_strategic_video_analytics(start_date, end_date, mode="efficient")
+            strategic_analytics = _collect_report(
+                collection_errors,
+                "動画別パフォーマンス",
+                lambda: self.get_strategic_video_analytics(start_date, end_date, mode="efficient"),
+                {"mode": "efficient", "top_videos": [], "recent_videos": [], "summary": {}},
+            )
 
             # 戦略的分析結果から動画データを統合
             video_analytics = strategic_analytics["top_videos"] + strategic_analytics["recent_videos"]
@@ -168,11 +188,16 @@ class ChannelAnalyticsMixin:
                 entry["scheduled_publish_at"] = publish_at_map.get(vid)
 
             logger.info("公開予約動画数を収集中...")
-            scheduled_video_count = self.get_scheduled_video_count()
+            scheduled_video_count = _collect_report(collection_errors, "公開予約動画数", self.get_scheduled_video_count)
 
             # 基本データ構築
             logger.info("収益メトリクス収集中...")
-            revenue_analytics = self.get_revenue_analytics(start_date, end_date)
+            revenue_analytics = _collect_report(
+                collection_errors,
+                "収益メトリクス",
+                lambda: self.get_revenue_analytics(start_date, end_date),
+                {"status": "unavailable", "daily_metrics": [], "by_video": {}, "summary": {}},
+            )
             for video_id, revenue in revenue_analytics["by_video"].items():
                 if video_id in video_data:
                     video_data[video_id].update(revenue)
@@ -194,39 +219,69 @@ class ChannelAnalyticsMixin:
             # standard 以上: impressions/CTR + traffic source + playlist + device + audience
             if depth in ("standard", "full"):
                 logger.info("CTR 詳細分析収集中...")
-                basic_data["ctr_analysis"] = self.get_ctr_analysis(start_date, end_date)
+                basic_data["ctr_analysis"] = _collect_report(
+                    collection_errors,
+                    "CTR詳細分析",
+                    lambda: self.get_ctr_analysis(start_date, end_date),
+                    {},
+                )
 
                 logger.info("トラフィックソース分析収集中...")
-                basic_data["traffic_sources"] = self.get_traffic_source_analytics(start_date, end_date)
+                basic_data["traffic_sources"] = _collect_report(
+                    collection_errors,
+                    "トラフィックソース分析",
+                    lambda: self.get_traffic_source_analytics(start_date, end_date),
+                    {},
+                )
 
                 logger.info("YT_SEARCH 検索語詳細収集中...")
-                basic_data["traffic_sources"]["search_terms"] = self.get_traffic_source_detail(
-                    start_date, end_date, "YT_SEARCH"
+                basic_data["traffic_sources"]["search_terms"] = _collect_report(
+                    collection_errors,
+                    "検索語詳細",
+                    lambda: self.get_traffic_source_detail(start_date, end_date, "YT_SEARCH"),
+                    [],
                 )
 
                 logger.info("プレイリスト別分析収集中...")
-                basic_data["playlist_analytics"] = self.get_playlist_analytics(start_date, end_date)
+                basic_data["playlist_analytics"] = _collect_report(
+                    collection_errors,
+                    "プレイリスト別分析",
+                    lambda: self.get_playlist_analytics(start_date, end_date),
+                    {},
+                )
 
                 logger.info("オーディエンス分析収集中...")
-                subscribed_status = _require_analytics_result(
-                    self.get_subscribed_status_analytics(start_date, end_date), "登録ステータス分析取得失敗"
-                )
                 basic_data["audience"] = {
-                    "by_device": self.get_device_analytics(start_date, end_date),
-                    "by_subscribed_status": subscribed_status,
+                    "by_device": _collect_report(
+                        collection_errors,
+                        "デバイス別分析",
+                        lambda: self.get_device_analytics(start_date, end_date),
+                        {},
+                    ),
+                    "by_subscribed_status": _collect_report(
+                        collection_errors,
+                        "登録ステータス分析",
+                        lambda: self.get_subscribed_status_analytics(start_date, end_date),
+                        {},
+                    ),
                 }
 
             # full: + retention + country
             if depth == "full":
                 logger.info("地域別分析収集中...")
-                by_country = _require_analytics_result(
-                    self.get_country_analytics(start_date, end_date), "地域別分析収集失敗"
+                basic_data["audience"]["by_country"] = _collect_report(
+                    collection_errors,
+                    "地域別分析",
+                    lambda: self.get_country_analytics(start_date, end_date),
+                    {},
                 )
-                basic_data["audience"]["by_country"] = by_country
 
                 logger.info("視聴維持率分析収集中...")
-                basic_data["retention"] = _require_retention_results(
-                    self.get_retention_summary(start_date, end_date, top_n=10)
+                basic_data["retention"] = _collect_report(
+                    collection_errors,
+                    "視聴維持率分析",
+                    lambda: self.get_retention_summary(start_date, end_date, top_n=10),
+                    [],
                 )
 
             # サマリー
@@ -240,6 +295,13 @@ class ChannelAnalyticsMixin:
                 "collection_version": "3.0",
                 "depth": depth,
             }
+
+            if collection_errors:
+                basic_data["collection_errors"] = collection_errors
+                logger.warning(
+                    "一部の収集項目が失敗しました（取得済み分は保存します）: %s",
+                    ", ".join(collection_errors),
+                )
 
             logger.info(f"アナリティクス収集完了 (depth={depth})")
             return basic_data

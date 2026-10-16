@@ -73,7 +73,10 @@ class _AnalyticsService:
         self._reports = reports
 
     def query(self, **kwargs: str | int) -> dict:
-        return self._reports.query(**kwargs).execute()
+        try:
+            return self._reports.query(**kwargs).execute()
+        except HttpError as error:
+            raise YouTubeAPIError(str(error)) from error
 
 
 class _YouTubeService:
@@ -239,8 +242,8 @@ def test_yt_analytics_collects_and_saves_subscribed_status_via_cli(cli_dependenc
     assert any(query.get("dimensions") == "subscribedStatus" for query in reports.queries)
 
 
-def test_yt_analytics_returns_failure_when_subscribed_status_collection_fails(cli_dependencies) -> None:
-    """必須 subscribedStatus の API 失敗は CLI の成功終了を許さない。"""
+def test_yt_analytics_saves_partial_data_when_subscribed_status_collection_fails(cli_dependencies) -> None:
+    """subscribedStatus の API 失敗は警告として記録し、取得済み分を保存して成功終了する。"""
     tmp_path, reports = cli_dependencies
     reports.subscribed_status_error = HttpError(MagicMock(status=500), b"backendError")
 
@@ -248,8 +251,13 @@ def test_yt_analytics_returns_failure_when_subscribed_status_collection_fails(cl
         with pytest.raises(SystemExit) as exited:
             entrypoints.yt_analytics()
 
-    assert exited.value.code == 1
-    assert not list((tmp_path / "data").glob("analytics_data_*.json"))
+    assert exited.value.code == 0
+    saved_files = list((tmp_path / "data").glob("analytics_data_*.json"))
+    assert len(saved_files) == 1
+    payload = json.loads(saved_files[0].read_text(encoding="utf-8"))
+    assert payload["collection_errors"]["登録ステータス分析"]
+    assert "error" in payload["audience"]["by_subscribed_status"]
+    assert payload["audience"]["by_device"]["devices"]
 
 
 def test_yt_analytics_saves_daily_revenue_when_video_revenue_query_fails(cli_dependencies) -> None:

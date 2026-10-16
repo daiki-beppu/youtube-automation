@@ -108,7 +108,7 @@ SLOW_MODULES = frozenset(
 SLOW_NODE_IDS = (
     (
         "test_analytics_cli_integration.py",
-        "test_yt_analytics_returns_failure_when_subscribed_status_collection_fails",
+        "test_yt_analytics_saves_partial_data_when_subscribed_status_collection_fails",
     ),
     (
         "test_pyscn_diff_gate_contract.py",

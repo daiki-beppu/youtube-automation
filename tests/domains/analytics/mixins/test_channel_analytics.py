@@ -98,13 +98,32 @@ def test_basic_depth_keeps_existing_behavior_without_audience_collection() -> No
     assert collector.called == ["initialize"]
 
 
-def test_subscribed_status_error_fails_collection() -> None:
-    """必須の登録ステータス集計が失敗した収集結果を成功扱いしない。"""
+def test_subscribed_status_error_is_recorded_and_collection_continues() -> None:
+    """登録ステータス集計の API 失敗は警告として記録し、取得済み項目は結果へ残る。"""
     collector = StubCollector()
     collector.get_subscribed_status_analytics = lambda start_date, end_date: {"error": "quota exceeded"}
 
-    with pytest.raises(YouTubeAPIError, match="登録ステータス分析取得失敗: quota exceeded"):
-        collector.collect_basic_analytics("2026-01-01", "2026-04-01", depth="standard")
+    result = collector.collect_basic_analytics("2026-01-01", "2026-04-01", depth="standard")
+
+    assert result["audience"]["by_subscribed_status"] == {"error": "quota exceeded"}
+    assert result["collection_errors"] == {"登録ステータス分析": "quota exceeded"}
+    assert result["audience"]["by_device"] == {"source": "device"}
+
+
+def test_raising_report_is_skipped_and_collection_continues() -> None:
+    """例外を送出するレポート項目はスキップし、残りの収集結果を返す。"""
+    collector = StubCollector()
+
+    def _raise(start_date: str, end_date: str) -> dict:
+        raise YouTubeAPIError("playlist unavailable")
+
+    collector.get_playlist_analytics = _raise
+
+    result = collector.collect_basic_analytics("2026-01-01", "2026-04-01", depth="standard")
+
+    assert result["playlist_analytics"] == {}
+    assert result["collection_errors"] == {"プレイリスト別分析": "playlist unavailable"}
+    assert result["audience"]["by_subscribed_status"] == {"source": "subscribed_status"}
 
 
 def test_channel_analytics_maps_daily_rows_and_summary_with_optional_columns() -> None:
