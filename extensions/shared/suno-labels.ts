@@ -33,6 +33,52 @@ export const SUNO_LABELS = {
   durationCustom: ["Custom", "カスタム"],
   // create:createForm.generationInProgress（queue 上限 toast の見出し）
   generationInProgress: ["Generation in progress", "生成中"],
+
+  // ===== Studio (suno.com/studio)。確定済みキーは各行の正本コメント参照 (#5209)。 =====
+  // studioTransport.projectMenu
+  studioProjectMenu: ["Project menu", "プロジェクトメニュー"],
+  // studioTransport.newProject
+  studioNewProject: ["New Project", "新規プロジェクト"],
+  // studioOnboarding.newEmptyProject
+  studioNewEmptyProject: ["New empty project", "新しい空のプロジェクト"],
+  // studioTransport.rename
+  studioRename: ["Rename", "名前を変更"],
+  // studioTransport.projectName
+  studioProjectName: ["Project name", "プロジェクト名"],
+  // studioCommands.openLibrary
+  studioOpenLibrary: ["Open library", "ライブラリを開く"],
+  // studioCommands.addNewTrack
+  studioAddNewTrack: ["Add new track", "新しいトラックを追加"],
+  // studioTransport.exportMenu
+  studioExportMenu: ["Export menu", "エクスポートメニュー"],
+  // studioExport.multitrack
+  studioMultitrack: ["Multitrack", "マルチトラック"],
+
+  // ===== Studio の未確定ラベル (#5209)。翻訳リソースで完全一致が取れず実 DOM 未検証。
+  // 英語側の大小文字揺れは照合側の case-insensitive で吸収し、ja は派生候補を併記する。 =====
+  // 候補: 名称未設定のプロジェクト / 無題のプロジェクト
+  studioUntitledProject: [
+    "Untitled Project",
+    "名称未設定のプロジェクト",
+    "無題のプロジェクト",
+  ],
+  studioAllSongs: ["All Songs", "すべての曲", "すべてのソング"],
+  studioGoBack: ["Go back", "戻る"],
+  studioPlay: ["Play", "再生"],
+  // 候補: Rename（名前を変更）+ track から派生
+  studioRenameTrack: [
+    "Rename Track",
+    "トラック名を変更",
+    "トラックの名前を変更",
+  ],
+  // 候補: Add new track（新しいトラックを追加）から派生
+  studioAddAudioTrack: [
+    "Add Audio track",
+    "オーディオトラックを追加",
+    "音声トラックを追加",
+  ],
+  // 候補: プロジェクトで
+  studioInProject: ["In Project", "プロジェクトで", "プロジェクト内"],
 } as const satisfies Record<string, readonly string[]>;
 
 /** clip 再生ボタンの aria-label（songsAndPlaylists:clipBrowserElements.playClipTitle、英語 "Play <曲名>" / 日本語 "<曲名>を再生"）。 */

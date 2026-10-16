@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../lib/messaging", () => ({ sendMessage: vi.fn() }));
 
+import { SUNO_LABELS } from "../../shared/suno-labels";
 import { sendMessage } from "../lib/messaging";
 import {
   clickStudioAriaButtonUntil,
@@ -203,7 +204,7 @@ describe("Studio multitrack export", () => {
     document.body.append(button);
 
     const clip = await clickStudioButtonUntil(
-      "All Songs",
+      SUNO_LABELS.studioAllSongs,
       () => document.querySelector<HTMLElement>("[data-clip-id]"),
       "Library の clip 一覧",
       "pointer"
@@ -231,7 +232,7 @@ describe("Studio multitrack export", () => {
     document.body.append(button);
 
     await clickStudioAriaButtonUntil(
-      "Add Audio track",
+      SUNO_LABELS.studioAddAudioTrack,
       () => document.querySelector<HTMLElement>("[data-track-id]"),
       "track 2 件"
     );
@@ -281,7 +282,7 @@ describe("Studio multitrack export", () => {
       });
 
       const resultPromise = clickStudioAriaButtonUntil(
-        "Add Audio track",
+        SUNO_LABELS.studioAddAudioTrack,
         () =>
           document.querySelectorAll<HTMLElement>("[data-track-id]").length === 2
             ? document.querySelector<HTMLElement>("[data-track-id]")
@@ -343,7 +344,7 @@ describe("Studio multitrack export", () => {
     document.body.append(button);
 
     const item = await clickStudioAriaButtonUntil(
-      "Add new track",
+      SUNO_LABELS.studioAddNewTrack,
       () =>
         document.querySelector<HTMLButtonElement>(
           'button[aria-label="Add Audio track"]'
@@ -435,7 +436,7 @@ describe("Studio multitrack export", () => {
     button.addEventListener("pointerdown", () => document.body.append(target));
 
     const found = await clickStudioButtonUntil(
-      "Rename Track",
+      SUNO_LABELS.studioRenameTrack,
       () => (document.body.contains(target) ? target : null),
       "対象要素",
       "pointer"
@@ -630,5 +631,99 @@ describe("Studio multitrack export", () => {
       vi.useRealTimers();
       document.body.replaceChildren();
     }
+  });
+});
+
+describe("Studio export の日本語 UI ラベル (#5209)", () => {
+  it.each([
+    ["プロジェクトメニュー", SUNO_LABELS.studioProjectMenu],
+    ["ライブラリを開く", SUNO_LABELS.studioOpenLibrary],
+    ["新しいトラックを追加", SUNO_LABELS.studioAddNewTrack],
+    ["エクスポートメニュー", SUNO_LABELS.studioExportMenu],
+  ])(
+    "Given aria-label=%s のボタン When clickStudioAriaButtonUntil Then 一致して trusted click される",
+    async (label, labels) => {
+      const button = visibleButton("unused");
+      button.setAttribute("aria-label", label);
+      document.body.append(button);
+      const target = document.createElement("div");
+      target.getBoundingClientRect = () =>
+        ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+      vi.mocked(sendMessage).mockImplementation(async (type) => {
+        if (type === "sendTrustedClick") document.body.append(target);
+        return undefined;
+      });
+
+      const found = await clickStudioAriaButtonUntil(
+        labels,
+        () => (document.body.contains(target) ? target : null),
+        "対象要素"
+      );
+
+      expect(found).toBe(target);
+      document.body.replaceChildren();
+      vi.mocked(sendMessage).mockReset();
+    }
+  );
+
+  it.each([
+    ["新規プロジェクト", SUNO_LABELS.studioNewProject],
+    ["新しい空のプロジェクト", SUNO_LABELS.studioNewEmptyProject],
+    ["名前を変更", SUNO_LABELS.studioRename],
+    ["すべての曲", SUNO_LABELS.studioAllSongs],
+    ["トラック名を変更", SUNO_LABELS.studioRenameTrack],
+    ["プロジェクトで", SUNO_LABELS.studioInProject],
+    ["マルチトラック", SUNO_LABELS.studioMultitrack],
+  ])(
+    "Given textContent=%s のボタン When clickStudioButtonUntil Then 一致してクリックされる",
+    async (label, labels) => {
+      const button = visibleButton(label);
+      document.body.append(button);
+      const target = document.createElement("div");
+      target.getBoundingClientRect = () =>
+        ({ left: 0, top: 0, width: 20, height: 20 }) as DOMRect;
+      button.addEventListener("pointerdown", () =>
+        document.body.append(target)
+      );
+
+      const found = await clickStudioButtonUntil(
+        labels,
+        () => (document.body.contains(target) ? target : null),
+        "対象要素",
+        "pointer"
+      );
+
+      expect(found).toBe(target);
+      document.body.replaceChildren();
+    }
+  );
+
+  it("Given 日本語 UI の Studio Library When openStudioLibraryAllSongs Then ja ラベルで clip 一覧まで辿る", async () => {
+    const openLibrary = visibleButton("ライブラリを開く");
+    openLibrary.setAttribute("aria-label", "ライブラリを開く");
+    document.body.append(openLibrary);
+
+    // trusted click を送ったら対象座標の pointerdown と同等の遷移を起こす扱いにする。
+    vi.mocked(sendMessage).mockImplementation(async (type) => {
+      if (type !== "sendTrustedClick") return undefined;
+      openLibrary.dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true })
+      );
+      return undefined;
+    });
+    openLibrary.addEventListener("pointerdown", () => {
+      const allSongs = visibleButton("すべての曲");
+      allSongs.addEventListener("pointerdown", () => {
+        document.body.append(libraryClip("clip-a"));
+      });
+      document.body.append(allSongs);
+    });
+
+    await expect(openStudioLibraryAllSongs()).resolves.toHaveProperty(
+      "dataset.clipId",
+      "clip-a"
+    );
+    document.body.replaceChildren();
+    vi.mocked(sendMessage).mockReset();
   });
 });
