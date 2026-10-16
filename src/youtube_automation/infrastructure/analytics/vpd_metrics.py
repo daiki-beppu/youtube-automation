@@ -42,7 +42,9 @@ def _normalize_duration(value: object) -> str | None:
     return duration
 
 
-def collect_all_video_statistics(collector: _VideoCollector) -> list[dict[str, object]]:
+def collect_all_video_statistics(
+    collector: _VideoCollector, *, exclude_private: bool = False
+) -> list[dict[str, object]]:
     """uploads playlist 全ページを起点に累計 viewCount を全件取得する。"""
     uploads = collector.get_all_channel_videos(refresh=True)
     video_ids = [video["video_id"] for video in uploads]
@@ -57,6 +59,9 @@ def collect_all_video_statistics(collector: _VideoCollector) -> list[dict[str, o
         detail = details.get(video_id)
         if not isinstance(detail, dict) or "view_count" not in detail:
             raise ValidationError(f"videos.list statistics.viewCount がありません: {video_id}")
+        privacy_status = detail.get("privacy_status")
+        if exclude_private and privacy_status is not None and privacy_status != "public":
+            continue
         result.append(
             {
                 "video_id": video_id,

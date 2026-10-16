@@ -11,6 +11,7 @@ from datetime import datetime
 
 from youtube_automation.commands._shared.cli_harness import run_report_command
 from youtube_automation.commands.analytics.analytics_system import AnalyticsSystem
+from youtube_automation.configuration import load_config
 from youtube_automation.core.errors import AuthError
 from youtube_automation.infrastructure.analytics.vpd_metrics import (
     build_vpd_ranking,
@@ -26,7 +27,7 @@ def _load_ranking(*, min_age_days: int, top_count: int | None, now: datetime | N
         raise AuthError("YouTube read-only 認証に失敗しました")
     if system.collector is None:
         raise AuthError("YouTube collector を初期化できませんでした")
-    videos = collect_all_video_statistics(system.collector)
+    videos = collect_all_video_statistics(system.collector, exclude_private=load_config().analytics.exclude_private)
     return build_vpd_ranking(videos, now=now, min_age_days=min_age_days, top_count=top_count)
 
 

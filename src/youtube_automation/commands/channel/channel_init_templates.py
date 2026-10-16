@@ -104,7 +104,10 @@ def _render_youtube(ctx: ChannelInitContext) -> dict:
 
 def _render_analytics(ctx: ChannelInitContext) -> dict:
     return {
-        "analytics": {"collection_filter_keywords": ["Complete Collection", ctx.short]},
+        "analytics": {
+            "collection_filter_keywords": ["Complete Collection", ctx.short],
+            "exclude_private": True,
+        },
         "benchmark": {"channels": list(ctx.benchmark_channels)},
     }
 

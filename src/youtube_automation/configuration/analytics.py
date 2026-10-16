@@ -17,4 +17,5 @@ class Analytics:
     """`analytics` セクション + `benchmark` セクションの合成（どちらも optional）."""
 
     collection_filter_keywords: list[str] = field(default_factory=list)
+    exclude_private: bool = True
     benchmark: Benchmark = field(default_factory=Benchmark)
