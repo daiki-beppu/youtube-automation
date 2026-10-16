@@ -149,6 +149,12 @@ def _refresh_credentials(credentials: Credentials) -> None:
         credentials.refresh(Request(session=session))
 
 
+def _stdin_is_interactive() -> bool:
+    """ブラウザ OAuth を開始してよい対話端末があるかを返す（#5235）。"""
+    isatty = getattr(sys.stdin, "isatty", None)
+    return bool(isatty is not None and isatty())
+
+
 def _connect_youtube_service(credentials: Credentials) -> "Resource":
     """Build the service and translate discovery HTTP failures at the SDK boundary."""
     try:
@@ -265,6 +271,7 @@ class YouTubeOAuthHandler:
         self.credentials = None
         self._interactive = interactive
         self._ephemeral_credentials = False
+        self._refresh_token_revoked = False
 
     def _load_secret_credentials(self) -> Credentials | None:
         """Load an authorized-user token injected by the cloud secret boundary."""
@@ -328,14 +335,23 @@ class YouTubeOAuthHandler:
             resolved_token_path = resolve_token_path(auth_dir, cls.READONLY_TOKEN_FILENAME)
         return cls(scopes=cls.READONLY_SCOPES, token_path=resolved_token_path, interactive=interactive)
 
-    def _require_interactive_reauthentication(self) -> None:
-        if self._interactive:
-            return
+    def _reauth_required_message(self) -> str:
         command = "uv run yt-oauth --readonly" if self._scopes == self.READONLY_SCOPES else "uv run yt-oauth"
-        raise AuthError(
+        if self._refresh_token_revoked:
+            return f"refresh token が失効しています。{command} で再認証してください"
+        return (
             "非対話実行では OAuth token を新規発行できません。"
             f"対話可能なターミナルで `{command}` を実行して token を発行してください。"
         )
+
+    def _require_interactive_reauthentication(self) -> None:
+        if not self._interactive:
+            raise AuthError(self._reauth_required_message())
+        if _stdin_is_interactive():
+            return
+        # 対話端末が無い環境で run_local_server を起動すると、consent 画面に
+        # 誰も到達せず待ち続けるだけになるため即座に失敗させる（#5235）。
+        raise AuthError(self._reauth_required_message())
 
     def _channel_label(self) -> str:
         """設定に依存しない認証ラベルとして auth ディレクトリの親名を返す。"""
@@ -402,6 +418,9 @@ class YouTubeOAuthHandler:
                     logger.warning("token refresh 失敗: %s", redact_sensitive_data(str(e)))
                     if self._ephemeral_credentials:
                         raise AuthError("secret OAuth token の更新に失敗しました") from e
+                    if "invalid_grant" in str(e):
+                        # 失効済み refresh token は対話再認証まで回復しない（#5235）。
+                        self._refresh_token_revoked = True
                     self.credentials = None
 
         # 新規認証が必要な場合
@@ -413,6 +432,9 @@ class YouTubeOAuthHandler:
     def _authenticate_interactively(self) -> None:
         """Run the permitted browser flow and persist its credentials with existing error redaction."""
         self._require_interactive_reauthentication()
+        if self._refresh_token_revoked:
+            # ブラウザ遷移で待つ前に、再認証が必要な理由を必ず出力する（#5235）。
+            print("⚠️ refresh token が失効しているため再認証が必要です", file=sys.stderr)
         self._validate_client_secrets()
         channel_label = self._channel_label()
         print(f"🌐 [{channel_label}] ブラウザで認証を実行します...", file=sys.stderr)

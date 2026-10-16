@@ -241,11 +241,54 @@ class TestReadonlyInteractivePolicy:
             "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
             browser_flow,
         )
+        monkeypatch.setattr("youtube_automation.infrastructure.auth.youtube._stdin_is_interactive", lambda: True)
         handler._save_credentials = MagicMock()
 
         assert handler.authenticate() is credentials
         browser_flow.assert_called_once()
         flow.run_local_server.assert_called_once()
+
+    def test_non_tty_stdin_fails_before_browser_when_interactive(self, tmp_path, monkeypatch):
+        """stdin が非対話なら interactive=True でもブラウザを開かず失敗する（#5235）。"""
+        handler = _create_readonly_handler(tmp_path, monkeypatch, interactive=True)
+        monkeypatch.setattr("youtube_automation.infrastructure.auth.youtube._stdin_is_interactive", lambda: False)
+        browser_flow = MagicMock()
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
+            browser_flow,
+        )
+
+        with pytest.raises(AuthError, match=r"uv run yt-oauth --readonly"):
+            handler.authenticate()
+
+        browser_flow.assert_not_called()
+
+    def test_non_tty_revoked_refresh_token_reports_reauthentication(self, tmp_path, monkeypatch):
+        """invalid_grant の失効 token は非対話環境で専用メッセージで失敗する（#5235）。"""
+        handler = _create_readonly_handler(tmp_path, monkeypatch, interactive=True)
+        handler.token_file.write_text("{}", encoding="utf-8")
+        credentials = MagicMock(expired=True, valid=False, refresh_token="refresh-token")
+        credentials.refresh.side_effect = google.auth.exceptions.RefreshError(
+            "invalid_grant: Token has been expired or revoked."
+        )
+        browser_flow = MagicMock()
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.Credentials.from_authorized_user_file",
+            MagicMock(return_value=credentials),
+        )
+        monkeypatch.setattr(
+            "youtube_automation.infrastructure.auth.youtube.InstalledAppFlow.from_client_secrets_file",
+            browser_flow,
+        )
+        monkeypatch.setattr("youtube_automation.infrastructure.auth.youtube._stdin_is_interactive", lambda: False)
+
+        with pytest.raises(
+            AuthError,
+            match="refresh token が失効しています。uv run yt-oauth --readonly で再認証してください",
+        ):
+            handler.authenticate()
+
+        browser_flow.assert_not_called()
 
 
 class TestYouTubeClientsReadonly:
