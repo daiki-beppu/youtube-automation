@@ -98,15 +98,15 @@ gcloud auth login
 uv run yt-doctor --apply --json --project-id <project-id>
 ```
 
-project 自体の作成・変更は GCP 層の責務として上流 `infra/terraform/gcp/` が管理する。既存 project が用意されていなければ上流 README を案内し、上流での apply 完了後に再診断する。
+project 自体の作成・変更は GCP 層の責務として上流 `infra/terraform/gcp/` が管理する。既存 project が用意されていなければ上流 README を案内し、上流での apply 完了後に再診断する。下流チャンネルの project にはこの stack を apply しない（上流専属で、`wif.tf` が上流 repo の GitHub Actions に project の読み取り権限を付与する）。下流は gcloud か自前の最小 Terraform で整備する。
 
 #### `billing_linked` — billing 未紐付け
 
-GCP 層は上流 `infra/terraform/gcp/` が管理する。fail なら `next_action.url` の README に従って上流で plan → apply を行い、完了後に `uv run yt-doctor --json` で再診断する。
+GCP 層は上流 `infra/terraform/gcp/` が管理する。fail なら `next_action.url` の README に従って上流で plan → apply を行い、完了後に `uv run yt-doctor --json` で再診断する。なおこの stack は上流専属で、下流 project へ apply すると `wif.tf` が上流 repo の GitHub Actions に project の読み取り権限を付与してしまうため、下流チャンネルの GCP 層は gcloud 直接実行か自前の最小 Terraform で整備する。
 
 #### `apis_enabled` — 必須 API 未有効
 
-GCP 層は上流 `infra/terraform/gcp/` が管理する。fail なら `next_action.url` の README に従って上流で plan → apply を行い、完了後に `uv run yt-doctor --json` で再診断する。
+GCP 層は上流 `infra/terraform/gcp/` が管理する。fail なら `next_action.url` の README に従って上流で plan → apply を行い、完了後に `uv run yt-doctor --json` で再診断する。なおこの stack は上流専属で、下流 project へ apply すると `wif.tf` が上流 repo の GitHub Actions に project の読み取り権限を付与してしまうため、下流チャンネルの GCP 層は gcloud 直接実行か自前の最小 Terraform で整備する。
 
 #### `adc` — Application Default Credentials 未設定
 
@@ -134,7 +134,7 @@ gcloud auth application-default set-quota-project <project-id>
 
 #### `iam_aiplatform_user` — Vertex AI 権限未付与
 
-GCP 層は上流 `infra/terraform/gcp/` が管理する。fail なら `next_action.url` の README に従って上流で plan → apply を行い、完了後に `uv run yt-doctor --json` で再診断する。
+GCP 層は上流 `infra/terraform/gcp/` が管理する。fail なら `next_action.url` の README に従って上流で plan → apply を行い、完了後に `uv run yt-doctor --json` で再診断する。なおこの stack は上流専属で、下流 project へ apply すると `wif.tf` が上流 repo の GitHub Actions に project の読み取り権限を付与してしまうため、下流チャンネルの GCP 層は gcloud 直接実行か自前の最小 Terraform で整備する。
 
 #### `client_secrets` — OAuth クライアント秘密ファイル未配置
 
