@@ -1,13 +1,15 @@
 """YouTube playlist upload operations owned by the uploads domain."""
 
 import logging
+import time
 from abc import abstractmethod
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Protocol
 
 from youtube_automation.configuration import load_config, reset
 from youtube_automation.core.channel_context import channel_dir
-from youtube_automation.core.errors import ValidationError, WorkflowStateError, YouTubeAPIError
+from youtube_automation.core.errors import AutomationError, ValidationError, WorkflowStateError, YouTubeAPIError
 from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.domains.uploads.playlist_resolution import (
@@ -39,6 +41,13 @@ _QUOTA_UNITS_BY_BUCKET = {
     "playlistItems.delete": 50,
     "playlistItems.list": 1,
 }
+
+# playlists.insert 直後は YouTube 側の伝播遅延で playlistItems が
+# 404 playlistNotFound を返し、割り当てが全件失敗する（#5229）。
+# そのため作成後は bounded backoff で参照可能になるまで待機する。
+_PROPAGATION_MAX_ATTEMPTS = 6
+_PROPAGATION_BASE_DELAY_SECONDS = 2.0
+_PROPAGATION_MAX_DELAY_SECONDS = 20.0
 
 
 def _log_playlist_quota(bucket: str, **metadata):
@@ -349,18 +358,21 @@ class PlaylistManager:
 
     # ─── 既存動画の一括同期 ────────────────────────────
 
-    def sync_existing_videos(self, dry_run: bool = False) -> dict[str, list[str]]:
+    def sync_existing_videos(self, dry_run: bool = False) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
         """live/ 配下の全コレクションをプレイリストに割り当て
 
         Returns:
-            {collection_name: [assigned_playlist_keys]}
+            ({collection_name: [assigned_playlist_keys]}, {collection_name: [unassigned_target_keys]})
+            2 つ目は解決された割り当て先のうち実際には割り当てられなかった key
+            （playlist_id 未設定等）。呼び出し側が fail-loud するために使う（#5229）。
         """
         collections_dir = channel_dir() / "collections" / "live"
         if not path_exists(collections_dir):
             logger.warning("live/ ディレクトリが見つかりません")
-            return {}
+            return {}, {}
 
-        results = {}
+        results: dict[str, list[str]] = {}
+        missing: dict[str, list[str]] = {}
         collections = sorted(list_directory(collections_dir))
 
         for col_path in collections:
@@ -388,10 +400,15 @@ class PlaylistManager:
                 results[col_path.name] = target_keys
             else:
                 logger.info(f"\n  {title} ({video_id})")
+                target_keys = self.resolve_playlists(theme, activity=activity_override, explicit=explicit)
                 assigned = self.assign_video(video_id, theme, collection_path=col_path)
+                unassigned = [key for key in target_keys if key not in assigned]
+                if unassigned:
+                    logger.warning(f"  ⚠️ {col_path.name}: 割り当てできなかったプレイリスト: {unassigned}")
+                    missing[col_path.name] = unassigned
                 results[col_path.name] = assigned
 
-        return results
+        return results, missing
 
     # ─── 削除済み動画エントリの除去 ────────────────────
 
@@ -444,20 +461,65 @@ class PlaylistManager:
 
     # ─── init（作成 + 同期） ──────────────────────────
 
+    def _wait_for_playlist_propagation(self, playlist_ids: Iterable[str]) -> None:
+        """新規プレイリストが playlistItems 経由で参照可能になるまで待機する。
+
+        ``playlists.insert`` 直後は伝播遅延で ``playlistItems`` が
+        ``404 playlistNotFound`` を返すため（#5229）、bounded backoff で伝播を
+        確認する。上限を超えても参照できない場合は ``YouTubeAPIError`` で失敗させる。
+        """
+        youtube = self._youtube_service()
+        pending = list(playlist_ids)
+        for attempt in range(_PROPAGATION_MAX_ATTEMPTS):
+            remaining = []
+            for playlist_id in pending:
+                request = youtube.playlistItems().list(playlistId=playlist_id, part="id", maxResults=1)
+                try:
+                    execute_youtube_request(
+                        request,
+                        "playlistItems.list failed",
+                        on_attempt=_log_playlist_quota("playlistItems.list", playlist_id=playlist_id),
+                    )
+                except YouTubeAPIError as error:
+                    if error.status_code == 404 and error.reason == "playlistNotFound":
+                        remaining.append(playlist_id)
+                        continue
+                    raise
+            pending = remaining
+            if not pending:
+                logger.info("✅ 新規プレイリストの伝播を確認しました")
+                return
+            if attempt + 1 < _PROPAGATION_MAX_ATTEMPTS:
+                delay = min(_PROPAGATION_BASE_DELAY_SECONDS * 2**attempt, _PROPAGATION_MAX_DELAY_SECONDS)
+                logger.info(
+                    f"⏳ プレイリスト伝播待ち ({attempt + 1}/{_PROPAGATION_MAX_ATTEMPTS}): {delay:.0f} 秒後に再確認"
+                )
+                time.sleep(delay)
+        raise YouTubeAPIError(
+            f"新規プレイリストの伝播が確認できませんでした（未伝播 {len(pending)} 件）。時間をおいて再実行してください"
+        )
+
     def init(self, dry_run: bool = False):
         """プレイリスト作成 + 既存動画の一括同期"""
         print("\n=== Step 1: プレイリスト作成 ===")
-        self.create_all_playlists(dry_run=dry_run)
+        created = self.create_all_playlists(dry_run=dry_run)
 
         # dry_run でなければ config を再読み込み（書き戻し後の playlist_id を反映）
         if not dry_run:
             reset()
             self.config = load_config()
+            if created:
+                self._wait_for_playlist_propagation(created.values())
 
         print("\n=== Step 2: 既存動画の割り当て ===")
-        results = self.sync_existing_videos(dry_run=dry_run)
+        results, missing = self.sync_existing_videos(dry_run=dry_run)
 
         total = sum(len(v) for v in results.values())
+        if missing:
+            missing_total = sum(len(v) for v in missing.values())
+            print(f"\n=== 失敗: {len(results)} コレクション, {total} 件の割り当て, 未割り当て {missing_total} 件 ===")
+            details = ", ".join(f"{name}→{keys}" for name, keys in missing.items())
+            raise AutomationError(f"プレイリスト割り当てが未完了です: {details}")
         print(f"\n=== 完了: {len(results)} コレクション, {total} 件の割り当て ===")
 
 

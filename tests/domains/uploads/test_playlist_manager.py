@@ -19,7 +19,7 @@ import pytest
 from googleapiclient.errors import HttpError
 from httplib2 import Response
 
-from youtube_automation.core.errors import ValidationError, WorkflowStateError, YouTubeAPIError
+from youtube_automation.core.errors import AutomationError, ValidationError, WorkflowStateError, YouTubeAPIError
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
 # ---------------------------------------------------------------------------
@@ -845,3 +845,129 @@ def test_list_playlist_video_ids_fails_closed_for_invalid_response_shape(manager
 
     with pytest.raises(ValidationError, match="response"):
         manager._list_playlist_video_ids("PL_ALL")
+
+
+# ---------------------------------------------------------------------------
+# プレイリスト伝播待機 / init の未割り当て検出（#5229）
+# ---------------------------------------------------------------------------
+
+
+def _playlist_not_found_error() -> HttpError:
+    return HttpError(
+        Response({"status": "404"}),
+        b'{"error": {"errors": [{"reason": "playlistNotFound"}]}}',
+    )
+
+
+class TestWaitForPlaylistPropagation:
+    def test_returns_once_playlist_items_resolves(self, manager, mock_youtube, monkeypatch):
+        """404 playlistNotFound の後に参照可能になれば待機終了（伝播遅延を吸収する）。"""
+        monkeypatch.setattr("youtube_automation.domains.uploads.playlists.time.sleep", lambda _: None)
+        request = mock_youtube.playlistItems.return_value.list.return_value
+        request.execute.side_effect = [_playlist_not_found_error(), {"items": []}]
+
+        manager._wait_for_playlist_propagation(["PL_NEW"])
+
+        assert request.execute.call_count == 2
+
+    def test_raises_after_bounded_attempts(self, manager, mock_youtube, monkeypatch):
+        """上限回数を超えても未伝播なら YouTubeAPIError で失敗させる。"""
+        import youtube_automation.domains.uploads.playlists as playlist_domain
+
+        monkeypatch.setattr("youtube_automation.domains.uploads.playlists.time.sleep", lambda _: None)
+        request = mock_youtube.playlistItems.return_value.list.return_value
+        request.execute.side_effect = _playlist_not_found_error()
+
+        with pytest.raises(YouTubeAPIError, match="伝播"):
+            manager._wait_for_playlist_propagation(["PL_STUCK"])
+
+        assert request.execute.call_count == playlist_domain._PROPAGATION_MAX_ATTEMPTS
+
+    def test_non_propagation_error_fails_immediately(self, manager, mock_youtube, monkeypatch):
+        """404 playlistNotFound 以外の失敗は待機せず即座に伝播する。"""
+        monkeypatch.setattr("youtube_automation.domains.uploads.playlists.time.sleep", lambda _: None)
+        request = mock_youtube.playlistItems.return_value.list.return_value
+        request.execute.side_effect = HttpError(
+            Response({"status": "403"}), b'{"error": {"errors": [{"reason": "forbidden"}]}}'
+        )
+
+        with pytest.raises(YouTubeAPIError):
+            manager._wait_for_playlist_propagation(["PL_FORBIDDEN"])
+
+        assert request.execute.call_count == 1
+
+
+class TestInitAssignmentCompletion:
+    def test_init_waits_for_new_playlist_propagation(self, manager):
+        """Step 1 で作成したプレイリストは伝播確認後に Step 2 へ進む。"""
+        with (
+            patch.object(manager, "create_all_playlists", return_value={"main": "PL_NEW"}),
+            patch.object(manager, "_wait_for_playlist_propagation") as wait,
+            patch.object(manager, "sync_existing_videos", return_value=({}, {})),
+        ):
+            manager.init()
+
+        wait.assert_called_once()
+        assert list(wait.call_args[0][0]) == ["PL_NEW"]
+
+    def test_init_skips_wait_when_nothing_created(self, manager):
+        """作成なし（全件既存）なら伝播待機は呼ばれない。"""
+        with (
+            patch.object(manager, "create_all_playlists", return_value={}),
+            patch.object(manager, "_wait_for_playlist_propagation") as wait,
+            patch.object(manager, "sync_existing_videos", return_value=({}, {})),
+        ):
+            manager.init()
+
+        wait.assert_not_called()
+
+    def test_init_fails_when_assignment_incomplete(self, manager, capsys):
+        """未割り当てが残れば成功メッセージを出さず AutomationError で失敗する。"""
+        with (
+            patch.object(manager, "create_all_playlists", return_value={}),
+            patch.object(
+                manager,
+                "sync_existing_videos",
+                return_value=({"col": ["all"]}, {"col": ["relaxation"]}),
+            ),
+            pytest.raises(AutomationError, match="未完了"),
+        ):
+            manager.init()
+
+        assert "失敗" in capsys.readouterr().out
+
+    def test_init_dry_run_skips_propagation_wait(self, manager):
+        """dry-run では作成も待機も行わない。"""
+        with (
+            patch.object(manager, "create_all_playlists", return_value={}) as create,
+            patch.object(manager, "_wait_for_playlist_propagation") as wait,
+            patch.object(manager, "sync_existing_videos", return_value=({}, {})),
+        ):
+            manager.init(dry_run=True)
+
+        create.assert_called_once_with(dry_run=True)
+        wait.assert_not_called()
+
+
+class TestSyncExistingVideosMissing:
+    def test_reports_targets_without_playlist_id_as_missing(self, manager, tmp_path, monkeypatch):
+        """playlist_id 未設定でスキップされた割り当て先は missing として報告する。"""
+        import youtube_automation.domains.uploads.playlists as playlist_domain
+
+        live = tmp_path / "collections" / "live" / "col1"
+        (live / "20-documentation").mkdir(parents=True)
+        (live / "workflow-state.json").write_text(json.dumps({"theme": "ocean waves"}), encoding="utf-8")
+        (live / "20-documentation" / "upload_tracking.json").write_text(
+            json.dumps({"complete_collection": {"video_id": "VID1"}}), encoding="utf-8"
+        )
+        manager.config.playlists.items["relaxation"] = {"title": "Relax", "auto_add_themes": ["ocean"]}
+        monkeypatch.setattr(playlist_domain, "channel_dir", lambda: tmp_path)
+
+        with (
+            patch.object(manager, "_list_playlist_video_ids", return_value=set()),
+            patch.object(manager, "_add_video_to_playlist", return_value=True),
+        ):
+            results, missing = manager.sync_existing_videos()
+
+        assert results == {"col1": ["all"]}
+        assert missing == {"col1": ["relaxation"]}
