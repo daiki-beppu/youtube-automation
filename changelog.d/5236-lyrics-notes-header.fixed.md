@@ -1,2 +1,0 @@
-- yt-suno-select-tracks の vocal 判定で、/music --prompt が lyrics 先頭へ入れる `Mixing Notes:` / `Instrument Notes:` のような `<英単語>:` 指示行を歌詞として数えないようにした（#5236）。
-- prompt entry の `options.instrumental: true` を判定へ反映し、該当 entry を lyrics 内容に関わらず instrumental として扱うようにした（#5236）。

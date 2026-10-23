@@ -1,1 +1,0 @@
-- `analytics.exclude_private`（既定 true）を追加し、yt-vpd-rank のランキング母集団から private / unlisted 動画を除外するようにした。false にすると従来通り全動画を母集団へ含める（#5203）。

@@ -1,1 +1,0 @@
-- CI 失敗を claude-code-action で自動修正する `CI autofix` workflow と、Skill E2E eval を定期実行する `Skill E2E eval` workflow を廃止した。eval はローカルの promptfoo 実行だけで行う

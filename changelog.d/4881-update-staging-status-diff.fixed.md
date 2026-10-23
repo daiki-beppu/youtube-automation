@@ -1,1 +1,0 @@
-- `/automation --update` wizard の追従 commit が `git add` を固定パス指定から `git status --porcelain` 差分へ変更し、`yt-skills sync --asset all` が書き込む skills 以外の asset 変更も commit に含めるようにした（#4881）。

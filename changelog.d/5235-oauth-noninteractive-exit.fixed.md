@@ -1,2 +1,0 @@
-- refresh token が失効（invalid_grant）しているとき、`yt-upload-collection --plan` や `yt-playlist-status` が非対話環境でローカル OAuth 待受ポートを listen し続けて戻らない問題を、stdin が対話端末でない場合はブラウザ認証を開始せず `refresh token が失効しています。uv run yt-oauth で再認証してください` を出して非 0 終了するよう修正した（#5235）。
-- `yt-playlist-status` で認証失敗が per-playlist の「(取得エラー)」表示に握りつぶされて成功終了していた問題を、AuthError をコマンド失敗として伝播するよう修正した（#5235）。

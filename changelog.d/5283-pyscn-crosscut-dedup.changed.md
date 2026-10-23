@@ -1,3 +1,0 @@
-- experiment 登録の JSONL 追記と judge transaction の journal 書き込みが、同じ atomic 書き込み helper（fsync・既存 mode 維持・失敗時の temp 削除）を使うよう共通化した（外部仕様不変）
-- `yt-benchmark-comments` のコメント JSON 保存と collection server の `distrokid-releases.json` 保存を、既存の `infrastructure.filesystem.write_file_text_atomically` に寄せた。書き出す bytes と 0o600 の permission は従来どおり（外部仕様不変）
-- `yt-skills migrate-config` の skill-config YAML 読込を loader（`configuration/skills.py`）と同じ関数に統一した。CLI 引数・出力・終了コードは不変で、root が mapping でない YAML のエラー文言だけが loader と同じ「skill-config の root は dict である必要があります」に揃う

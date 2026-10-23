@@ -1,1 +1,0 @@
-- suno-helper の Studio multitrack export が日本語 UI でも動くよう、Studio のラベルを `extensions/shared/suno-labels.ts` に集約し英語・日本語の両ラベルで照合するようにした（#5209）。

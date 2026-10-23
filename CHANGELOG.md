@@ -7,6 +7,122 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.1.0] - 2026-10-23
+
+### Added
+
+- Suno Studio export の配置成功時に曲 URL・生成日時・モデル・利用プラン・動画内開始位置を自動記録し、Content ID 異議申し立て文の下書きを生成できるようにした（#5129）。
+- 証跡を記録できなかった場合は配置を止めずに、suno-helper の進捗表示で理由を通知するようにした（#5129）。
+- `analytics.exclude_private`（既定 true）を追加し、yt-vpd-rank のランキング母集団から private / unlisted 動画を除外するようにした。false にすると従来通り全動画を母集団へ含める（#5203）。
+- Suno downloaded ZIP の総展開サイズ上限を `SUNO_ZIP_MAX_TOTAL_SIZE_GIB` 環境変数で引き上げ可能にし、上限超過メッセージに引き上げ方法と末尾 silence trim の回避策を追記した（#5222）。
+- yt-document-migrate に `--no-project` を追加。workflow-state.json を書き込めない subagent などから collection plan / music prompt / video description の pair を state 投影なしで公開できる（#5225）。
+- suno-helper の overlay に「プレイリストに追加する」Switch（既定 ON・再読み込み後も保持）を追加し、OFF では生成完了の時点で FINISHED にして playlist 作成・追加と download を省略できるようにした（#5291）。
+
+### Changed
+
+- dashboard / audio-studio / site / extensions の Node.js と pnpm を、Nix の `devShells.extensions`（nixpkgs の `nodejs_24` と独自の pnpm wrapper）から vite-plus（`vp`）の shim と CI の `voidzero-dev/setup-vp` へ移した。nixpkgs の `nodejs_24` は staging を経るため Node のセキュリティリリース（2026-10-21、修正版 24.22.1）に数週間遅れていた。
+- Node の版はリポジトリ root の `.node-version`（`24`）を単一の正とし、Node 24 系の最新 patch へ解決する。pnpm は従来どおり各 `package.json::packageManager` の `pnpm@11.15.1` で固定し、dashboard / audio-studio にも同じ固定を追加した。
+- `nix develop .#extensions --command ...` の入口を廃止した。pnpm は各 package のディレクトリで起動する（例: `(cd site && pnpm build)`）。`PNPM_MAX_WORKERS=1` の既定値（#3078）は default devShell の shellHook が引き継ぐ。
+- ツール導入ガイドの対応 OS に素の Windows を明記し、WSL2 が不要であることと symlink 非対応環境での挙動を追記した（#5118）。
+- YouTube 公開前に Studio で Content ID のチェック結果を確認し、申立て時の対応を選ぶリスクチェック工程を追加
+- `yt-doctor` の check と dashboard の Analytics 更新で別々に持っていた「チャンネル設定の参照先を一時的に切り替えて元へ戻す」処理を `configuration.loader.temporary_channel_dir()` に共通化した。CLI 引数・出力・エラーメッセージ・終了コード・公開 import パスなどの外部仕様は変わらない。
+- メディア生成系の重複を整理した: `yt-apply-rain-layers` の rain layer 探索を `yt-finalize-master` の ambient layer 探索規則へ委譲し、Lyria の skill-config 必須キー欠落エラーと画像生成の `image_generation.<provider>` namespace 解決をそれぞれ 1 箇所に寄せた。
+- CLI 引数・出力・エラーメッセージ・終了コード・公開 import パスなどの外部仕様は変わらない。
+- collection plan の preview asset 参照を collection 内の実ファイルへ解決する安全性判定を、digest 計算と review 表示で同じ helper に共通化した（外部仕様・エラーメッセージは不変）
+- `yt-automation-update` の git status パースを `infrastructure.vcs` の共通 helper に、配信用 Vultr API の GET 処理（認証ヘッダ・timeout・通信失敗の正規化）を streaming 内の共通 helper に寄せた。CLI 引数・出力・エラーメッセージ・終了コード・公開 import パスは変わらない。
+- `suno-prompts.json` entry の name / title 検証を `domains/suno/prompts.py` の共通 helper に集約し、選曲（`yt-suno-select-tracks`）と playlist 突合（`yt-suno-verify-playlist`）が同じ規則で検査するようにした。CLI 引数・出力形式・終了コード・公開 import パスは変えていない。
+- experiment 登録の JSONL 追記と judge transaction の journal 書き込みが、同じ atomic 書き込み helper（fsync・既存 mode 維持・失敗時の temp 削除）を使うよう共通化した（外部仕様不変）
+- `yt-benchmark-comments` のコメント JSON 保存と collection server の `distrokid-releases.json` 保存を、既存の `infrastructure.filesystem.write_file_text_atomically` に寄せた。書き出す bytes と 0o600 の permission は従来どおり（外部仕様不変）
+- `yt-skills migrate-config` の skill-config YAML 読込を loader（`configuration/skills.py`）と同じ関数に統一した。CLI 引数・出力・終了コードは不変で、root が mapping でない YAML のエラー文言だけが loader と同じ「skill-config の root は dict である必要があります」に揃う
+- workflow-state.json の読み書き失敗を `WorkflowStateError` の subclass（`WorkflowStateRootTypeError` / `WorkflowStateSymlinkError` / `WorkflowStateNotRegularFileError` / `WorkflowStateWriteError`）で区別するようにし、各 CLI と skill スクリプトが例外メッセージの文言照合で失敗種別を判定していた処理を型判定へ置き換えた。CLI 引数・出力・エラーメッセージ・終了コードなどの外部仕様は変わらない。
+- ファイルパスや workflow-state.json の値に照合対象の文言が含まれていると失敗種別を取り違える可能性があったが、型判定に変えたことで起きなくなった。
+
+### Removed
+
+- PR ごとに claude-code-action で走る CI の自動コードレビュー（`Code review` workflow）を廃止した
+- CI 失敗を claude-code-action で自動修正する `CI autofix` workflow と、Skill E2E eval を定期実行する `Skill E2E eval` workflow を廃止した。eval はローカルの promptfoo 実行だけで行う
+
+### Fixed
+
+- `/automation --update` wizard の追従 commit が `git add` を固定パス指定から `git status --porcelain` 差分へ変更し、`yt-skills sync --asset all` が書き込む skills 以外の asset 変更も commit に含めるようにした（#4881）。
+- `/setup --channel` の必須 check 一覧から `CHECK_REGISTRY` に存在しない `env_file` を削除し、列挙が `CHECK_REGISTRY` の id 集合の subset であることを契約テストで機械担保した（#4885）。
+- Suno 音源 cleanup の末尾 fade を実測済み中間音源へ分離し、曲の途中から誤って無音化される問題を修正した（#5122）。
+- ベンチマーク集計の Shorts 尺判定を3分以下へ修正し、3〜4分台の通常動画を平均再生数などの集計対象に含めるようにした（#5123）。
+- Suno Studio Multitrack export の download 監視上限を 30 分へ延長し、完了待ちは監視上限 + 猶予 1 分とした。監視タイムアウト時に書き出し済みの download を拾い上げる fallback が確実に届くため、13 分前後かかる長尺 WAV 20 曲でも打ち切られない（#5131）。
+- 長尺 WAV 20 曲の Studio Multitrack ZIP を取り込めるよう総展開上限を 8 GiB へ引き上げ、超過時に実サイズ・上限・分割手順を表示するようにした（#5132）。
+- suno-helper の手動実行開始時に背面タブを検出し、実行中の Playlist 検出失敗でも背面化の可能性と復旧方法を案内（定期実行は開始時の前面性を要求しないため対象外）（#5133）
+- suno-helper: Chrome が ZIP の書き込み完了後に `interrupted`（ERR_ABORTED 等）を返すケースで、`exists` と `bytesReceived >= fileSize` から保存済みを判定し、完了として取り込みを継続するよう修正（`downloaded_count` が 0 のまま止まる不具合を解消）
+- suno-helper: `interrupted` 通知時に直近の download を再探索し、完了済みまたは保存済みの別 ZIP を fallback 採用するよう修正
+- suno-helper: download 失敗メッセージに `error` / 受信 bytes / 保存ファイル有無を含め、画面表示のエラーだけに頼らず「実際に保存されたか」を診断できるようにした
+- suno-helper: Download 再開（retryDownload）で resume state の時刻窓内に保存済みの Studio export ZIP があれば検出し、Studio project / export を作り直さずその ZIP で `POST /downloaded` を再実行するよう修正（Untitled Project が retry ごとに残る不具合を解消）
+- suno-helper の Studio エクスポートでボタン検出をラベル大小文字に揺らがない照合へ修正し、"Rename Track" / "Rename track" のような表記差で Multitrack export が停止しないようにした（#5198）。
+- Library が最後に開いた Workspace を記憶して直接開く場合でも、"Go back" で Library トップへ戻ってから "All Songs" を待つようにした（#5198）。
+- 要素待機のタイムアウトに非表示・画面外・遮蔽の診断を付け、拡張自身のパネルに遮られた場合も識別できるようにした（#5198）。
+- Studio export の playlist 作成で playlist name 入力欄の出現を poll するようにし、dialog 描画遅延と placeholder の大小文字揺れに耐えるようにした（#5199）。
+- Studio の track rename を track 見出しへの右クリック（contextmenu）起点に変更し、hover 限定・幅 0 の ︙ ボタンに依存しない動作にした（#5199）。
+- Studio tab の content script 起動待ちを 30 秒から 60 秒に延長し、background 化された tab でも export を開始できるようにした（#5199）。
+- Studio への clip 配置後に配置済み clip の長さをライブラリ曲長と照合し、生成未完了で短いまま置かれた場合は明示的なエラーで停止するようにした（#5199）。
+- yt-suno-select-tracks `--allow-incomplete-download` の非 dry-run が承認済みの不足 prompt を `workflow-state.json::music_pair_selection` へ記録するようになり、wf-auto-state は記録分の欠損だけを残す download を `suno_download_complete` として masterup へ進める（#5201）。
+- freshness 判定の `reports/analysis_*.json` 選択を `analysis_YYYYMMDD.json`（8 桁日付）だけに限定し、`analysis_YYYYMMDD.win-pattern.json` 等の sidecar を report として拾わないようにした（#5202）。
+- `config/channel/` 未生成の開設直後チャンネルでも、cwd または祖先に `collections/`・`auth/`・`branding/` などのチャンネルルート目印があればそのディレクトリを `channel_dir()` として解決するようにした (#5206)。これにより `uv run yt-oauth` や `yt-doctor --apply` 経由の `uv run yt-analytics --reporting-create-job` が `CHANNEL_DIR` 未設定でも動作する
+- suno-helper が Suno の日本語 UI と 2026-10 の Create UI 改装でも Style / Lyrics 注入・生成中判定・playlist 追加を行えるようにした（#5207）。
+- suno-helper の Duration 注入が Auto / カスタムのどちらの状態からでも動くようにした（#5207）。
+- suno-helper の Studio multitrack export が日本語 UI でも動くよう、Studio のラベルを `extensions/shared/suno-labels.ts` に集約し英語・日本語の両ラベルで照合するようにした（#5209）。
+- suno-helper の生成中（in-flight）判定で、clip 行の `data-clip-status` を一次シグナルにした（#5210）。complete / error / failed は終端として数えず、それ以外の非空 status を生成中とみなす。属性が無い clip 行は従来の Remix btn disabled 判定へフォールバックする。
+- `/automation-release` の prepare が `changelog.d/` の fragment を集約する前に `[Unreleased]` の空判定と semver 判定を行い、誤って中止される問題を修正した（#5211）。
+- `wf-new` の自己参照・委譲先の重複と、skill / AGENTS.md に残っていた実在しない参照や旧版差分の言い回しを現行の記述に直した（#5211）。
+- `fix(masterup)`: `yt-suno-verify-playlist` が非対話 shell（stdin が TTY でなく入力も EOF も来ない環境）で stdin の読み取りに無期限待機していたハングを修正した。stdin の read は最長 5 秒で打ち切り、データが届かなければ stdin 入力なしとして `--music-dir` 等の明示入力で完走する（#5213）。
+- clip 採用の仮想走査がタイムアウトした際、実測/期待件数を error message に載せ、件数不一致の原因が汎用 timeout に埋もれないようにした（#5219）。
+- Studio の New empty project 後に project 領域が空（track 1 件以下・clip 0 件）になることを検証し、内容を持つ既存の Untitled Project を誤って rename しないようにした（#5219）。
+- Studio の Project name 入力欄の待ち時間を延長し、background tab での描画遅延でも rename project を継続できるようにした（#5219）。
+- Studio の track 検出を expected 件数以上・長い待ち窓＋ scroll 再試行に変更し、clip 配置時の render lag に耐えるようにした（#5219）。
+- suno-helper: clip 一覧走査をページネーション対応にし、Next page ボタンで全ページを走査するようにした。ページネーションや仮想化で描画できない対象 clip は Library 検索（Search songs…）でタイトル検索して選択するフォールバックを追加した（#5220）。
+- suno-helper: 「ダウンロードのみ実行」が採用済み clip ID（extension storage の resume state）を優先利用するようにし、ページ再読み込みで Suno 側の選択状態が消えても Download からの再開が継続できるようにした（#5220）。
+- suno-helper: playlist ページなどで clip row が見つからない失敗に、検出状況（scroller 有無・選択ボタン数）と復帰手順（対象曲だけの一覧を開く等）を含むエラーメッセージを付けるようにした（#5220）。
+- suno-helper: Studio の track / project rename を Enter keydown/keyup で確定するよう変更し、blur では確定しない現行 Studio で名前付けが反映されない問題を修正
+- suno-helper: Studio Library / In Project の ~20 件表示上限により clip が描画されない問題を修正（タイトルが分かる clip は Library 検索で描画して配置、配置済み clip 数は timeline 側から集計）
+- suno-helper: 非表示タブで setTimeout が throttle され Studio export や clip 走査が停滞する問題を、Worker ベースの sleep に切り替えて修正（Worker 非対応環境では従来の setTimeout にフォールバック）
+- `yt-doctor` の GCP 層 check（`gcp_project` / `billing_linked` / `apis_enabled` / `iam_aiplatform_user`）の next_action と関連ガイドに、`infra/terraform/gcp/` が上流専属 stack で下流 project へ apply すると上流 repo の CI へ読み取り権限を渡す旨と、下流は gcloud か自前の最小 Terraform で整備する案内を追加した（#5223）。
+- yt-suno-verify が suno-prompts.json の合成済み per-entry style を検証するようになった: 1 行目 (Suno Style 欄実効値) が style_char_limit を超過、または style 全体が full_style_char_limit を超過した entry を exit 1 で検出する（#5224）。
+- entry 間の最小 hamming distance が 0 の同一 style (zero-diversity) を exit 1 で検出するようにした（#5224）。
+- `fix(masterup)`: `yt-suno-verify-playlist` がコレクション名だけの指定で `expected validated JSON+HTML pair` と失敗していた問題を修正した。bare name は `yt-suno-verify` と同様に `collections/planning/` → `collections/live/` の順で解決し、見つからない名前や存在しないパスは探索先・ディレクトリ不在を示すエラーで fail-fast する（#5226）。
+- suno-helper の overlay が Suno 側 UI を覆ってクリックを奪わないよう、shadow host とコンテナを pointer-events 透過にし hit 領域を panel へ限定した（#5227）。
+- yt-analytics の各レポート収集を個別に耐障害化し、subscribedStatus 等の単一 dimension の API 失敗時も警告として `collection_errors` に記録して取得済み分を `analytics_data_*.json` へ保存するようにした（#5228）。
+- `uv run yt-playlist-manager --init` で新規作成したプレイリストへの割り当てが YouTube 側の伝播遅延で HTTP 404 playlistNotFound になる問題を、作成後に bounded backoff で伝播を確認してから割り当てを開始する形で解消した（#5229）。
+- 割り当て先解決はできたが未割り当てのプレイリストが残った場合に、`=== 完了 ===` を出して exit 0 になっていた問題を、`=== 失敗 ===` を表示して非 0 終了するよう修正した（#5229）。
+- `config/skills/thumbnail.yaml` の `image_generation.gemini.reference_images.default` に複数ベンチマークチャンネルの参照画像が混在する場合、`plan_ttp_reference_assignments` の config 経由の呼び出し（`select-ttp-references.py` / uploads preflight）で多数派チャンネルの参照だけを採用して警告付きで継続するようにした (#5230)。CLI 明示指定の strict 経路は従来どおり `ConfigError` で弾く。混在エラーの文言に `reference_images.default` の設定キー名を明記した
+- live 全件を走査する descriptions pair の reader（yt-title-duplicate-check の collect_live_titles と upload preflight）が、JSON 直接編集で HTML と不整合になった collection を警告して skip し、残りの collection の処理を継続するようにした（#5231）。
+- 不整合 pair の修復経路として `uv run yt-document-render <descriptions.json> --schema video-description.schema.json`（HTML のみ再発行）を警告文に明示した（#5231）。
+- suno-helper overlay panel を viewport 内の高さに制限し内部スクロール可能にして、下端が見切れた場合も実行ボタンへ到達できるようにした（#5232）。
+- `data-suno-control` 属性を generate 手順書の DOM signal 表へ追加した（#5232）。
+- suno-helper overlay の実行・再開ボタンが通常の座標クリックで起動することを回帰テストで担保した（#5227 の pointer-events 透過とあわせて実座標クリック経路を復旧）（#5233）。
+- `composition_rules` の数値閾値（被写体帯・`size_hierarchy` 幅比）を参照サムネの実測から導出するよう生成ガイダンスを訂正した (#5234)。`config-generation-rules.md`・`config-template/skills/thumbnail.yaml`・`channel_init` scaffold・`direction.md` に、未計測時の較正済み目安（帯下端 65-80%・影分 +5%・幅比 3.5-5x）と出典（productivityonyt 実測 73.9/79.0/92.5%・3.73/4.42）を記載し、ベンチ自身が不合格になる閾値の再転記を防ぐ
+- refresh token が失効（invalid_grant）しているとき、`yt-upload-collection --plan` や `yt-playlist-status` が非対話環境でローカル OAuth 待受ポートを listen し続けて戻らない問題を、stdin が対話端末でない場合はブラウザ認証を開始せず `refresh token が失効しています。uv run yt-oauth で再認証してください` を出して非 0 終了するよう修正した（#5235）。
+- `yt-playlist-status` で認証失敗が per-playlist の「(取得エラー)」表示に握りつぶされて成功終了していた問題を、AuthError をコマンド失敗として伝播するよう修正した（#5235）。
+- yt-suno-select-tracks の vocal 判定で、/music --prompt が lyrics 先頭へ入れる `Mixing Notes:` / `Instrument Notes:` のような `<英単語>:` 指示行を歌詞として数えないようにした（#5236）。
+- prompt entry の `options.instrumental: true` を判定へ反映し、該当 entry を lyrics 内容に関わらず instrumental として扱うようにした（#5236）。
+- generate_videos.sh の stream copy 所要時間見積もりを、環境差で約 5 倍速まで落ちる実測を踏まえて 5–15 倍速幅へ広げ、見積もり文に環境差を明示した（#5237）。
+- 配信帯域取得（Vultr bandwidth API）が UTF-8 でない応答を受けたとき、生の `UnicodeDecodeError` ではなく他の通信失敗と同じ `YouTubeAPIError`（`Vultr bandwidth API request failed: ...`）で止まるようにした。
+- playlist 突合が不正な `suno-prompts.json` entry を報告するときのエラー文言を、選曲と同じ `suno-prompts.json: entry N.name must be a non-empty string` / `suno-prompts.json: entry N.title must be a string` 形式に揃えた（旧文言は `entry N has no name` / `entry N title must be a string`）。検査順も name → title に揃えた。
+
+### Migration
+
+所要時間の目安: 5〜15 分（suno-helper 拡張の更新を含む）
+
+local fix 衝突注意:
+- audit / automation / channel-research / channel-strategy / music / publish / setup / short / streaming / thumbnail / video / wf-new / wf-next
+
+サマリ:
+- suno-helper が Suno の日本語 UI と 2026-10 の Create UI 改装に対応し、Studio export・download・clip 走査の停止要因を修正しました。生成後のプレイリスト追加を省略するトグルも追加しています。拡張は `/extension --update` で別途更新してください。
+- Suno Studio export の配置時に Content ID 異議申し立て用の証跡を自動記録し、YouTube 公開前に Studio で Content ID のチェック結果を確認する工程を追加しました。
+- `analytics.exclude_private`（既定 true）により、`yt-vpd-rank` のランキング母集団から private / unlisted 動画が除外されます。従来どおり全動画を含めるには `false` を設定してください。
+- 非対話環境で refresh token が失効している場合、OAuth 待受で止まらず `uv run yt-oauth` での再認証を案内して非 0 終了するようになりました。
+- CLI entry point の撤去・改名、config の必須キー追加はありません。
+
+Python module 移動: なし
+
+移動監査: v6.0.1 との差分を rename 検出付きで照合しました。削除・rename された module は無く、追加は `youtube_automation.commands.suno.content_id_evidence` と `youtube_automation.infrastructure.youtube.streaming._vultr_api` の新規 module だけです。
+
 ## [6.0.1] - 2026-09-10
 
 
@@ -3632,3 +3748,5 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 [6.0.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v6.0.0
 
 [6.0.1]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v6.0.1
+
+[6.1.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v6.1.0

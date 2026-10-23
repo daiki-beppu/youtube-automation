@@ -1,1 +1,0 @@
-- yt-analytics の各レポート収集を個別に耐障害化し、subscribedStatus 等の単一 dimension の API 失敗時も警告として `collection_errors` に記録して取得済み分を `analytics_data_*.json` へ保存するようにした（#5228）。

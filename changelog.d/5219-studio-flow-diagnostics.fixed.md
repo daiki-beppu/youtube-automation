@@ -1,4 +1,0 @@
-- clip 採用の仮想走査がタイムアウトした際、実測/期待件数を error message に載せ、件数不一致の原因が汎用 timeout に埋もれないようにした（#5219）。
-- Studio の New empty project 後に project 領域が空（track 1 件以下・clip 0 件）になることを検証し、内容を持つ既存の Untitled Project を誤って rename しないようにした（#5219）。
-- Studio の Project name 入力欄の待ち時間を延長し、background tab での描画遅延でも rename project を継続できるようにした（#5219）。
-- Studio の track 検出を expected 件数以上・長い待ち窓＋ scroll 再試行に変更し、clip 配置時の render lag に耐えるようにした（#5219）。

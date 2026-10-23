@@ -1,2 +1,0 @@
-- メディア生成系の重複を整理した: `yt-apply-rain-layers` の rain layer 探索を `yt-finalize-master` の ambient layer 探索規則へ委譲し、Lyria の skill-config 必須キー欠落エラーと画像生成の `image_generation.<provider>` namespace 解決をそれぞれ 1 箇所に寄せた。
-- CLI 引数・出力・エラーメッセージ・終了コード・公開 import パスなどの外部仕様は変わらない。
