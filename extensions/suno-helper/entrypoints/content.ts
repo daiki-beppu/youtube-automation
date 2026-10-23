@@ -123,6 +123,7 @@ import {
   writeResumeState,
 } from "../lib/resume-state";
 import {
+  finalStageCompletionMessage,
   resolveRunFinalStage,
   type RunFinalStage,
 } from "../lib/run-final-stage";
@@ -158,24 +159,6 @@ import {
   evaluateClips,
   type DurationOutlierPolicy,
 } from "../lib/yield-guard";
-
-const FINAL_STAGE_COMPLETION_MESSAGES: Record<
-  RunFinalStage,
-  string | undefined
-> = {
-  generation:
-    "playlist 追加とダウンロードは未実行。Suno から手動で取得して 02-Individual-music/ へ配置してください。",
-  playlist:
-    "ダウンロード未実行。Suno から手動で取得して 02-Individual-music/ へ配置してください。",
-  download: undefined,
-};
-
-function finalStageCompletionMessage(
-  finalStage: RunFinalStage
-): Pick<ProgressPayload, "message"> {
-  const message = FINAL_STAGE_COMPLETION_MESSAGES[finalStage];
-  return message === undefined ? {} : { message };
-}
 
 function advanceRunTimingReceipt(
   receipt: RunTimingReceipt,
@@ -2753,7 +2736,6 @@ export default defineContentScript({
       });
       // run 一式完了時リロード (#1411 要件2)。playlist 追加で作った multi-select 状態は
       // Suno 内部 state に残り、同一タブの次 run の Cmd+P に混入するためページごと破棄する。
-      // collection mode の run は playlist phase を実行するため対象。
       // リロード前に FINISHED snapshot を退避し、popup 再 open 時の完了結果表示を引き継ぐ。
       if (
         playlistName &&

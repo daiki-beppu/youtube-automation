@@ -54,6 +54,10 @@ import {
   writeResumeState,
 } from "../lib/resume-state";
 import {
+  finalStageCompletionMessage,
+  resolveRunFinalStage,
+} from "../lib/run-final-stage";
+import {
   buildFailedEntriesRunOverrides,
   buildRunPayload,
   buildResumeRunOverrides,
@@ -1494,10 +1498,34 @@ export function useSunoRunner(): RunnerState {
       );
       return;
     }
+    const finalStage = resolveRunFinalStage({
+      playlistEnabled,
+      downloadEnabled,
+    });
+    if (finalStage === "generation") {
+      // 現在の Switch を優先する。生成は完了済みなので resume を閉じ、通常 run の生成完了と同じ表示で終える。
+      persistedResumeRef.current = null;
+      setPersistedResume(null);
+      setResumeDismissed(true);
+      report(
+        phaseToStatus(
+          {
+            phase: PHASE.FINISHED,
+            total: resumeBanner?.total ?? entries.length,
+            ...finalStageCompletionMessage(finalStage),
+          },
+          entries
+        ).text
+      );
+      await clearResumeStateForCollection(selectedCollectionId).catch(
+        reportStorageFailure
+      );
+      return;
+    }
     const expectedClipCount =
       playlistExpectedClipCountForResume ?? submittedClipIdsForResume.length;
     const shouldDownload =
-      downloadEnabled &&
+      finalStage === "download" &&
       resumeBanner !== null &&
       resumeBanner.failedIndex >= resumeBanner.total &&
       !resumeBanner.remainingIndices?.length;
@@ -1553,7 +1581,10 @@ export function useSunoRunner(): RunnerState {
     report,
     setRunning,
     persistedResume?.timingReceipt,
+    playlistEnabled,
     downloadEnabled,
+    entries,
+    reportStorageFailure,
   ]);
 
   // バナー承認 = 1-click 自動再開 (#892 要件6)。failedIndex === total（全 entry 投入済み）のときは
