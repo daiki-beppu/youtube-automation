@@ -1,1 +1,0 @@
-- yt-document-migrate に `--no-project` を追加。workflow-state.json を書き込めない subagent などから collection plan / music prompt / video description の pair を state 投影なしで公開できる（#5225）。

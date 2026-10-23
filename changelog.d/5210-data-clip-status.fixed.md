@@ -1,1 +1,0 @@
-- suno-helper の生成中（in-flight）判定で、clip 行の `data-clip-status` を一次シグナルにした（#5210）。complete / error / failed は終端として数えず、それ以外の非空 status を生成中とみなす。属性が無い clip 行は従来の Remix btn disabled 判定へフォールバックする。

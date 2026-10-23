@@ -1,1 +1,0 @@
-- `yt-doctor` の GCP 層 check（`gcp_project` / `billing_linked` / `apis_enabled` / `iam_aiplatform_user`）の next_action と関連ガイドに、`infra/terraform/gcp/` が上流専属 stack で下流 project へ apply すると上流 repo の CI へ読み取り権限を渡す旨と、下流は gcloud か自前の最小 Terraform で整備する案内を追加した（#5223）。

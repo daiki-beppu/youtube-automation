@@ -1,1 +1,0 @@
-- suno-helper の overlay が Suno 側 UI を覆ってクリックを奪わないよう、shadow host とコンテナを pointer-events 透過にし hit 領域を panel へ限定した（#5227）。

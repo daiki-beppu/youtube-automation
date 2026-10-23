@@ -1,1 +1,0 @@
-- suno-helper の overlay に「プレイリストに追加する」Switch（既定 ON・再読み込み後も保持）を追加し、OFF では生成完了の時点で FINISHED にして playlist 作成・追加と download を省略できるようにした（#5291）。

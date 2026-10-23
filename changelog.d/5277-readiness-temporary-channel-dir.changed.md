@@ -1,1 +1,0 @@
-- `yt-doctor` の check と dashboard の Analytics 更新で別々に持っていた「チャンネル設定の参照先を一時的に切り替えて元へ戻す」処理を `configuration.loader.temporary_channel_dir()` に共通化した。CLI 引数・出力・エラーメッセージ・終了コード・公開 import パスなどの外部仕様は変わらない。

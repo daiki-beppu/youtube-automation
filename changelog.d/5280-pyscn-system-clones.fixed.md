@@ -1,1 +1,0 @@
-- 配信帯域取得（Vultr bandwidth API）が UTF-8 でない応答を受けたとき、生の `UnicodeDecodeError` ではなく他の通信失敗と同じ `YouTubeAPIError`（`Vultr bandwidth API request failed: ...`）で止まるようにした。
