@@ -11,7 +11,15 @@ from pathlib import Path
 
 import pytest
 
-from youtube_automation.core.errors import AutomationError, WorkflowStateError, WorkflowStateSectionTypeError
+from youtube_automation.core.errors import (
+    AutomationError,
+    WorkflowStateError,
+    WorkflowStateNotRegularFileError,
+    WorkflowStateRootTypeError,
+    WorkflowStateSectionTypeError,
+    WorkflowStateSymlinkError,
+    WorkflowStateWriteError,
+)
 from youtube_automation.domains.collections.workflow_state import WorkflowState, read, read_or_none, update
 from youtube_automation.infrastructure.filesystem import JSONValue
 
@@ -342,32 +350,53 @@ def test_update_creates_missing_document_under_the_same_contract(tmp_path: Path)
     assert read(state_path).phase == "planning"
 
 
-@pytest.mark.parametrize("payload", ["{broken", "[]", "null"])
-def test_read_rejects_broken_json_and_non_object_roots(tmp_path: Path, payload: str) -> None:
+def test_read_rejects_broken_json(tmp_path: Path) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    state_path.write_text("{broken", encoding="utf-8")
+
+    with pytest.raises(WorkflowStateError) as exc_info:
+        read(state_path)
+
+    assert isinstance(exc_info.value.__cause__, json.JSONDecodeError)
+    assert not isinstance(exc_info.value, WorkflowStateRootTypeError)
+
+
+@pytest.mark.parametrize("payload", ["[]", "null"])
+def test_read_rejects_non_object_roots_with_typed_error(tmp_path: Path, payload: str) -> None:
     state_path = tmp_path / "workflow-state.json"
     state_path.write_text(payload, encoding="utf-8")
 
-    with pytest.raises(WorkflowStateError):
+    with pytest.raises(WorkflowStateRootTypeError):
         read(state_path)
 
 
 def test_read_and_read_or_none_distinguish_missing_file(tmp_path: Path) -> None:
     state_path = tmp_path / "workflow-state.json"
 
-    with pytest.raises(WorkflowStateError):
+    with pytest.raises(WorkflowStateNotRegularFileError):
         read(state_path)
     assert read_or_none(state_path) is None
 
 
-def test_read_and_read_or_none_reject_symlink(tmp_path: Path) -> None:
+def test_read_and_read_or_none_reject_directory_with_typed_error(tmp_path: Path) -> None:
+    state_path = tmp_path / "workflow-state.json"
+    state_path.mkdir()
+
+    with pytest.raises(WorkflowStateNotRegularFileError):
+        read(state_path)
+    with pytest.raises(WorkflowStateNotRegularFileError):
+        read_or_none(state_path)
+
+
+def test_read_and_read_or_none_reject_symlink_with_typed_error(tmp_path: Path) -> None:
     target = tmp_path / "actual.json"
     state_path = tmp_path / "workflow-state.json"
     _write(target, {"phase": "planning"})
     state_path.symlink_to(target)
 
-    with pytest.raises(WorkflowStateError):
+    with pytest.raises(WorkflowStateSymlinkError):
         read(state_path)
-    with pytest.raises(WorkflowStateError):
+    with pytest.raises(WorkflowStateSymlinkError):
         read_or_none(state_path)
 
 
@@ -555,9 +584,10 @@ def test_update_keeps_existing_file_and_cleans_temp_when_replace_fails(tmp_path:
 
     monkeypatch.setattr(os, "replace", fail_replace)
 
-    with pytest.raises(WorkflowStateError):
+    with pytest.raises(WorkflowStateWriteError) as exc_info:
         update(state_path, lambda state: setattr(state, "phase", "prepared"))
 
+    assert str(exc_info.value.__cause__) == "replace failed"
     assert state_path.read_text(encoding="utf-8") == original
     assert list(tmp_path.glob(".workflow-state.*.tmp")) == []
 
@@ -582,7 +612,7 @@ def test_update_reports_replace_and_temp_cleanup_failures(tmp_path: Path, monkey
     monkeypatch.setattr(os, "replace", fail_replace)
     monkeypatch.setattr(Path, "unlink", fail_temporary_cleanup)
 
-    with pytest.raises(WorkflowStateError, match="replace failed.*cleanup failed"):
+    with pytest.raises(WorkflowStateWriteError, match="replace failed.*cleanup failed"):
         update(state_path, lambda state: setattr(state, "phase", "prepared"))
 
     assert state_path.read_text(encoding="utf-8") == original

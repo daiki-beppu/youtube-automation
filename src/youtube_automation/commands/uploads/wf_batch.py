@@ -58,6 +58,7 @@ from youtube_automation.core.errors import (
     ReviewError,
     ValidationError,
     WorkflowStateError,
+    WorkflowStateRootTypeError,
     WorkflowStateSectionTypeError,
 )
 from youtube_automation.domains.collections.inventory import UnreadableWorkflowState, iter_collections
@@ -137,7 +138,7 @@ def _load_state(workflow_state_path: Path) -> dict:
     try:
         return read_workflow_state(workflow_state_path).to_dict()
     except WorkflowStateError as error:
-        if "root must be an object" in str(error):
+        if isinstance(error, WorkflowStateRootTypeError):
             raise ValidationError("workflow-state.json の root は object である必要があります") from error
         if isinstance(error.__cause__, json.JSONDecodeError):
             raise ValidationError(f"workflow-state.json のパースに失敗: {error.__cause__}") from error

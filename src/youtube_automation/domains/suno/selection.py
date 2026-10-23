@@ -19,7 +19,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from youtube_automation.core.adapters.media import probe_duration
-from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.core.errors import (
+    ValidationError,
+    WorkflowStateError,
+    WorkflowStateNotRegularFileError,
+    WorkflowStateRootTypeError,
+    WorkflowStateSymlinkError,
+    WorkflowStateWriteError,
+)
 from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
@@ -861,14 +868,13 @@ def _read_workflow_state(workflow_state_path: Path) -> WorkflowStateSnapshot:
     try:
         read_workflow_state_or_none(workflow_state_path)
     except WorkflowStateError as error:
-        message = str(error)
-        if "must not be a symlink" in message:
+        if isinstance(error, WorkflowStateSymlinkError):
             raise ValidationError(f"workflow-state.json must not be a symlink: {workflow_state_path}") from error
-        if "root must be an object" in message:
+        if isinstance(error, WorkflowStateRootTypeError):
             raise ValidationError(
                 f"workflow-state.json の root は object である必要があります: {workflow_state_path}"
             ) from error
-        if "is not a regular file" in message:
+        if isinstance(error, WorkflowStateNotRegularFileError):
             raise ValidationError(f"workflow-state.json は file である必要があります: {workflow_state_path}") from error
         raise ValidationError(f"workflow-state.json を読み取れませんでした: {workflow_state_path}") from error
     return WorkflowStateSnapshot(path=workflow_state_path)
@@ -899,7 +905,7 @@ def _sync_workflow_state_music_pair_selection(
     try:
         update_workflow_state(snapshot.path, record_selection)
     except WorkflowStateError as error:
-        if isinstance(error.__cause__, OSError) and "could not be written" in str(error):
+        if isinstance(error, WorkflowStateWriteError) and isinstance(error.__cause__, OSError):
             raise error.__cause__ from error
         raise ValidationError(f"workflow-state.json を読み取れませんでした: {snapshot.path}") from error
 

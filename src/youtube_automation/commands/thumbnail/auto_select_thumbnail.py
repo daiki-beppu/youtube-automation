@@ -41,7 +41,13 @@ from typing import Any
 from PIL import Image, UnidentifiedImageError
 
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.core.errors import (
+    ConfigError,
+    ValidationError,
+    WorkflowStateError,
+    WorkflowStateRootTypeError,
+    WorkflowStateSymlinkError,
+)
 from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
@@ -187,10 +193,9 @@ def load_workflow_state(ws_path: Path) -> dict[str, Any] | None:
     try:
         state = read_workflow_state_or_none(ws_path)
     except WorkflowStateError as error:
-        message = str(error)
-        if "must not be a symlink" in message:
+        if isinstance(error, WorkflowStateSymlinkError):
             raise ValidationError(f"workflow-state.json にシンボリックリンクは指定できません: {ws_path}") from error
-        if "root must be an object" in message:
+        if isinstance(error, WorkflowStateRootTypeError):
             raise ValidationError(f"workflow-state.json の root は object である必要があります: {ws_path}") from error
         raise ValidationError(f"workflow-state.json が JSON としてパースできません: {ws_path}: {error}") from error
     return state.to_dict() if state is not None else None

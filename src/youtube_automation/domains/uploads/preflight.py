@@ -12,7 +12,7 @@ from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 
 from youtube_automation.configuration import load_config
-from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError, WorkflowStateRootTypeError
 from youtube_automation.core.youtube_tags import parse_youtube_tags, youtube_tag_chars
 from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
@@ -516,7 +516,7 @@ def _validate_scene_phrases(paths: CollectionPaths, supported_languages: list[st
     except WorkflowStateError as exc:
         if isinstance(exc.__cause__, json.JSONDecodeError):
             return ["workflow-state.json の JSON が不正"]
-        if "root must be an object" in str(exc):
+        if isinstance(exc, WorkflowStateRootTypeError):
             return ["workflow-state.json の root は object である必要があります"]
         raise
     if not requires_scene_phrases(supported_languages):

@@ -19,7 +19,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, TypedDict
 
-from youtube_automation.core.errors import StateSyncError, ValidationError, WorkflowStateError
+from youtube_automation.core.errors import (
+    StateSyncError,
+    ValidationError,
+    WorkflowStateError,
+    WorkflowStateRootTypeError,
+)
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.documents.video_description import read_video_description_metadata
@@ -412,7 +417,7 @@ def _state(collection: Path) -> WorkflowState:
         cause = exc.__cause__
         if isinstance(cause, (OSError, json.JSONDecodeError)):
             raise ValueError(f"JSON を読めません: {state_path}: {cause}") from exc
-        if "root must be an object" in str(exc):
+        if isinstance(exc, WorkflowStateRootTypeError):
             raise ValueError(f"JSON root は object でなければなりません: {state_path}") from exc
         raise ValueError(str(exc)) from exc
     try:

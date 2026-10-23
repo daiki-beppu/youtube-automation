@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.core.errors import WorkflowStateError, WorkflowStateWriteError
 from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
@@ -103,6 +103,6 @@ def update_workflow_state_downloaded(
     try:
         update_workflow_state(ws_path, record_downloaded)
     except WorkflowStateError as error:
-        if isinstance(error.__cause__, OSError) and "could not be written" in str(error):
+        if isinstance(error, WorkflowStateWriteError) and isinstance(error.__cause__, OSError):
             raise error.__cause__ from error
         raise ValueError("invalid workflow-state.json") from error

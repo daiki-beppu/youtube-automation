@@ -23,7 +23,13 @@ import yaml
 from youtube_automation.configuration import ChannelConfig, load_config
 from youtube_automation.configuration.skills import load_skill_config
 from youtube_automation.core.channel_context import channel_dir
-from youtube_automation.core.errors import ValidationError, WorkflowStateError, WorkflowStateSectionTypeError
+from youtube_automation.core.errors import (
+    ValidationError,
+    WorkflowStateError,
+    WorkflowStateRootTypeError,
+    WorkflowStateSectionTypeError,
+    WorkflowStateWriteError,
+)
 from youtube_automation.core.time_utils import format_duration_display, format_duration_short, format_timestamp
 from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import WorkflowState
@@ -111,7 +117,7 @@ def _load_metadata_workflow_state(ws_path: Path) -> WorkflowState:
     try:
         state = read_workflow_state_or_none(ws_path)
     except WorkflowStateError as error:
-        if "root must be an object" in str(error):
+        if isinstance(error, WorkflowStateRootTypeError):
             raise ValidationError(f"workflow-state.json の root は object である必要があります: {ws_path}") from error
         if isinstance(error, WorkflowStateSectionTypeError) and error.section in {"planning", "scene_phrases"}:
             raise ValidationError(f"workflow-state.json::{error.section} は object である必要があります") from error
@@ -144,9 +150,9 @@ def _persist_track_display_names(ws_path: Path, filename_map: dict[str, str]) ->
         update_workflow_state(ws_path, persist_display_names)
     except WorkflowStateError as error:
         cause = error.__cause__
-        if isinstance(cause, OSError) and "could not be written" in str(error):
+        if isinstance(error, WorkflowStateWriteError) and isinstance(cause, OSError):
             raise cause from error
-        if "root must be an object" in str(error):
+        if isinstance(error, WorkflowStateRootTypeError):
             raise ValidationError("workflow-state.json の root は object である必要があります") from error
         if isinstance(cause, json.JSONDecodeError):
             raise ValidationError(f"workflow-state.json のパースに失敗: {cause}") from error

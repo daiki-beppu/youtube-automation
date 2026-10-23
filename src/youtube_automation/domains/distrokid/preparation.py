@@ -22,7 +22,13 @@ from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 
-from youtube_automation.core.errors import ConfigError, ValidationError, WorkflowStateError
+from youtube_automation.core.errors import (
+    ConfigError,
+    ValidationError,
+    WorkflowStateError,
+    WorkflowStateRootTypeError,
+    WorkflowStateWriteError,
+)
 from youtube_automation.core.time_utils import format_duration_mss
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
@@ -759,14 +765,14 @@ def write_release_date(workflow_state_path: Path, date_str: str) -> None:
         update_workflow_state(workflow_state_path, record_release_date)
     except WorkflowStateError as error:
         cause = error.__cause__
-        if isinstance(cause, OSError) and "could not be written" in str(error):
+        if isinstance(error, WorkflowStateWriteError) and isinstance(cause, OSError):
             raise cause from error
         if isinstance(cause, json.JSONDecodeError):
             raise ConfigError(
                 f"workflow-state.json が不正な JSON です: {workflow_state_path}\n"
                 "上書きすると既存データが失われるため中断しました。手動で修復してください。"
             ) from error
-        if "root must be an object" in str(error):
+        if isinstance(error, WorkflowStateRootTypeError):
             raise ConfigError(
                 f"workflow-state.json のトップレベルが object ではありません: {workflow_state_path}"
             ) from error
