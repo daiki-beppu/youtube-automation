@@ -22,9 +22,9 @@ git status --porcelain | wc -l
 # → 0 であること
 ```
 
-### 3. Nix extensions shell が利用可能
+### 3. vp 管理の Node / pnpm が利用可能
 
-release workflow と同じ **Node 24 / pnpm 11.15.1** の Nix extensions shell を使う。ambient `node` / `pnpm` は使わず、`extensions/<name>/pnpm-workspace.yaml::allowBuilds` を有効に保つため `--ignore-workspace` も使わない。
+release workflow と同じ **Node 24 / pnpm 11.15.1** を vite-plus（`vp`）の shim から使う（Node は root の `.node-version`、pnpm は `package.json::packageManager` が正）。ambient `node` / `pnpm` は使わず、`extensions/<name>/pnpm-workspace.yaml::allowBuilds` を有効に保つため `--ignore-workspace` も使わない。
 
 ```bash
 bash .claude/skills/automation-release/references/verify-extensions.sh <name>
@@ -91,7 +91,7 @@ version bump 自体では `pnpm-lock.yaml` は乖離しない。失敗するの�
 
 `git status --porcelain` に `extensions/<name>/package.json` 以外の行が出るケース。
 
-**対応**: 停止して原因を特定する。典型は `--frozen-lockfile` を付けない install による `pnpm-lock.yaml` 書き換わり・root への lockfile / workspace 設定の混入、`pnpm add` の誤実行。`--ignore-workspace` は `extensions/<name>/pnpm-workspace.yaml::allowBuilds` を無視して build script を失敗させるため使わない。復旧は `git checkout -- <file>` で差分破棄 → Nix extensions shell で verify 再実行。`.output/` / `.wxt/` / `node_modules/` が `git status` に出る場合は `.gitignore` の破損なので、リリースを中断して先に修正する。
+**対応**: 停止して原因を特定する。典型は `--frozen-lockfile` を付けない install による `pnpm-lock.yaml` 書き換わり・root への lockfile / workspace 設定の混入、`pnpm add` の誤実行。`--ignore-workspace` は `extensions/<name>/pnpm-workspace.yaml::allowBuilds` を無視して build script を失敗させるため使わない。復旧は `git checkout -- <file>` で差分破棄 → verify を再実行。`.output/` / `.wxt/` / `node_modules/` が `git status` に出る場合は `.gitignore` の破損なので、リリースを中断して先に修正する。
 
 ### ケース C: gh pr merge --delete-branch が non-zero を返す（worktree footgun）
 

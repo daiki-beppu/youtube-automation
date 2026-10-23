@@ -55,17 +55,17 @@ browser use から overlay を安定して観測できるよう、操作 panel �
 
 ## 開発・ビルド・テスト
 
-ローカル検証は CI・lockfile と同じ Nix extensions shell の Node 24 / pnpm 11.15.1 に固定する。ambient `pnpm` の版は各環境で異なり得るため、リポジトリ root から以下のコマンドを使う。理由と両拡張共通の release 前検証は `extensions/README.md::pnpm バージョン契約` を参照する。
+ローカル検証は CI・lockfile と同じ vite-plus（`vp`）管理の Node 24 / pnpm 11.15.1 に固定する。ambient `pnpm` の版は各環境で異なり得るため、リポジトリ root から以下のコマンドを使う（拡張ディレクトリで起動した vp の shim が版を選ぶ）。理由と両拡張共通の release 前検証は `extensions/README.md::pnpm バージョン契約` を参照する。
 
 ```bash
-nix develop .#extensions --command pnpm -C extensions/suno-helper install --frozen-lockfile  # postinstall で wxt prepare
-nix develop .#extensions --command pnpm -C extensions/suno-helper dev                         # 開発（HMR）
-nix develop .#extensions --command pnpm -C extensions/suno-helper build                       # 本番ビルド → .output/chrome-mv3/
-nix develop .#extensions --command pnpm -C extensions/suno-helper zip                         # 配布用 zip
-nix develop .#extensions --command pnpm -C extensions/suno-helper compile                     # 型チェック（tsc --noEmit）
-nix develop .#extensions --command pnpm -C extensions/suno-helper test                        # Vitest unit
-nix develop .#extensions --command pnpm -C extensions/suno-helper exec playwright install --with-deps chromium  # Playwright 初回のみ（CI と同じ browser + system dependencies）
-nix develop .#extensions --command pnpm -C extensions/suno-helper test:e2e                    # Playwright e2e
+(cd extensions/suno-helper && pnpm install --frozen-lockfile)  # postinstall で wxt prepare
+(cd extensions/suno-helper && pnpm dev)                         # 開発（HMR）
+(cd extensions/suno-helper && pnpm build)                       # 本番ビルド → .output/chrome-mv3/
+(cd extensions/suno-helper && pnpm zip)                         # 配布用 zip
+(cd extensions/suno-helper && pnpm compile)                     # 型チェック（tsc --noEmit）
+(cd extensions/suno-helper && pnpm test)                        # Vitest unit
+(cd extensions/suno-helper && pnpm exec playwright install --with-deps chromium)  # Playwright 初回のみ（CI と同じ browser + system dependencies）
+(cd extensions/suno-helper && pnpm test:e2e)                    # Playwright e2e
 ```
 
 `compile` は `wxt prepare` の後に固定版 TypeScript 7.0.2 の `tsc --noEmit` を実行する型検査レーンで、成果物を生成する WXT の `build` / `zip` とは別である。TypeScript 5.9.3 との比較で確認した 6.7〜8.3 倍の高速化は `wxt prepare` を除外した型検査部分だけの結果であり、build / zip 全体の性能を示さない。計測条件と生値は [共通の性能比較記録](../../docs/investigations/2026-07-18-2016-typescript7-compile-benchmark.md) を参照する。
@@ -74,7 +74,7 @@ build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/suno-helpe
 
 ## インストール（unpacked）
 
-1. リポジトリ root で `nix develop .#extensions --command pnpm -C extensions/suno-helper install --frozen-lockfile && nix develop .#extensions --command pnpm -C extensions/suno-helper build` を実行。
+1. リポジトリ root で `(cd extensions/suno-helper && pnpm install --frozen-lockfile) && (cd extensions/suno-helper && pnpm build)` を実行。
 2. build artifact を basename が `suno-helper` になる固定パスへコピーする:
    ```bash
    mkdir -p "$HOME/chrome-extensions/suno-helper"

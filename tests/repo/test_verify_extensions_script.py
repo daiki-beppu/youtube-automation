@@ -26,52 +26,59 @@ def verify_environment(tmp_path: Path) -> tuple[Path, dict[str, str], Path]:
 
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    log_path = tmp_path / "nix.log"
-    fake_nix = bin_dir / "nix"
-    fake_nix.write_text(
+    log_path = tmp_path / "toolchain.log"
+    # vp の shim の代わりに、cwd と引数を記録する偽の node / pnpm を PATH 先頭へ置く。
+    fake_node = bin_dir / "node"
+    fake_node.write_text(
         """#!/usr/bin/env bash
 set -euo pipefail
-printf '%s\\n' "$*" >> "${FAKE_NIX_LOG}"
-
-if [[ $* == 'develop .#extensions --command node --version' ]]; then
-  printf '%s\\n' "${FAKE_NODE_VERSION:-v24.1.0}"
+printf 'node %s\\n' "$*" >> "${FAKE_TOOLCHAIN_LOG}"
+if [[ $* == --version ]]; then
+  printf '%s\\n' "${FAKE_NODE_VERSION:-v24.22.1}"
   exit 0
 fi
-if [[ $* == 'develop .#extensions --command pnpm --version' ]]; then
-  printf '%s\\n' "${FAKE_PNPM_VERSION:-11.15.1}"
-  exit 0
-fi
-if [[ ${4:-} == node && ${5:-} == -p ]]; then
+if [[ ${1:-} == -p ]]; then
   printf '1.2.3\\n'
   exit 0
 fi
-if [[ ${4:-} == pnpm ]]; then
-  extension_dir=${6}
-  command=${7}
-  name=${extension_dir##*/}
-  if [[ ${command} == install && ${FAKE_MUTATE_LOCK:-} == "${name}" ]]; then
-    printf 'mutated\\n' >> "${extension_dir}/pnpm-lock.yaml"
-  fi
-  if [[ ${command} == zip && ${FAKE_SKIP_ZIP:-} != "${name}" ]]; then
-    mkdir -p "${extension_dir}/.output"
-    : > "${extension_dir}/.output/${name}-1.2.3-chrome.zip"
-    if [[ ${FAKE_EXTRA_ZIP:-} == "${name}" ]]; then
-      : > "${extension_dir}/.output/${name}-sources.zip"
-    fi
-  fi
-  exit 0
-fi
-
-printf 'unexpected nix arguments: %s\\n' "$*" >&2
+printf 'unexpected node arguments: %s\\n' "$*" >&2
 exit 64
 """,
         encoding="utf-8",
     )
-    fake_nix.chmod(0o755)
+    fake_pnpm = bin_dir / "pnpm"
+    fake_pnpm.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+extension_dir=${PWD#"${FAKE_REPOSITORY}/"}
+printf '%s: pnpm %s\\n' "${extension_dir}" "$*" >> "${FAKE_TOOLCHAIN_LOG}"
+name=${extension_dir##*/}
+command=${1:-}
+if [[ ${command} == --version ]]; then
+  printf '%s\\n' "${FAKE_PNPM_VERSION:-11.15.1}"
+  exit 0
+fi
+if [[ ${command} == install && ${FAKE_MUTATE_LOCK:-} == "${name}" ]]; then
+  printf 'mutated\\n' >> pnpm-lock.yaml
+fi
+if [[ ${command} == zip && ${FAKE_SKIP_ZIP:-} != "${name}" ]]; then
+  mkdir -p .output
+  : > ".output/${name}-1.2.3-chrome.zip"
+  if [[ ${FAKE_EXTRA_ZIP:-} == "${name}" ]]; then
+    : > ".output/${name}-sources.zip"
+  fi
+fi
+exit 0
+""",
+        encoding="utf-8",
+    )
+    for fake in (fake_node, fake_pnpm):
+        fake.chmod(0o755)
 
     environment = os.environ | {
         "PATH": f"{bin_dir}:{os.environ['PATH']}",
-        "FAKE_NIX_LOG": str(log_path),
+        "FAKE_TOOLCHAIN_LOG": str(log_path),
+        "FAKE_REPOSITORY": str(tmp_path.resolve()),
     }
     return tmp_path, environment, log_path
 
@@ -102,17 +109,15 @@ def test_default_verification_runs_all_extensions_in_order(
     log = verify_environment[2].read_text(encoding="utf-8")
 
     assert result.returncode == 0, result.stderr
-    expected_commands = [
-        "develop .#extensions --command node --version",
-        "develop .#extensions --command pnpm --version",
-    ]
+    expected_commands = ["node --version"]
+    expected_commands.extend(f"extensions/{name}: pnpm --version" for name in _EXTENSIONS)
     for name in _EXTENSIONS:
         expected_commands.extend(
             [
-                f"develop .#extensions --command pnpm -C extensions/{name} install --frozen-lockfile",
-                f"develop .#extensions --command pnpm -C extensions/{name} build",
-                f"develop .#extensions --command pnpm -C extensions/{name} zip",
-                f"develop .#extensions --command node -p require('./extensions/{name}/package.json').version",
+                f"extensions/{name}: pnpm install --frozen-lockfile",
+                f"extensions/{name}: pnpm build",
+                f"extensions/{name}: pnpm zip",
+                f"node -p require('./extensions/{name}/package.json').version",
             ]
         )
     assert log.splitlines() == expected_commands

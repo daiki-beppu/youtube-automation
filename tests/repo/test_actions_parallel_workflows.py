@@ -41,26 +41,24 @@ _CI_FULL_TEST_JOBS = {
 }
 
 _SUNO_FAST_PARALLEL_STEPS = {
-    "Check (Oxlint + Oxfmt)": "nix develop .#extensions --command pnpm check",
-    "Type check": "nix develop .#extensions --command pnpm compile",
-    "Unit tests (Vitest)": "nix develop .#extensions --command pnpm test",
+    "Check (Oxlint + Oxfmt)": "pnpm check",
+    "Type check": "pnpm compile",
+    "Unit tests (Vitest)": "pnpm test",
 }
 _SUNO_BUILD_PARALLEL_STEPS = {
-    "Build": "nix develop .#extensions --command pnpm build",
-    "Install Playwright browser": (
-        "nix develop .#extensions --command pnpm exec playwright install --with-deps chromium"
-    ),
+    "Build": "pnpm build",
+    "Install Playwright browser": ("pnpm exec playwright install --with-deps chromium"),
 }
 _DISTROKID_FAST_PARALLEL_STEPS = {
-    "Check (Oxlint + Oxfmt)": "nix develop .#extensions --command pnpm check",
-    "Typecheck": "nix develop .#extensions --command pnpm compile",
-    "Unit tests (Vitest)": "nix develop .#extensions --command pnpm test",
+    "Check (Oxlint + Oxfmt)": "pnpm check",
+    "Typecheck": "pnpm compile",
+    "Unit tests (Vitest)": "pnpm test",
 }
 _DISTROKID_BUILD_PARALLEL_STEPS = _SUNO_BUILD_PARALLEL_STEPS
 _COMMUNITY_FAST_PARALLEL_STEPS = {
-    "Check (Oxlint + Oxfmt)": "nix develop .#extensions --command pnpm check",
-    "Typecheck": "nix develop .#extensions --command pnpm compile",
-    "Unit tests (Vitest)": "nix develop .#extensions --command pnpm test",
+    "Check (Oxlint + Oxfmt)": "pnpm check",
+    "Typecheck": "pnpm compile",
+    "Unit tests (Vitest)": "pnpm test",
 }
 _EXTENSIONS_JOB_CONTRACTS = {
     "check": {
@@ -79,16 +77,16 @@ _EXTENSIONS_JOB_CONTRACTS = {
         "check_script": "cd .. && ultracite check community-helper",
     },
 }
-_NIX_EXTENSIONS_INSTALL_COMMAND = "nix develop .#extensions --command pnpm install --frozen-lockfile"
-_NIX_EXTENSIONS_E2E_COMMAND = "nix develop .#extensions --command xvfb-run -a pnpm test:e2e"
-_NIX_EXTENSIONS_AUDIT_COMMAND = "nix develop .#extensions --command pnpm run audit"
+_EXTENSIONS_INSTALL_COMMAND = "pnpm install --frozen-lockfile"
+_EXTENSIONS_E2E_COMMAND = "xvfb-run -a pnpm test:e2e"
+_EXTENSIONS_AUDIT_COMMAND = "pnpm run audit"
 
 _RELEASE_BUILD_PARALLEL_STEPS = {
     "Build and zip suno-helper": ("extensions/suno-helper", "verify-extensions.sh suno-helper"),
     "Build and zip distrokid-helper": ("extensions/distrokid-helper", "verify-extensions.sh distrokid-helper"),
     "Build and zip community-helper": ("extensions/community-helper", "verify-extensions.sh community-helper"),
 }
-_RELEASE_NIX_INSTALL_ACTION = "DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25"
+_SETUP_VP_ACTION = "voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af"
 _SHELL_BACKGROUND_OPERATOR = re.compile(r"(?<!&)&(?!&)")
 
 
@@ -225,8 +223,7 @@ def test_extensions_pull_request_trigger_keeps_path_filter() -> None:
         ".github/workflows/extensions.yml",
         ".github/scripts/classify-ci-paths.sh",
         "tests/repo/test_actions_parallel_workflows.py",
-        "flake.nix",
-        "flake.lock",
+        ".node-version",
     ]
     assert pull_request.get("paths") == expected_paths
     assert _on_section(workflow).get("push", {}).get("paths") == expected_paths
@@ -255,6 +252,7 @@ def test_extensions_pull_request_trigger_keeps_path_filter() -> None:
         ),
         (["docs/adr/0024-example.md"], {"python", "adr"}),
         ([".github/scripts/select-affected-tests.py"], {"python"}),
+        ([".node-version"], {"python", "suno", "distrokid", "community"}),
         (
             [],
             {"python", "packaging", "windows", "adr", "suno", "distrokid", "community"},
@@ -573,25 +571,30 @@ def test_issue_lint_workflow_and_script_are_removed() -> None:
 
 
 @pytest.mark.parametrize("job_name", ["check", "distrokid-helper", "community-helper"])
-def test_extensions_jobs_use_only_the_nix_extensions_toolchain(job_name: str) -> None:
-    """Given Extensions CI, When commands run, Then all jobs use the Nix extensions shell."""
+def test_extensions_jobs_use_only_the_vp_toolchain(job_name: str) -> None:
+    """Given Extensions CI, When commands run, Then Node / pnpm come from vp, not Nix or setup actions."""
     steps = _job_steps(_load_workflow(_EXTENSIONS_WORKFLOW_PATH), job_name)
 
-    assert _top_level_step_index_with_uses(
-        steps, "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
-    ) < _top_level_step_index_with_uses(steps, "cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342")
-    uses = {step.get("uses") for step in steps}
-    assert "pnpm/action-setup@v4" not in uses
-    assert "actions/setup-node@v4" not in uses
+    setup_index = _top_level_step_index_with_uses(steps, _SETUP_VP_ACTION)
+    assert (
+        _top_level_step_index_with_uses(steps, "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1")
+        < setup_index
+    )
+    assert steps[setup_index]["with"] == {"node-version-file": ".node-version", "run-install": False}
+    uses = {str(step.get("uses", "")).split("@", maxsplit=1)[0] for step in steps}
+    assert "cachix/install-nix-action" not in uses
+    assert "pnpm/action-setup" not in uses
+    assert "actions/setup-node" not in uses
     run_steps = [step for step in steps if "run" in step]
     run_steps.extend(child for group in _parallel_groups(steps) for child in group)
     assert run_steps
-    assert all(str(step.get("run", "")).startswith("nix develop .#extensions --command ") for step in run_steps)
+    assert all("nix develop" not in str(step.get("run", "")) for step in run_steps)
+    assert all(str(step.get("run", "")).lstrip().startswith(("pnpm ", "node ", "xvfb-run ")) for step in run_steps)
 
 
 @pytest.mark.parametrize("job_name", ["check", "distrokid-helper", "community-helper"])
 def test_extensions_jobs_preserve_working_directory_install_and_e2e_contract(job_name: str) -> None:
-    """Given Extensions CI, When Nix supplies its tools, Then each job keeps its check contract."""
+    """Given Extensions CI, When vp supplies its tools, Then each job keeps its check contract."""
     workflow = _load_workflow(_EXTENSIONS_WORKFLOW_PATH)
     jobs = workflow.get("jobs")
     assert isinstance(jobs, dict), "jobs セクションが存在しない"
@@ -601,17 +604,17 @@ def test_extensions_jobs_preserve_working_directory_install_and_e2e_contract(job
 
     assert job.get("defaults") == {"run": {"working-directory": contract["working_directory"]}}
     steps = _job_steps(workflow, job_name)
-    assert _top_level_step(steps, "Install dependencies").get("run") == _NIX_EXTENSIONS_INSTALL_COMMAND
+    assert _top_level_step(steps, "Install dependencies").get("run") == _EXTENSIONS_INSTALL_COMMAND
     # 共有 config の ultracite import を extensions/node_modules で解決するための install（#2154）。
     toolchain_install = _top_level_step(steps, "Install shared lint toolchain")
-    assert toolchain_install.get("run") == _NIX_EXTENSIONS_INSTALL_COMMAND
+    assert toolchain_install.get("run") == _EXTENSIONS_INSTALL_COMMAND
     assert toolchain_install.get("working-directory") == "extensions"
     assert (
         _top_level_step_index(steps, "Install dependencies")
         < _top_level_step_index(steps, "Install shared lint toolchain")
         < _parallel_group_index_containing(steps, "Check (Oxlint + Oxfmt)")
     )
-    assert _top_level_step(steps, contract["e2e_step"]).get("run") == _NIX_EXTENSIONS_E2E_COMMAND
+    assert _top_level_step(steps, contract["e2e_step"]).get("run") == _EXTENSIONS_E2E_COMMAND
 
 
 @pytest.mark.parametrize("job_name", ["check", "distrokid-helper", "community-helper"])
@@ -627,7 +630,7 @@ def test_extensions_jobs_run_ultracite_through_the_package_check_entrypoint(job_
     expected_steps = _SUNO_FAST_PARALLEL_STEPS if job_name == "check" else _DISTROKID_FAST_PARALLEL_STEPS
     check_group = _parallel_group_with_names(_job_steps(workflow, job_name), set(expected_steps))
     check_step = next(step for step in check_group if step.get("name") == "Check (Oxlint + Oxfmt)")
-    assert check_step.get("run") == "nix develop .#extensions --command pnpm check"
+    assert check_step.get("run") == "pnpm check"
 
     package = json.loads(_read_text(_REPO_ROOT / str(contract["working_directory"]) / "package.json"))
     assert package["scripts"]["check"] == contract["check_script"]
@@ -642,14 +645,12 @@ def test_extensions_pull_request_runs_one_fallow_audit_for_the_extensions_root()
     audit_steps: list[tuple[str, dict[str, object]]] = []
     for job_name in jobs:
         for step in _job_steps(workflow, str(job_name)):
-            if step.get("run") == _NIX_EXTENSIONS_AUDIT_COMMAND:
+            if step.get("run") == _EXTENSIONS_AUDIT_COMMAND:
                 audit_steps.append((str(job_name), step))
             parallel_steps = step.get("parallel")
             if isinstance(parallel_steps, list):
                 audit_steps.extend(
-                    (str(job_name), child)
-                    for child in parallel_steps
-                    if child.get("run") == _NIX_EXTENSIONS_AUDIT_COMMAND
+                    (str(job_name), child) for child in parallel_steps if child.get("run") == _EXTENSIONS_AUDIT_COMMAND
                 )
 
     assert audit_steps == [
@@ -659,7 +660,7 @@ def test_extensions_pull_request_runs_one_fallow_audit_for_the_extensions_root()
                 "name": "Fallow audit",
                 "if": "github.event_name == 'pull_request'",
                 "env": {"FALLOW_AUDIT_BASE": "${{ github.event.pull_request.base.sha }}"},
-                "run": _NIX_EXTENSIONS_AUDIT_COMMAND,
+                "run": _EXTENSIONS_AUDIT_COMMAND,
             },
         )
     ]
@@ -806,16 +807,16 @@ def test_community_helper_runs_required_ci_gates_after_install() -> None:
     assert job.get("defaults") == {"run": {"working-directory": "extensions/community-helper"}}
 
     steps = _job_steps(workflow, "community-helper")
-    assert _top_level_step(steps, "Install dependencies").get("run") == _NIX_EXTENSIONS_INSTALL_COMMAND
+    assert _top_level_step(steps, "Install dependencies").get("run") == _EXTENSIONS_INSTALL_COMMAND
     toolchain_install = _top_level_step(steps, "Install shared lint toolchain")
     assert toolchain_install.get("working-directory") == "extensions"
-    assert toolchain_install.get("run") == _NIX_EXTENSIONS_INSTALL_COMMAND
+    assert toolchain_install.get("run") == _EXTENSIONS_INSTALL_COMMAND
     _assert_named_parallel_commands(steps, _COMMUNITY_FAST_PARALLEL_STEPS)
     _assert_named_parallel_commands(steps, _SUNO_BUILD_PARALLEL_STEPS)
     assert _parallel_group_index_containing(steps, "Check (Oxlint + Oxfmt)") < _parallel_group_index_containing(
         steps, "Build"
     )
-    assert _top_level_step(steps, "E2E (Playwright)").get("run") == _NIX_EXTENSIONS_E2E_COMMAND
+    assert _top_level_step(steps, "E2E (Playwright)").get("run") == _EXTENSIONS_E2E_COMMAND
     _assert_parallel_runs_do_not_use_shell_backgrounding(steps)
 
 
@@ -852,6 +853,6 @@ def test_release_extensions_builds_all_zips_before_release_attachment() -> None:
         _top_level_step_index_with_uses(steps, "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1")
         < build_parallel_index
     )
-    assert _top_level_step_index_with_uses(steps, _RELEASE_NIX_INSTALL_ACTION) < build_parallel_index
+    assert _top_level_step_index_with_uses(steps, _SETUP_VP_ACTION) < build_parallel_index
     assert build_parallel_index < _top_level_step_index(steps, "Attach zips to Release")
     _assert_parallel_runs_do_not_use_shell_backgrounding(steps)

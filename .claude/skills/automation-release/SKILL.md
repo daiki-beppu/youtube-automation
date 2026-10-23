@@ -54,7 +54,7 @@ description: "Use when 本リポジトリの新規リリースを作成すると
 - Python 本体のバージョン管理は `pyproject.toml::version` を **唯一のソース** とする（`src/youtube_automation/__init__.py` は `importlib.metadata` 経由で自動追従）。配布は git+https + tag pin（PyPI 公開しない）
 - extension release のバージョン管理は `extensions/<name>/package.json::version` を **唯一のソース** とし、Python 本体とは完全独立（契約: `references/release-contracts.md`）。extension release では `pyproject.toml` / `uv.lock` / `CHANGELOG.md` 昇格に一切触らない
 - extension release の場合、`references/verify-extensions.sh <name>` がexit 0を返すこと。non-zeroなら出力された原因を解消するまで停止する
-- extension release の install / build / zip は Nix extensions shell（Node 24 / pnpm 11.15.1）経由で実行する。ambient `node` / `pnpm` は使わず、`extensions/<name>/pnpm-workspace.yaml::allowBuilds` を有効に保つため `--ignore-workspace` も使わない
+- extension release の install / build / zip は vite-plus（`vp`）管理の Node 24 / pnpm 11.15.1 で実行する。ambient `node` / `pnpm` は使わず、`extensions/<name>/pnpm-workspace.yaml::allowBuilds` を有効に保つため `--ignore-workspace` も使わない
 
 ## Instructions
 
@@ -421,7 +421,7 @@ git checkout -b "release/ext-v${VER}"
 bash .claude/skills/automation-release/references/verify-extensions.sh <name>
 ```
 
-このスクリプトは `.github/workflows/release-extensions.yml` と同じ Nix extensions shell（Node 24 / pnpm 11.15.1）を使い、`pnpm install --frozen-lockfile` → `pnpm build` → `pnpm zip` を実行する。ambient `node` / `pnpm` や `--ignore-workspace` を使わない。
+このスクリプトは `.github/workflows/release-extensions.yml` と同じ vite-plus（`vp`）管理の Node 24 / pnpm 11.15.1 を使い、`pnpm install --frozen-lockfile` → `pnpm build` → `pnpm zip` を実行する。ambient `node` / `pnpm` や `--ignore-workspace` を使わない。
 
 検証ロジックとPASS/FAIL条件は `references/verify-extensions.sh` が単一ソース。対象拡張の期待名 zip が唯一の1件であることと、対象 lockfile に差分がないことまで確認し、non-zeroならreleaseを中止する。
 
@@ -602,7 +602,7 @@ merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/relea
 - **`gh pr merge --delete-branch` の non-zero（worktree footgun）**: worktree 環境では remote merge 成功後の local checkout 後処理が `fatal: 'main' is already used by worktree ...` で失敗し non-zero になる。remote merge 失敗と誤認して merge を再実行しない。E2-1 の通り `gh pr view <N> --json state,mergeCommit` で remote state を確認し、`MERGED` なら tag push へ進む
 - **`pnpm install --frozen-lockfile` の失敗**: version bump 自体では lockfile は乖離しない。失敗＝依存差分の混入なので、リリースとは切り離して lockfile 同期の修正 PR を先に main へ入れる
 - **ext-v tag 系列と package.json 版数の乖離**: `ext-v*` は3拡張共通の単一系列のため、bump 対象の拡張によっては tag 版数と package.json 版数がずれる（前例: `ext-v0.2.3` で distrokid-helper 0.2.1）。Release asset 名は package.json 版数に従う（E0 の「tag 版数の決定」参照）
-- **Chrome 拡張の pnpm 版数乖離**: ambient pnpm の版は各環境で異なり得る。prepare Phase 1-6 の Nix extensions shell（Node 24 / pnpm 11.15.1）で3拡張を検証し、期待 zip と lockfile 無差分を確認する
+- **Chrome 拡張の pnpm 版数乖離**: ambient pnpm の版は各環境で異なり得る。prepare Phase 1-6 で vite-plus（`vp`）管理の Node 24 / pnpm 11.15.1 を使って3拡張を検証し、期待 zip と lockfile 無差分を確認する
 - **`.output/` のビルド残骸で verify が誤 FAIL**: `verify-extensions.sh` は zip が「期待名の唯一 1 件」であることを検証するため、過去 run の zip（`<name>-<旧版数>-chrome.zip`）が `.output/` に残っていると `expected exactly one zip ... found N` で停止する。原因はリポジトリ側ではなくローカルのビルド成果物（gitignore 済み）。スクリプトが zip 生成前に `.output/*.zip` を掃除するので通常は起きないが、手動で `pnpm zip` を先に走らせた場合は掃除してから再実行する
 - **verify を `| tail` 等へパイプすると exit code を見失う**: `bash verify-extensions.sh | tail -60` の `$?` はパイプ末尾（`tail`）の値になり、スクリプトが `exit 1` していても 0 に見える。Hard Gate の「exit 0 を必須」を満たすには、パイプせずに実行するか `${PIPESTATUS[0]}` を評価する
 
@@ -626,7 +626,7 @@ merge 後の公開 URL: https://youtube-automation-release-notes.pages.dev/relea
 - `references/prepare-checklist.md` — prepare 実行前のチェックリストとエッジケース
 - `references/publish-checklist.md` — publish 実行前のチェックリストとエッジケース
 - `references/extension-release-checklist.md` — extension prepare / publish 実行前のチェックリストとエッジケース
-- `references/verify-extensions.sh` — Nix toolchain / frozen install / build / zip / asset / lockfileを検証する単一ソース
+- `references/verify-extensions.sh` — Node / pnpm toolchain / frozen install / build / zip / asset / lockfileを検証する単一ソース
 - `references/version-rules.md` — semver bump 判定ルール
 - `references/changelog-promotion.md` — CHANGELOG.md 昇格手順
 - `references/release-contracts.md` — Python Migration producer と extension GitHub Release 配布の実行契約

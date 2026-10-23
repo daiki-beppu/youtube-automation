@@ -31,38 +31,38 @@ WXT + React + TypeScript + Tailwind CSS + [@webext-core/messaging](https://webex
 
 ## 開発フロー
 
-ローカル検証は CI・lockfile と同じ Nix extensions shell の Node 24 / pnpm 11.15.1 に固定する。ambient `pnpm` の版は各環境で異なり得るため、リポジトリ root から以下のコマンドを使う。理由と両拡張共通の release 前検証は `extensions/README.md::pnpm バージョン契約` を参照する。
+ローカル検証は CI・lockfile と同じ vite-plus（`vp`）管理の Node 24 / pnpm 11.15.1 に固定する。ambient `pnpm` の版は各環境で異なり得るため、リポジトリ root から以下のコマンドを使う（拡張ディレクトリで起動した vp の shim が版を選ぶ）。理由と両拡張共通の release 前検証は `extensions/README.md::pnpm バージョン契約` を参照する。
 
 依存インストール:
 
 ```bash
-nix develop .#extensions --command pnpm -C extensions/distrokid-helper install --frozen-lockfile
+(cd extensions/distrokid-helper && pnpm install --frozen-lockfile)
 ```
 
 開発（HMR 付き、Chrome を自動起動）:
 
 ```bash
-nix develop .#extensions --command pnpm -C extensions/distrokid-helper dev
+(cd extensions/distrokid-helper && pnpm dev)
 ```
 
 ## ビルド
 
 ```bash
-nix develop .#extensions --command pnpm -C extensions/distrokid-helper build  # .output/chrome-mv3/ に Manifest V3 拡張を生成
-nix develop .#extensions --command pnpm -C extensions/distrokid-helper zip    # 配布用 zip を生成
+(cd extensions/distrokid-helper && pnpm build)  # .output/chrome-mv3/ に Manifest V3 拡張を生成
+(cd extensions/distrokid-helper && pnpm zip)    # 配布用 zip を生成
 ```
 
 型チェック（WXT 型生成 + tsc）:
 
 ```bash
-nix develop .#extensions --command pnpm -C extensions/distrokid-helper compile
+(cd extensions/distrokid-helper && pnpm compile)
 ```
 
 `compile` は `wxt prepare` の後に固定版 TypeScript 7.0.2 の `tsc --noEmit` を実行する型検査レーンで、成果物を生成する WXT の `build` / `zip` とは別である。TypeScript 5.9.3 との比較で確認した 11.0〜12.7 倍の高速化は `wxt prepare` を除外した型検査部分だけの結果であり、build / zip 全体の性能を示さない。計測条件と生値は [共通の性能比較記録](../../docs/investigations/2026-07-18-2016-typescript7-compile-benchmark.md) を参照する。
 
 ## unpacked ロード
 
-1. リポジトリ root で `nix develop .#extensions --command pnpm -C extensions/distrokid-helper build` を実行し、`.output/chrome-mv3/` を生成する。
+1. リポジトリ root で `(cd extensions/distrokid-helper && pnpm build)` を実行し、`.output/chrome-mv3/` を生成する。
 2. build artifact を basename が `distrokid-helper` になる固定パスへコピーする:
    ```bash
    mkdir -p "$HOME/chrome-extensions/distrokid-helper"
@@ -149,9 +149,9 @@ POST/DELETE は JSON 以外を 415、`Origin` 付き要求を 403、不正 schem
 ## テスト
 
 ```bash
-nix develop .#extensions --command pnpm -C extensions/distrokid-helper test                              # Vitest（API client / DOM 注入 / messaging / storage）
-nix develop .#extensions --command pnpm -C extensions/distrokid-helper exec playwright install --with-deps chromium  # 初回のみ（CI と同じ browser + system dependencies）
-nix develop .#extensions --command pnpm -C extensions/distrokid-helper test:e2e                          # Playwright（distrokid.com/new モックへの注入スモーク）
+(cd extensions/distrokid-helper && pnpm test)                              # Vitest（API client / DOM 注入 / messaging / storage）
+(cd extensions/distrokid-helper && pnpm exec playwright install --with-deps chromium)  # 初回のみ（CI と同じ browser + system dependencies）
+(cd extensions/distrokid-helper && pnpm test:e2e)                          # Playwright（distrokid.com/new モックへの注入スモーク）
 ```
 
 build 後は `.output/chrome-mv3/manifest.json`、zip 後は `.output/distrokid-helper-<package.json の version>-chrome.zip` を確認する。期待名 zip が唯一の 1 件であることを含む release 前検証は、リポジトリ root で `bash .claude/skills/automation-release/references/verify-extensions.sh distrokid-helper` を実行する。

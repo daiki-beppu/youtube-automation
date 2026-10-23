@@ -58,8 +58,12 @@ PATH_TEST_MAP: Final = (
     ),
     (
         ".github/workflows/dashboard.yml",
-        ("tests/contracts/architecture/test_repository_reorganization_contract.py",),
+        (
+            "tests/contracts/architecture/test_repository_reorganization_contract.py",
+            "tests/repo/test_extension_package_manager_contract.py",
+        ),
     ),
+    (".github/workflows/audio-studio.yml", ("tests/repo/test_extension_package_manager_contract.py",)),
     (".github/workflows/extensions.yml", ("tests/repo/test_extension_package_manager_contract.py",)),
     (
         ".github/workflows/release-extensions.yml",
@@ -72,6 +76,7 @@ PATH_TEST_MAP: Final = (
     (
         ".github/workflows/site.yml",
         (
+            "tests/repo/test_extension_package_manager_contract.py",
             "tests/repo/test_site_repository_contract.py",
             "tests/repo/test_skill_page_generation_contract.py",
         ),

@@ -31,8 +31,7 @@ on:
       - "docs/upgrades/v5.5.1.md"
       - "docs/upgrades/v6.0.0.md"
       - ".github/workflows/site.yml"
-      - "flake.nix"
-      - "flake.lock"
+      - ".node-version"
   pull_request:
     paths:
       - "site/**"
@@ -62,8 +61,7 @@ on:
       - "docs/upgrades/v5.5.1.md"
       - "docs/upgrades/v6.0.0.md"
       - ".github/workflows/site.yml"
-      - "flake.nix"
-      - "flake.lock"
+      - ".node-version"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -72,14 +70,20 @@ concurrency:
 jobs:
   site:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+      - uses: voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af # v1.21.2
+        with:
+          node-version-file: .node-version
+          run-install: false
       - name: Install dependencies
-        run: nix develop .#extensions --command pnpm -C site install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Check content and types
-        run: nix develop .#extensions --command pnpm -C site check
+        run: pnpm check
       - name: Build
-        run: nix develop .#extensions --command pnpm -C site build
+        run: pnpm build
       - name: Test
-        run: nix develop .#extensions --command pnpm -C site test
+        run: pnpm test

@@ -141,14 +141,14 @@ def test_skill_md_documents_wxt_unpacked_load_flow() -> None:
     """
     text = _read()
     for token in (
-        "nix develop .#extensions --command pnpm -C extensions/suno-helper install --frozen-lockfile",
-        "nix develop .#extensions --command pnpm -C extensions/suno-helper build",
+        "(cd extensions/suno-helper && pnpm install --frozen-lockfile)",
+        "(cd extensions/suno-helper && pnpm build)",
         "test -f extensions/suno-helper/.output/chrome-mv3/manifest.json",
         ".output/chrome-mv3",
         "~/chrome-extensions/suno-helper",
     ):
         assert token in text, f"SKILL.md に WXT ロード手順の記載がない（`{token}` 不在）"
-    assert "npx -y pnpm@" not in text, "SKILL.md に Nix shell を迂回する旧 npx pnpm 導線が残っている"
+    assert "npx -y pnpm@" not in text, "SKILL.md に packageManager 固定を迂回する旧 npx pnpm 導線が残っている"
 
 
 def test_skill_md_has_no_dangling_content_js_reference() -> None:

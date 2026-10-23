@@ -75,8 +75,7 @@ def test_site_workflow_checks_every_stacked_pull_request_and_main_push() -> None
         "docs/release-notes/**",
         *OPERATOR_DOC_SOURCES,
         ".github/workflows/site.yml",
-        "flake.nix",
-        "flake.lock",
+        ".node-version",
     ]
 
     pull_request = triggers["pull_request"]
@@ -104,15 +103,17 @@ def test_site_workflow_uses_frozen_dependencies_and_all_quality_gates() -> None:
     assert isinstance(steps, list)
 
     assert steps[0]["uses"] == "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
-    assert steps[1]["uses"] == "cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342"
+    assert steps[1]["uses"] == "voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af"
+    assert steps[1]["with"] == {"node-version-file": ".node-version", "run-install": False}
+    assert site["defaults"] == {"run": {"working-directory": "site"}}
     commands = [step.get("run") for step in steps]
     assert commands == [
         None,
         None,
-        "nix develop .#extensions --command pnpm -C site install --frozen-lockfile",
-        "nix develop .#extensions --command pnpm -C site check",
-        "nix develop .#extensions --command pnpm -C site build",
-        "nix develop .#extensions --command pnpm -C site test",
+        "pnpm install --frozen-lockfile",
+        "pnpm check",
+        "pnpm build",
+        "pnpm test",
     ]
     assert not any("deploy" in str(step).lower() for step in steps)
 

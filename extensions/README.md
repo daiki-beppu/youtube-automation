@@ -40,18 +40,18 @@ suno-helper は長時間 run の終端通知に `notifications` permission を�
 shared UI 自体の型検査は次で行う:
 
 ```bash
-nix develop .#extensions --command pnpm -C extensions/shared-ui install --frozen-lockfile
-nix develop .#extensions --command pnpm -C extensions/shared-ui compile
-nix develop .#extensions --command pnpm -C extensions/shared-ui check
+(cd extensions/shared-ui && pnpm install --frozen-lockfile)
+(cd extensions/shared-ui && pnpm compile)
+(cd extensions/shared-ui && pnpm check)
 ```
 
 各 helper は独立した frozen lockfile と workspace root を維持する。このため、WXT の既知 advisory を解消する `pnpm-workspace.yaml::overrides` は 3 workspace に同じ値を明示する。pin を更新するときは 3 ファイルと 3 lockfile を同時に更新し、各 workspace の `pnpm audit --audit-level low` と release 前検証をすべて実行する。
 
 ## pnpm バージョン契約
 
-3拡張（`suno-helper` / `distrokid-helper` / `community-helper`）のローカル検証には Nix extensions shell の **Node 24 / pnpm 11.15.1** を使う。各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` による依存 build script の承認、および CI を同じ契約に保つためである。
+3拡張（`suno-helper` / `distrokid-helper` / `community-helper`）のローカル検証には vite-plus（`vp`）が管理する **Node 24 / pnpm 11.15.1** を使う。Node はリポジトリ root の `.node-version`（`24`）、pnpm は各 `package.json::packageManager` を正とする。`.node-version` は vp の shim と CI の `voidzero-dev/setup-vp` が同じファイルを読み、Node 24 系の最新 patch へ解決するため、Node のセキュリティリリースは手で版を書き換えずに取り込まれる。各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` による依存 build script の承認、および CI を同じ契約に保つためである。
 
-ambient `node` / `pnpm` の版は各環境で異なり得るため、再現可能な検証では必ず `nix develop .#extensions --command` 経由で実行する。`--ignore-workspace` は `pnpm-workspace.yaml::allowBuilds` を無効化するため使用しない。
+ambient `node` / `pnpm` の版は各環境で異なり得るため、`node` / `pnpm` は vp の shim から起動する（`vp env current` で解決元を確認できる）。shim は起動時の cwd から版を解決し、repository root には `packageManager` が無いため、pnpm は `pnpm -C <dir>` ではなく各パッケージのディレクトリで起動する。macOS・Node 24 で pnpm の tarball Worker が libuv の abort で落ちる回避として、devShell の shellHook が `PNPM_MAX_WORKERS` の既定値を 1 にする（明示値は尊重する）。`--ignore-workspace` は `pnpm-workspace.yaml::allowBuilds` を無効化するため使用しない。
 
 release 前検証は単一ソースのスクリプトをリポジトリ root から実行する。引数を省略すると3拡張、`<name>`（`suno-helper` / `distrokid-helper` / `community-helper`）を渡すと対象だけを検証する:
 
@@ -63,21 +63,21 @@ bash .claude/skills/automation-release/references/verify-extensions.sh [<name>]
 
 ## 開発フロー（suno-helper を例に）
 
-すべてリポジトリ root で実行する。コマンドごとに Nix extensions shell を入口にするため、別途 shell へ入る必要はない。
+すべてリポジトリ root で実行する。コマンドごとに subshell で対象ディレクトリへ移動してから pnpm を起動するため、vp の shim が `.node-version` と `packageManager` の版を選ぶ。
 
 | 目的 | コマンド |
 |---|---|
-| 依存インストール | `nix develop .#extensions --command pnpm -C extensions/suno-helper install --frozen-lockfile` |
-| 共有 lint toolchain インストール（check / fix の前提） | `nix develop .#extensions --command pnpm -C extensions install --frozen-lockfile`（`oxlint.config.ts` / `oxfmt.config.ts` の ultracite import を `extensions/node_modules` で解決する） |
-| 開発（HMR） | `nix develop .#extensions --command pnpm -C extensions/suno-helper dev` |
-| 本番ビルド | `nix develop .#extensions --command pnpm -C extensions/suno-helper build`（`.output/chrome-mv3/` に MV3 拡張を生成） |
-| 型チェック | `nix develop .#extensions --command pnpm -C extensions/suno-helper compile` |
-| unit テスト（Vitest） | `nix develop .#extensions --command pnpm -C extensions/suno-helper test` |
-| Playwright browser（初回） | `nix develop .#extensions --command pnpm -C extensions/suno-helper exec playwright install --with-deps chromium` |
-| e2e テスト（Playwright） | `nix develop .#extensions --command pnpm -C extensions/suno-helper test:e2e` |
-| lint + format 検査 / 自動修正 | `nix develop .#extensions --command pnpm -C extensions/suno-helper check` / `nix develop .#extensions --command pnpm -C extensions/suno-helper fix` |
-| Fallow audit | `nix develop .#extensions --command pnpm -C extensions/suno-helper run audit` |
-| 配布 zip | `nix develop .#extensions --command pnpm -C extensions/suno-helper zip` |
+| 依存インストール | `(cd extensions/suno-helper && pnpm install --frozen-lockfile)` |
+| 共有 lint toolchain インストール（check / fix の前提） | `(cd extensions && pnpm install --frozen-lockfile)`（`oxlint.config.ts` / `oxfmt.config.ts` の ultracite import を `extensions/node_modules` で解決する） |
+| 開発（HMR） | `(cd extensions/suno-helper && pnpm dev)` |
+| 本番ビルド | `(cd extensions/suno-helper && pnpm build)`（`.output/chrome-mv3/` に MV3 拡張を生成） |
+| 型チェック | `(cd extensions/suno-helper && pnpm compile)` |
+| unit テスト（Vitest） | `(cd extensions/suno-helper && pnpm test)` |
+| Playwright browser（初回） | `(cd extensions/suno-helper && pnpm exec playwright install --with-deps chromium)` |
+| e2e テスト（Playwright） | `(cd extensions/suno-helper && pnpm test:e2e)` |
+| lint + format 検査 / 自動修正 | `(cd extensions/suno-helper && pnpm check)` / `(cd extensions/suno-helper && pnpm fix)` |
+| Fallow audit | `(cd extensions/suno-helper && pnpm run audit)` |
+| 配布 zip | `(cd extensions/suno-helper && pnpm zip)` |
 
 build 後は `extensions/suno-helper/.output/chrome-mv3/manifest.json`、zip 後は `extensions/suno-helper/.output/suno-helper-<package.json の version>-chrome.zip` が生成される。build / zip と期待名 zip が唯一の 1 件であることまで一括検証する場合は、前節の `verify-extensions.sh suno-helper` を使う。
 
@@ -123,8 +123,8 @@ Oxlint はコード単体の lint rule 違反を検出し、Fallow は未使用�
 
 ## unpacked ロード手順
 
-1. `nix develop .#extensions --command pnpm -C extensions/suno-helper install --frozen-lockfile` を実行する。
-2. `nix develop .#extensions --command pnpm -C extensions/suno-helper build` を実行する。
+1. `(cd extensions/suno-helper && pnpm install --frozen-lockfile)` を実行する。
+2. `(cd extensions/suno-helper && pnpm build)` を実行する。
 3. Chrome で `chrome://extensions` を開き、右上の **デベロッパーモード** を ON。
 4. **パッケージ化されていない拡張機能を読み込む** → `extensions/suno-helper/.output/chrome-mv3/` を選択。
 
