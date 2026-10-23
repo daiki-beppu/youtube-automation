@@ -32,7 +32,7 @@ while IFS= read -r path || [ -n "$path" ]; do
       distrokid=true
       community=true
       ;;
-    tests/repo/test_actions_parallel_workflows.py | flake.nix | flake.lock)
+    tests/repo/test_actions_parallel_workflows.py | .node-version)
       python=true
       suno=true
       distrokid=true

@@ -521,7 +521,7 @@ candidate / `suno-lyrics.json` の展開後 entry 数、entry name、歌詞構�
 
 `suno-prompts.json` を Chrome 拡張（`extensions/suno-helper/`）が読み取り、連続実行する。
 
-1. **拡張をビルドしてロード**（初回のみ）: リポジトリ root で `nix develop .#extensions --command pnpm -C extensions/suno-helper install --frozen-lockfile` → `nix develop .#extensions --command pnpm -C extensions/suno-helper build` → `test -f extensions/suno-helper/.output/chrome-mv3/manifest.json` → `mkdir -p ~/chrome-extensions/suno-helper && rsync -a --delete extensions/suno-helper/.output/chrome-mv3/ ~/chrome-extensions/suno-helper/` → Chrome で `chrome://extensions` → `~/chrome-extensions/suno-helper/` を選択。Nix extensions shell（Node 24 / pnpm 11.15.1）固定の理由と release 前検証は `extensions/README.md::pnpm バージョン契約` を参照
+1. **拡張をビルドしてロード**（初回のみ）: リポジトリ root で `(cd extensions/suno-helper && pnpm install --frozen-lockfile)` → `(cd extensions/suno-helper && pnpm build)` → `test -f extensions/suno-helper/.output/chrome-mv3/manifest.json` → `mkdir -p ~/chrome-extensions/suno-helper && rsync -a --delete extensions/suno-helper/.output/chrome-mv3/ ~/chrome-extensions/suno-helper/` → Chrome で `chrome://extensions` → `~/chrome-extensions/suno-helper/` を選択。vite-plus（`vp`）管理の Node 24 / pnpm 11.15.1 固定の理由と release 前検証は `extensions/README.md::pnpm バージョン契約` を参照
 2. **サーバー起動**: `.claude/skills/extension/references/serve.md` の `--suno` 契約を直接読み、既存 server の再利用または起動と疎通確認を行う
 3. **Suno を開く**: Chrome で Advanced タブを選択（ボーカルは Lyrics mode = **Write**）
 4. **自動取得 → 連続実行**: 拡張ポップアップで配信元と collection を選ぶと prompts と配信元 URL が自動取得・保存される。最新データを取り直す場合はページを再読み込みし、取得完了後に全パターンを連続実行する。スキップされた entry は再実行ボタンで再投入可能

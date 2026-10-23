@@ -18,7 +18,7 @@ _WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "release-extensions.yml"
 
 _RELEASE_TAG_GLOB = "ext-v*"
 _GH_RELEASE_ACTION = "softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228"
-_NIX_INSTALL_ACTION = "DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25"
+_SETUP_VP_ACTION = "voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af"
 _VERIFY_SCRIPT = ".claude/skills/automation-release/references/verify-extensions.sh"
 _EXTENSIONS = ("suno-helper", "distrokid-helper", "community-helper")
 _ZIP_GLOBS = tuple(f"extensions/{name}/.output/*.zip" for name in _EXTENSIONS)
@@ -100,19 +100,20 @@ def test_builds_and_zips_each_extension(name: str) -> None:
     assert "--ignore-workspace" not in run_script
 
 
-def test_installs_nix_before_parallel_extension_builds() -> None:
-    """release job が checkout 後、build 前に Nix を導入する。"""
+def test_sets_up_vp_before_parallel_extension_builds() -> None:
+    """release job が checkout 後、build 前に vp で Node / pnpm を用意する。"""
     steps = _release_top_level_steps()
     checkout_index = next(
         index
         for index, step in enumerate(steps)
         if step.get("uses") == "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
     )
-    nix_index = next(index for index, step in enumerate(steps) if step.get("uses") == _NIX_INSTALL_ACTION)
+    setup_index = next(index for index, step in enumerate(steps) if step.get("uses") == _SETUP_VP_ACTION)
     parallel_index = next(index for index, step in enumerate(steps) if "parallel" in step)
     uses = {step.get("uses") for step in steps if "uses" in step}
 
-    assert checkout_index < nix_index < parallel_index
+    assert checkout_index < setup_index < parallel_index
+    assert steps[setup_index]["with"] == {"node-version-file": ".node-version", "run-install": False}
     assert "pnpm/action-setup@v4" not in uses
     assert "actions/setup-node@v4" not in uses
 

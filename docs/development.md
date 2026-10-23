@@ -19,6 +19,7 @@ nix develop
 - **対話 shell**: direnv があれば `direnv allow` 一回で `.envrc`（nix-direnv 経由の `use flake`）が devShell へ自動入室させる。なければ `nix develop` を使う。どちらも shellHook が `uv sync` を自動実行する（失敗は warning で入場継続）
 - **非対話 shell / agent**: `nix develop --command <command> [args...]` を正規入口とする。例: `nix develop --command bash .claude/skills/automation/references/pytest-quiet.sh tests/commands/system/test_doctor.py -q`
 - **依存同期を fail-closed にしたい場合**: `nix develop --command uv sync` を明示実行する。exit 非 0 なら依存は同期されていないので、後続コマンドを実行しない
+- **Node.js / pnpm**（dashboard / audio-studio / site / extensions）: devShell には含めず、[vite-plus](https://viteplus.dev/guide/env)（`vp`）の `node` / `pnpm` shim を使う。版の正はリポジトリ root の `.node-version`（`24`。Node 24 系の最新 patch へ解決する）と各 `package.json::packageManager`（`pnpm@11.15.1`）で、CI は `voidzero-dev/setup-vp` が同じファイルを読む。shim は起動時の cwd から版を解決するため、pnpm は各 package のディレクトリで起動する
 
 worktree の生成・命名・issue / PR 運用は [`docs/takt-operations.md`](takt-operations.md) を参照する。実装・検証は worktree 上のエージェントセッションで直接進める。
 
@@ -113,15 +114,15 @@ dashboard は ADR-0013 / ADR-0021 で許可された本リポジトリ唯一の 
 
 ### frontend 品質ゲート
 
-Node.js / pnpm は Nix の extensions shell と同じ固定 toolchain を使い、ambient `pnpm` や `npx` は使わない。依存 install は lockfile を使い fail-closed にする。
+Node.js / pnpm は extensions と同じく vite-plus（`vp`）の shim が供給する固定 toolchain（root の `.node-version` と `package.json::packageManager`）を使い、ambient `pnpm` や `npx` は使わない。shim は起動時の cwd から版を解決するため、pnpm は package ディレクトリで起動する。依存 install は lockfile を使い fail-closed にする。
 
 ```bash
-nix develop .#extensions --command pnpm -C dashboard install --frozen-lockfile
-nix develop .#extensions --command pnpm -C dashboard lint
-nix develop .#extensions --command pnpm -C dashboard typecheck
-nix develop .#extensions --command pnpm -C dashboard test
-nix develop .#extensions --command pnpm -C dashboard test:e2e
-nix develop .#extensions --command pnpm -C dashboard build
+(cd dashboard && pnpm install --frozen-lockfile)
+(cd dashboard && pnpm lint)
+(cd dashboard && pnpm typecheck)
+(cd dashboard && pnpm test)
+(cd dashboard && pnpm test:e2e)
+(cd dashboard && pnpm build)
 ```
 
 component 追加前は対象 workspace で `shadcn info` と registry/公式 docs を確認する。shadcn/ui の Base UI、Tailwind CSS v4、semantic token を使い、`extensions/shared-ui` は package/release 境界が異なるため直接 import しない。
@@ -138,11 +139,11 @@ component 追加前は対象 workspace で `shadcn info` と registry/公式 doc
 Audio Studio は ADR-0028 / ADR-0021 で許可された collection 音源編集 UI。frontend workspace は `audio-studio/`、完成済み Vite asset は `src/youtube_automation/audio_studio_dist/` に置く。`dashboard/` や `extensions/shared-ui` を import しない。
 
 ```bash
-nix develop .#extensions --command pnpm -C audio-studio install --frozen-lockfile
-nix develop .#extensions --command pnpm -C audio-studio lint
-nix develop .#extensions --command pnpm -C audio-studio typecheck
-nix develop .#extensions --command pnpm -C audio-studio test
-nix develop .#extensions --command pnpm -C audio-studio build
+(cd audio-studio && pnpm install --frozen-lockfile)
+(cd audio-studio && pnpm lint)
+(cd audio-studio && pnpm typecheck)
+(cd audio-studio && pnpm test)
+(cd audio-studio && pnpm build)
 ```
 
 - Python server は `127.0.0.1` にだけ bind し、track allowlist、duration probe、HTTP Range、server-kind 別 lifecycle を所有する。
@@ -160,19 +161,19 @@ nix develop .#extensions --command pnpm -C audio-studio build
 
 ## リリースノートサイト開発
 
-`site/` は ADR-0023 / ADR-0021 で許可された Blume ベースの公開静的サイトで、`docs/release-notes/*.md`、明示 allowlist の運用文書、`.claude/skills/*/SKILL.md` の公開可能な規定フィールドだけを読む。skill ページ生成も `site/` の TypeScript 内で完結し、Python CLI を起動しない。Node.js / pnpm は dashboard・extensions と同じ Nix toolchain を使い、ambient `pnpm` や `npx` は使わない。
+`site/` は ADR-0023 / ADR-0021 で許可された Blume ベースの公開静的サイトで、`docs/release-notes/*.md`、明示 allowlist の運用文書、`.claude/skills/*/SKILL.md` の公開可能な規定フィールドだけを読む。skill ページ生成も `site/` の TypeScript 内で完結し、Python CLI を起動しない。Node.js / pnpm は dashboard・extensions と同じ vp 管理の toolchain を使い、ambient `pnpm` や `npx` は使わない。
 
 ```bash
-nix develop .#extensions --command pnpm -C site install --frozen-lockfile
-nix develop .#extensions --command pnpm -C site check
-nix develop .#extensions --command pnpm -C site build
-nix develop .#extensions --command pnpm -C site test
+(cd site && pnpm install --frozen-lockfile)
+(cd site && pnpm check)
+(cd site && pnpm build)
+(cd site && pnpm test)
 ```
 
 - `site/.blume/` と `site/dist/` は再生成可能な build output であり commit しない。CI は content/schema check、一覧・詳細の契約 test、production build を実行する。
 - `site/tests/color-contrast.test.mjs` は production build の `index.html` が参照する stylesheet closure から実際の色値を解決するため、`test` は必ず `build` の後に実行する。light / dark それぞれの body text、muted text、accent / link、main / extension の kind badge 前景と合成後の背景、card の default / hover border を検証する。
 - contrast threshold は text が `4.5:1`、border などの non-text が `3:1`。基準未達時は failure に pair 名、実測比 `x.xx:1`、必要比 `4.50:1` または `3.00:1` が出るため、該当 theme と用途の DADS token / mix を見直す。
-- contrast gate は既存の site CI job と `pnpm -C site test` に含まれる Node test で完結する。新しい CI job、headless browser、外部サービスによるブラウザ監査は不要。
+- contrast gate は既存の site CI job と `(cd site && pnpm test)` に含まれる Node test で完結する。新しい CI job、headless browser、外部サービスによるブラウザ監査は不要。
 - 静的サイトは Cloudflare Pages へ独立して配信する。preview / production の公開処理は Cloudflare Pages Git integration が所有し、この品質ゲートは deploy しない。
 - Cloudflare Pages の production / preview 設定、公開 URL、障害復旧用 Direct Upload は [`docs/release-notes-deployment.md`](release-notes-deployment.md) を参照する。
 - `site/` の source、lockfile、生成物は Python wheel / sdist には同梱しない。Hatch は `src/youtube_automation/` と明示した force-include だけを扱い、配布境界 test が実 archive に `site/` が無いことを確認する。
@@ -307,9 +308,9 @@ bash .claude/skills/automation/references/pytest-quiet.sh tests/repo/test_skills
 - **manifest は自動生成**: `manifest.json` を手書きせず `wxt.config.ts` から生成する。権限は最小権限を `lib/manifest.ts` の `MANIFEST_PERMISSIONS` 単一定数で宣言し、`wxt.config.ts` がそれを参照する（過剰権限の混入は Vitest で機械担保）
 - **型安全**: 全 source を TypeScript で書き、`@types/chrome` で `chrome.*` を型付け。message は `@webext-core/messaging`、`chrome.storage` は `@wxt-dev/storage` の型付き wrapper を経由する
 - **契約文字列**: サーバー（`yt-collection-serve`）との互換契約値（storage key / 配信ルート / phase 値）は `extensions/shared/constants.ts` の定数として 1 箇所で定義する。メッセージ種別（`run` / `stop` / `progress`）は各拡張の `lib/messaging.ts` で `@webext-core/messaging` の ProtocolMap として型付け定義する。ハードコーディング禁止
-- **テスト必須**: unit は Vitest（`nix develop .#extensions --command pnpm -C extensions/<name> test`）、e2e は Playwright（初回に `nix develop .#extensions --command pnpm -C extensions/<name> exec playwright install --with-deps chromium`、実行は `nix develop .#extensions --command pnpm -C extensions/<name> test:e2e`。Suno UI / DistroKid UI mock への DOM 注入スモーク）。CI は `.github/workflows/extensions.yml` が同じ Nix 入口で lint / 型チェック / Vitest / Playwright を実行する
+- **テスト必須**: unit は Vitest（`(cd extensions/<name> && pnpm test)`）、e2e は Playwright（初回に `(cd extensions/<name> && pnpm exec playwright install --with-deps chromium)`、実行は `(cd extensions/<name> && pnpm test:e2e)`。Suno UI / DistroKid UI mock への DOM 注入スモーク）。CI は `.github/workflows/extensions.yml` が `voidzero-dev/setup-vp` で同じ `.node-version` / `packageManager` を解決し、lint / 型チェック / Vitest / Playwright を実行する
 - **成果物は commit しない**: `node_modules/` / `dist/` / `.wxt/` / `.output/` は `.gitignore` 済み。配布は `release-extensions.yml` が tag push 時に zip を GitHub Release へ添付する
-- **パッケージマネージャ**: 3拡張とも Nix extensions shell の Node 24 / pnpm 11.15.1 固定（`ni`/`nr`、ambient `pnpm`、`npx` は使わない）。`nix develop .#extensions --command pnpm ...` により、各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` の依存 build script 承認、CI を揃える契約である。install は `--frozen-lockfile` を必須とし、`--ignore-workspace` は使用しない。全拡張共通の install / build / zip、生成 manifest / 期待名 zip の確認と lockfile 無差分確認は `extensions/README.md::pnpm バージョン契約` を正とする
+- **パッケージマネージャ**: 3拡張とも vite-plus（`vp`）管理の Node 24 / pnpm 11.15.1 固定（`ni`/`nr`、ambient `pnpm`、`npx` は使わない）。拡張ディレクトリで起動した vp の `pnpm` shim により、各 `package.json::packageManager`、コミット済み lockfile、`pnpm-workspace.yaml::allowBuilds` の依存 build script 承認、CI を揃える契約である。install は `--frozen-lockfile` を必須とし、`--ignore-workspace` は使用しない。全拡張共通の install / build / zip、生成 manifest / 期待名 zip の確認と lockfile 無差分確認は `extensions/README.md::pnpm バージョン契約` を正とする
 - **リリース手順**: 拡張のリリース（`extensions/<name>/package.json::version` bump → `release/ext-v<VER>` PR → merge commit への `ext-v<VER>` tag push → Release asset 確認）は `/automation-release` スキルの extension release phase で実行する。tag は Python 本体の `v*` と分離した `ext-v*` 系列で、バージョンは Python 本体と完全独立（`docs/adr/0011-extension-distribution.md`）
 
 ## 品質ゲート（CI）

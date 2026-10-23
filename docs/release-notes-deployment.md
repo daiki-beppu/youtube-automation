@@ -106,10 +106,10 @@ merge する。merge 後は production build と `https://youtube-automation-rel
 が必要な場合は、Cloudflare へ認証済みの Wrangler を用いて repository root から実行する。
 
 ```bash
-nix develop .#extensions --command pnpm -C site install --frozen-lockfile
-nix develop .#extensions --command pnpm -C site check
-nix develop .#extensions --command pnpm -C site test
-nix develop .#extensions --command pnpm -C site build
+(cd site && pnpm install --frozen-lockfile)
+(cd site && pnpm check)
+(cd site && pnpm test)
+(cd site && pnpm build)
 nix run nixpkgs#wrangler -- pages deploy site/dist --project-name youtube-automation-release-notes --branch main
 ```
 

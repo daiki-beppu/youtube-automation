@@ -16,39 +16,8 @@
       system:
       let
         pkgs = import nixpkgs { inherit system; };
-        pnpmLatest = pkgs.stdenvNoCC.mkDerivation {
-          pname = "pnpm";
-          version = "11.15.1";
-          src = pkgs.fetchurl {
-            url = "https://registry.npmjs.org/pnpm/-/pnpm-11.15.1.tgz";
-            hash = "sha256-J0YGKbEBEWBOf5iIJ1O1M5iYaCDCDgoGXzpKXp59tx8=";
-          };
-          nativeBuildInputs = [ pkgs.makeWrapper ];
-          installPhase = ''
-            runHook preInstall
-            mkdir -p "$out/lib/pnpm" "$out/bin"
-            cp -R . "$out/lib/pnpm/"
-            makeWrapper "${pkgs.nodejs_24}/bin/node" "$out/bin/pnpm" \
-              --set-default PNPM_MAX_WORKERS 1 \
-              --add-flags "$out/lib/pnpm/bin/pnpm.cjs"
-            runHook postInstall
-          '';
-        };
       in
       {
-        devShells.extensions = pkgs.mkShell {
-          shellHook = ''
-            if [ -z "''${PNPM_MAX_WORKERS:-}" ]; then
-              export PNPM_MAX_WORKERS=1
-            fi
-          '';
-
-          packages = with pkgs; [
-            nodejs_24
-            pnpmLatest
-          ];
-        };
-
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             python314
@@ -95,6 +64,14 @@
             # 品質ゲート（ruff / CHANGELOG / any 型）はローカル git hook ではなく
             # CI で担保する（issue #2534 で lefthook を廃止）
             uv sync --quiet || echo "warning: uv sync failed; dependencies may be out of date." >&2
+
+            # Node.js / pnpm は Nix ではなく vite-plus（vp）の shim が供給する（版は
+            # .node-version と各 package.json::packageManager が正）。macOS・Node 24 で
+            # pnpm の tarball Worker 並列が libuv の kqueue assertion で SIGABRT する
+            # 回避として、Worker 数の既定値だけをここで 1 にする（#3078）。明示値は尊重する
+            if [ -z "''${PNPM_MAX_WORKERS:-}" ]; then
+              export PNPM_MAX_WORKERS=1
+            fi
           '';
         };
       }

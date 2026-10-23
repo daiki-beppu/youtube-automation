@@ -10,6 +10,7 @@ on:
       - "src/youtube_automation/infrastructure/analytics/channel_registry.py"
       - "src/youtube_automation/infrastructure/analytics/dashboard_read_model.py"
       - ".github/workflows/dashboard.yml"
+      - ".node-version"
       - "flake.nix"
       - "flake.lock"
   pull_request:
@@ -20,6 +21,7 @@ on:
       - "src/youtube_automation/infrastructure/analytics/channel_registry.py"
       - "src/youtube_automation/infrastructure/analytics/dashboard_read_model.py"
       - ".github/workflows/dashboard.yml"
+      - ".node-version"
       - "flake.nix"
       - "flake.lock"
 
@@ -33,18 +35,25 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+      - uses: voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af # v1.21.2
+        with:
+          node-version-file: .node-version
+          run-install: false
       - uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
       - name: Install Python dependencies
         run: nix develop --command uv sync --frozen
       - name: Install dependencies
-        run: nix develop .#extensions --command pnpm -C dashboard install --frozen-lockfile
+        working-directory: dashboard
+        run: pnpm install --frozen-lockfile
       - name: Install Playwright browser
-        run: nix develop .#extensions --command pnpm -C dashboard exec playwright install --with-deps chromium
+        working-directory: dashboard
+        run: pnpm exec playwright install --with-deps chromium
       - name: Frontend checks
+        working-directory: dashboard
         run: |
-          nix develop .#extensions --command pnpm -C dashboard lint
-          nix develop .#extensions --command pnpm -C dashboard typecheck
-          nix develop .#extensions --command pnpm -C dashboard test
-          nix develop .#extensions --command pnpm -C dashboard build
-          git diff --exit-code -- src/youtube_automation/dashboard_dist
-          nix develop .#extensions --command pnpm -C dashboard test:e2e
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+          pnpm build
+          git -C .. diff --exit-code -- src/youtube_automation/dashboard_dist
+          pnpm test:e2e

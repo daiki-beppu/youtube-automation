@@ -8,16 +8,14 @@ on:
       - ".github/workflows/extensions.yml"
       - ".github/scripts/classify-ci-paths.sh"
       - "tests/repo/test_actions_parallel_workflows.py"
-      - "flake.nix"
-      - "flake.lock"
+      - ".node-version"
   pull_request:
     paths:
       - "extensions/**"
       - ".github/workflows/extensions.yml"
       - ".github/scripts/classify-ci-paths.sh"
       - "tests/repo/test_actions_parallel_workflows.py"
-      - "flake.nix"
-      - "flake.lock"
+      - ".node-version"
 
 # main への push は cancel-in-progress の対象外（デプロイ相当の run を途中で殺さない）
 concurrency:
@@ -74,38 +72,41 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+      - uses: voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af # v1.21.2
+        with:
+          node-version-file: .node-version
+          run-install: false
       - name: Install dependencies
-        run: nix develop .#extensions --command pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Install DistroKid helper dependencies for cross-extension audit
         working-directory: extensions/distrokid-helper
-        run: nix develop .#extensions --command pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Install community helper dependencies for cross-extension audit
         working-directory: extensions/community-helper
-        run: nix develop .#extensions --command pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Install shared lint toolchain
         working-directory: extensions
-        run: nix develop .#extensions --command pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Fallow audit
         if: github.event_name == 'pull_request'
         env:
           FALLOW_AUDIT_BASE: ${{ github.event.pull_request.base.sha }}
-        run: nix develop .#extensions --command pnpm run audit
+        run: pnpm run audit
       - parallel:
           - name: Check (Oxlint + Oxfmt)
-            run: nix develop .#extensions --command pnpm check
+            run: pnpm check
           - name: Type check
-            run: nix develop .#extensions --command pnpm compile
+            run: pnpm compile
           - name: Unit tests (Vitest)
-            run: nix develop .#extensions --command pnpm test
+            run: pnpm test
       - parallel:
           - name: Build
-            run: nix develop .#extensions --command pnpm build
+            run: pnpm build
           - name: Install Playwright browser
-            run: nix develop .#extensions --command pnpm exec playwright install --with-deps chromium
+            run: pnpm exec playwright install --with-deps chromium
       - name: Verify generated manifest permissions (least-privilege)
         run: |
-          nix develop .#extensions --command node --input-type=module -e '
+          node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const manifest = JSON.parse(
               readFileSync(".output/chrome-mv3/manifest.json", "utf8"),
@@ -121,7 +122,7 @@ jobs:
             }
           '
       - name: E2E tests (Playwright)
-        run: nix develop .#extensions --command xvfb-run -a pnpm test:e2e
+        run: xvfb-run -a pnpm test:e2e
 
   distrokid-helper:
     needs: changes
@@ -132,27 +133,30 @@ jobs:
         working-directory: extensions/distrokid-helper
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+      - uses: voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af # v1.21.2
+        with:
+          node-version-file: .node-version
+          run-install: false
       - name: Install dependencies
-        run: nix develop .#extensions --command pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Install shared lint toolchain
         working-directory: extensions
-        run: nix develop .#extensions --command pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - parallel:
           - name: Check (Oxlint + Oxfmt)
-            run: nix develop .#extensions --command pnpm check
+            run: pnpm check
           - name: Typecheck
-            run: nix develop .#extensions --command pnpm compile
+            run: pnpm compile
           - name: Unit tests (Vitest)
-            run: nix develop .#extensions --command pnpm test
+            run: pnpm test
       - parallel:
           - name: Build
-            run: nix develop .#extensions --command pnpm build
+            run: pnpm build
           - name: Install Playwright browser
-            run: nix develop .#extensions --command pnpm exec playwright install --with-deps chromium
+            run: pnpm exec playwright install --with-deps chromium
       - name: Verify generated manifest permissions (least-privilege)
         run: |
-          nix develop .#extensions --command node --input-type=module -e '
+          node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const manifest = JSON.parse(
               readFileSync(".output/chrome-mv3/manifest.json", "utf8"),
@@ -194,7 +198,7 @@ jobs:
             }
           '
       - name: E2E (Playwright)
-        run: nix develop .#extensions --command xvfb-run -a pnpm test:e2e
+        run: xvfb-run -a pnpm test:e2e
 
   community-helper:
     needs: changes
@@ -205,27 +209,30 @@ jobs:
         working-directory: extensions/community-helper
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: cachix/install-nix-action@630ae543ea3a38a9a4166f03376c02c50f408342 # v31.11.0
+      - uses: voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af # v1.21.2
+        with:
+          node-version-file: .node-version
+          run-install: false
       - name: Install dependencies
-        run: nix develop .#extensions --command pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - name: Install shared lint toolchain
         working-directory: extensions
-        run: nix develop .#extensions --command pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile
       - parallel:
           - name: Check (Oxlint + Oxfmt)
-            run: nix develop .#extensions --command pnpm check
+            run: pnpm check
           - name: Typecheck
-            run: nix develop .#extensions --command pnpm compile
+            run: pnpm compile
           - name: Unit tests (Vitest)
-            run: nix develop .#extensions --command pnpm test
+            run: pnpm test
       - parallel:
           - name: Build
-            run: nix develop .#extensions --command pnpm build
+            run: pnpm build
           - name: Install Playwright browser
-            run: nix develop .#extensions --command pnpm exec playwright install --with-deps chromium
+            run: pnpm exec playwright install --with-deps chromium
       - name: Verify generated manifest permissions (least-privilege)
         run: |
-          nix develop .#extensions --command node --input-type=module -e '
+          node --input-type=module -e '
             import { readFileSync } from "node:fs";
             const manifest = JSON.parse(
               readFileSync(".output/chrome-mv3/manifest.json", "utf8"),
@@ -266,4 +273,4 @@ jobs:
             }
           '
       - name: E2E (Playwright)
-        run: nix develop .#extensions --command xvfb-run -a pnpm test:e2e
+        run: xvfb-run -a pnpm test:e2e

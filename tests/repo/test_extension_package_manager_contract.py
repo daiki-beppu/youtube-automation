@@ -12,10 +12,27 @@ from tests.helpers.paths import REPO_ROOT
 _REPO_ROOT = REPO_ROOT
 _EXTENSION_NAMES = ("suno-helper", "distrokid-helper", "community-helper")
 _EXTENSION_README_NAMES = ("suno-helper", "distrokid-helper")
-_NIX_PNPM = "11.15.1"
+_PINNED_PNPM = "11.15.1"
 _LEGACY_PNPM = "11.11.0"
 _LEGACY_NPX_COMMAND = f"npx -y pnpm@{_LEGACY_PNPM}"
-_NIX_COMMAND = "nix develop .#extensions --command pnpm"
+_SETUP_VP_ACTION = "voidzero-dev/setup-vp@68f39c78aaf39be468cabd2afb09c162574c84af"
+_NODE_PACKAGE_DIRS = (
+    "extensions",
+    "extensions/suno-helper",
+    "extensions/distrokid-helper",
+    "extensions/community-helper",
+    "extensions/shared-ui",
+    "site",
+    "audio-studio",
+    "dashboard",
+)
+_NODE_WORKFLOWS = (
+    ".github/workflows/extensions.yml",
+    ".github/workflows/release-extensions.yml",
+    ".github/workflows/site.yml",
+    ".github/workflows/audio-studio.yml",
+    ".github/workflows/dashboard.yml",
+)
 _VERIFY_SCRIPT_PATH = ".claude/skills/automation-release/references/verify-extensions.sh"
 _CURRENT_CONTRACT_DOCS = (
     "extensions/README.md",
@@ -61,57 +78,66 @@ def _pnpm_setup_versions(path: str) -> list[object]:
     return versions
 
 
-def test_extensions_shell_contains_only_the_node_toolchain() -> None:
-    """REQ-3078-01 / TC-01B: worker default is wired only into extensions shell."""
+def _cd_pnpm(directory: str, command: str) -> str:
+    return f"(cd {directory} && pnpm {command})"
+
+
+def test_flake_no_longer_supplies_node_or_pnpm() -> None:
+    """Node.js / pnpm は vp が供給し、Nix の devShell は Python 側だけを持つ。"""
     flake = _read("flake.nix")
-    extensions_shell = re.search(
-        r"(?ms)^(?P<indent>[ \t]*)devShells\.extensions\s*="
-        r"\s*pkgs\.mkShell\s*\{"
-        r".*?"
-        r"\s*packages\s*=\s*with pkgs;\s*\[(?P<packages>.*?)\];"
-        r"\s*\};",
-        flake,
-    )
 
-    assert extensions_shell is not None
-    packages = extensions_shell.group("packages").split()
-    assert packages == ["nodejs_24", "pnpmLatest"]
-
-    default_shell = re.search(r"(?m)^(?P<indent>[ \t]*)devShells\.default\s*=", flake)
-    assert default_shell is not None
-    assert extensions_shell.group("indent") == default_shell.group("indent")
-
-    block = extensions_shell.group(0)
-    for excluded in ("python314", "uv", "ffmpeg"):
-        assert excluded not in block
-    assert "shellHook" in block
-    assert "if [ -z \"''${PNPM_MAX_WORKERS:-}\" ]; then" in block
-    assert "export PNPM_MAX_WORKERS=1" in block
-
-    default_shell_start = default_shell.start()
-    assert "PNPM_MAX_WORKERS" not in flake[default_shell_start:]
+    assert "devShells.extensions" not in flake
+    assert "pnpmLatest" not in flake
+    assert not re.search(r"\bnodejs(_\d+)?\b", flake)
+    assert "devShells.default" in flake
 
 
-def test_pnpm_wrapper_sets_a_default_worker_limit() -> None:
-    """REQ-3078-01 / TC-01A: pnpm wrapper preserves overrides and Node entrypoint."""
+def test_default_shell_sets_only_a_default_pnpm_worker_limit() -> None:
+    """REQ-3078-01: macOS の libuv abort 回避として Worker 既定値 1 を devShell が持つ。"""
     flake = _read("flake.nix")
-    wrapper = re.search(
-        r'(?ms)makeWrapper .*?"\$out/bin/pnpm" \\\n+(?P<args>.*?)\n\s*runHook postInstall',
-        flake,
-    )
+    default_shell = flake[flake.index("devShells.default") :]
 
-    assert wrapper is not None
-    args = wrapper.group("args")
-    assert "--set-default PNPM_MAX_WORKERS 1" in args
-    assert "--set PNPM_MAX_WORKERS" not in args
-    assert '--add-flags "$out/lib/pnpm/bin/pnpm.cjs"' in args
+    assert "if [ -z \"''${PNPM_MAX_WORKERS:-}\" ]; then" in default_shell
+    assert "export PNPM_MAX_WORKERS=1" in default_shell
+    assert flake.count("PNPM_MAX_WORKERS=1") == 1
 
 
-def test_all_extensions_pin_the_nix_pnpm() -> None:
+def test_node_version_is_declared_once_at_the_repository_root() -> None:
+    """vp と CI の setup-vp が読む Node の版は root の .node-version を正とする。"""
+    assert _read(".node-version") == "24\n"
+
+
+def test_every_node_package_pins_the_pnpm_version() -> None:
+    """vp の pnpm shim は cwd の packageManager から版を解決する。"""
+    for directory in _NODE_PACKAGE_DIRS:
+        package = json.loads(_read(f"{directory}/package.json"))
+
+        assert package["packageManager"] == f"pnpm@{_PINNED_PNPM}", directory
+
+
+def test_node_workflows_set_up_node_with_vp_from_the_node_version_file() -> None:
+    for path in _NODE_WORKFLOWS:
+        jobs = _workflow(path)["jobs"]
+        assert isinstance(jobs, dict)
+        for job_name, job in jobs.items():
+            assert isinstance(job, dict)
+            steps = job.get("steps", [])
+            assert isinstance(steps, list)
+            runs = " ".join(str(step.get("run", "")) for step in steps if isinstance(step, dict))
+            if "pnpm" not in runs and "verify-extensions.sh" not in runs:
+                continue
+            setup = [step for step in steps if str(step.get("uses", "")).startswith("voidzero-dev/setup-vp@")]
+            assert len(setup) == 1, f"{path}::{job_name}"
+            assert setup[0]["uses"] == _SETUP_VP_ACTION
+            assert setup[0]["with"] == {"node-version-file": ".node-version", "run-install": False}
+            assert ".#extensions" not in _read(path)
+
+
+def test_all_extensions_pin_the_pnpm_version() -> None:
     for name in _EXTENSION_NAMES:
         package = json.loads(_read(f"extensions/{name}/package.json"))
 
-        assert package["packageManager"] == f"pnpm@{_NIX_PNPM}"
+        assert package["packageManager"] == f"pnpm@{_PINNED_PNPM}"
 
 
 def test_all_extensions_preserve_build_approval() -> None:
@@ -119,7 +145,7 @@ def test_all_extensions_preserve_build_approval() -> None:
         assert _workspace_settings(name)["allowBuilds"] == {"esbuild": True, "spawn-sync": False}
 
 
-def test_extensions_ci_uses_the_nix_pnpm_instead_of_a_setup_action() -> None:
+def test_extensions_ci_uses_vp_instead_of_a_pnpm_setup_action() -> None:
     assert _pnpm_setup_versions(".github/workflows/extensions.yml") == []
 
 
@@ -128,7 +154,7 @@ def test_local_pnpm_store_is_ignored_and_has_no_tracked_project_metadata() -> No
     assert not list((_REPO_ROOT / ".pnpm-store" / "v10" / "projects").glob("*"))
 
 
-def test_release_workflow_uses_the_nix_pnpm_instead_of_a_setup_action() -> None:
+def test_release_workflow_uses_vp_instead_of_a_pnpm_setup_action() -> None:
     assert _pnpm_setup_versions(".github/workflows/release-extensions.yml") == []
 
 
@@ -143,7 +169,8 @@ def test_shared_docs_precede_commands_with_the_pinned_contract() -> None:
     assert f"bash {_VERIFY_SCRIPT_PATH} [<name>]" in extensions_readme
     assert "期待名 zip が唯一の1件" in extensions_readme
     assert "Node 24 / pnpm 11.15.1" in development_doc
-    assert "nix develop .#extensions --command pnpm" in development_doc
+    assert "vite-plus（`vp`）管理の Node 24 / pnpm 11.15.1" in development_doc
+    assert "`.node-version`" in development_doc
     assert "`--ignore-workspace`" in extensions_readme
     assert "`--ignore-workspace`" in development_doc
     assert _LEGACY_PNPM not in extensions_readme
@@ -153,7 +180,7 @@ def test_shared_docs_precede_commands_with_the_pinned_contract() -> None:
     assert "extensions/README.md::pnpm バージョン契約" in development_doc
 
 
-def test_each_extension_readme_uses_the_nix_extensions_shell() -> None:
+def test_each_extension_readme_uses_the_vp_toolchain() -> None:
     for name in _EXTENSION_README_NAMES:
         readme = _read(f"extensions/{name}/README.md")
 
@@ -167,7 +194,7 @@ def test_each_extension_readme_uses_the_nix_extensions_shell() -> None:
             "exec playwright install --with-deps chromium",
             "test:e2e",
         ):
-            assert f"{_NIX_COMMAND} -C extensions/{name} {command}" in readme
+            assert _cd_pnpm(f"extensions/{name}", command) in readme
         assert ".output/chrome-mv3/manifest.json" in readme
         assert f".output/{name}-<package.json の version>-chrome.zip" in readme
         assert f"bash {_VERIFY_SCRIPT_PATH} {name}" in readme
@@ -175,7 +202,7 @@ def test_each_extension_readme_uses_the_nix_extensions_shell() -> None:
         assert _LEGACY_NPX_COMMAND not in readme
 
 
-def test_shared_extension_readme_spells_out_the_nix_command_flow() -> None:
+def test_shared_extension_readme_spells_out_the_command_flow() -> None:
     readme = _read("extensions/README.md")
 
     for command in (
@@ -186,17 +213,17 @@ def test_shared_extension_readme_spells_out_the_nix_command_flow() -> None:
         "exec playwright install --with-deps chromium",
         "test:e2e",
     ):
-        assert f"{_NIX_COMMAND} -C extensions/suno-helper {command}" in readme
+        assert _cd_pnpm("extensions/suno-helper", command) in readme
     assert "extensions/suno-helper/.output/chrome-mv3/manifest.json" in readme
     assert "extensions/suno-helper/.output/suno-helper-<package.json の version>-chrome.zip" in readme
 
 
-def test_suno_skill_uses_the_nix_extensions_shell() -> None:
+def test_suno_skill_uses_the_vp_toolchain() -> None:
     suno_skill = _read(".claude/skills/music/references/prompt.md")
 
-    assert "Nix extensions shell（Node 24 / pnpm 11.15.1）" in suno_skill
-    assert f"{_NIX_COMMAND} -C extensions/suno-helper install --frozen-lockfile" in suno_skill
-    assert f"{_NIX_COMMAND} -C extensions/suno-helper build" in suno_skill
+    assert "vite-plus（`vp`）管理の Node 24 / pnpm 11.15.1" in suno_skill
+    assert _cd_pnpm("extensions/suno-helper", "install --frozen-lockfile") in suno_skill
+    assert _cd_pnpm("extensions/suno-helper", "build") in suno_skill
     assert "extensions/README.md::pnpm バージョン契約" in suno_skill
     assert _LEGACY_PNPM not in suno_skill
     assert _LEGACY_NPX_COMMAND not in suno_skill
@@ -219,11 +246,12 @@ def test_release_skill_delegates_extension_verification_to_single_source() -> No
     invocation = f"bash {_VERIFY_SCRIPT_PATH}"
     assert invocation in release_skill
     assert invocation in release_checklist
-    assert "nix develop .#extensions --command pnpm -C" not in release_skill
-    assert "nix develop .#extensions --command pnpm -C" not in release_checklist
+    assert ".#extensions" not in release_skill
+    assert ".#extensions" not in release_checklist
     assert "extension_names=(suno-helper distrokid-helper community-helper)" in verify_script
     for command in ("install --frozen-lockfile", "build", "zip"):
-        assert f'nix develop .#extensions --command pnpm -C "${{extension_dir}}" {command}' in verify_script
+        assert f'(cd "${{extension_dir}}" && pnpm {command})' in verify_script
+    assert "nix" not in verify_script
     assert "node_version} != v24.*" in verify_script
     assert "pnpm_version} != 11.15.1" in verify_script
     assert "zip_path=" in verify_script

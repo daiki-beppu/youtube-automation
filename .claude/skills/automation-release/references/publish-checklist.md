@@ -71,10 +71,10 @@ fi
 承認済みの公開ノート案を post-release branch に載せた後、commit / push 前に次を記載順で実行する。
 
 ```bash
-nix develop .#extensions --command pnpm -C site install --frozen-lockfile
-nix develop .#extensions --command pnpm -C site check
-nix develop .#extensions --command pnpm -C site build
-nix develop .#extensions --command pnpm -C site test
+(cd site && pnpm install --frozen-lockfile)
+(cd site && pnpm check)
+(cd site && pnpm build)
+(cd site && pnpm test)
 git diff --check
 ```
 

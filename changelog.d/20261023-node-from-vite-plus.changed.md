@@ -1,0 +1,3 @@
+- dashboard / audio-studio / site / extensions の Node.js と pnpm を、Nix の `devShells.extensions`（nixpkgs の `nodejs_24` と独自の pnpm wrapper）から vite-plus（`vp`）の shim と CI の `voidzero-dev/setup-vp` へ移した。nixpkgs の `nodejs_24` は staging を経るため Node のセキュリティリリース（2026-10-21、修正版 24.22.1）に数週間遅れていた。
+- Node の版はリポジトリ root の `.node-version`（`24`）を単一の正とし、Node 24 系の最新 patch へ解決する。pnpm は従来どおり各 `package.json::packageManager` の `pnpm@11.15.1` で固定し、dashboard / audio-studio にも同じ固定を追加した。
+- `nix develop .#extensions --command ...` の入口を廃止した。pnpm は各 package のディレクトリで起動する（例: `(cd site && pnpm build)`）。`PNPM_MAX_WORKERS=1` の既定値（#3078）は default devShell の shellHook が引き継ぐ。
