@@ -40,6 +40,7 @@ import { buildSelectedEntriesRunOverrides } from "../lib/run-overrides";
 import { CompletionSoundControls } from "./CompletionSoundControls";
 import { DownloadControls } from "./DownloadControls";
 import { PatternList } from "./PatternList";
+import { PlaylistControls } from "./PlaylistControls";
 import { ReloadRequiredNotice } from "./ReloadRequiredNotice";
 import { RunTimingPanel } from "./RunTimingPanel";
 import { useSunoRunner } from "./useSunoRunner";
@@ -76,6 +77,9 @@ export function App() {
     downloadEnabled,
     downloadEnabledLoaded,
     setDownloadEnabled,
+    playlistEnabled,
+    playlistEnabledLoaded,
+    setPlaylistEnabled,
     playlistName,
     runModeId,
     setRunMode,
@@ -608,9 +612,15 @@ export function App() {
         onEnabledChange={setCompletionSoundEnabled}
       />
 
+      <PlaylistControls
+        enabled={playlistEnabled}
+        disabled={!playlistEnabledLoaded || controlsLocked}
+        onEnabledChange={setPlaylistEnabled}
+      />
+
       <DownloadControls
-        enabled={downloadEnabled}
-        disabled={!downloadEnabledLoaded || controlsLocked}
+        enabled={playlistEnabled && downloadEnabled}
+        disabled={!downloadEnabledLoaded || controlsLocked || !playlistEnabled}
         onEnabledChange={setDownloadEnabled}
       />
 
@@ -659,7 +669,7 @@ export function App() {
             ダウンロードのみ実行
           </Button>
           <div className="flex gap-2">
-            {playlistName && (
+            {playlistEnabled && playlistName && (
               <Button
                 type="button"
                 onClick={() => void retryPlaylist()}
@@ -671,7 +681,7 @@ export function App() {
                 Playlist から再開
               </Button>
             )}
-            {downloadEnabled && (
+            {playlistEnabled && downloadEnabled && (
               <Button
                 type="button"
                 onClick={() => void retryDownload()}

@@ -21,6 +21,11 @@ export const serverUrlItem = storage.defineItem<string>(
   { fallback: DEFAULT_URL }
 );
 
+export const playlistEnabledItem = storage.defineItem<boolean>(
+  "local:sunoPlaylistEnabled",
+  { fallback: true }
+);
+
 export const downloadEnabledItem = storage.defineItem<boolean>(
   "local:sunoDownloadEnabled",
   { fallback: true }

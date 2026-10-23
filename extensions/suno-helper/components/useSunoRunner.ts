@@ -62,6 +62,7 @@ import {
 import { isTerminalPhase, nextItemStates } from "../lib/snapshot";
 import {
   downloadEnabledItem,
+  playlistEnabledItem,
   migrateServerSourcesStorage,
   serverUrlItem,
 } from "../lib/storage";
@@ -99,6 +100,9 @@ interface RunnerState {
   completionSoundSettings: CompletionSoundSettings;
   completionSoundSettingsLoaded: boolean;
   setCompletionSoundEnabled: (enabled: boolean) => void;
+  playlistEnabled: boolean;
+  playlistEnabledLoaded: boolean;
+  setPlaylistEnabled: (enabled: boolean) => void;
   downloadEnabled: boolean;
   downloadEnabledLoaded: boolean;
   setDownloadEnabled: (enabled: boolean) => void;
@@ -276,6 +280,8 @@ export function useSunoRunner(): RunnerState {
   const [regenerateDurationOutliers, setRegenerateDurationOutliers] = useState(
     DEFAULT_REGENERATE_DURATION_OUTLIERS
   );
+  const [playlistEnabled, setPlaylistEnabledState] = useState(true);
+  const [playlistEnabledLoaded, setPlaylistEnabledLoaded] = useState(false);
   const [downloadEnabled, setDownloadEnabledState] = useState(true);
   const [downloadEnabledLoaded, setDownloadEnabledLoaded] = useState(false);
   const [
@@ -709,6 +715,22 @@ export function useSunoRunner(): RunnerState {
   );
 
   useEffect(() => {
+    void playlistEnabledItem
+      .getValue()
+      .then(setPlaylistEnabledState)
+      .catch(reportStorageFailure)
+      .finally(() => setPlaylistEnabledLoaded(true));
+  }, [reportStorageFailure]);
+
+  const setPlaylistEnabled = useCallback(
+    (enabled: boolean) => {
+      setPlaylistEnabledState(enabled);
+      void playlistEnabledItem.setValue(enabled).catch(reportStorageFailure);
+    },
+    [reportStorageFailure]
+  );
+
+  useEffect(() => {
     void downloadEnabledItem
       .getValue()
       .then(setDownloadEnabledState)
@@ -910,6 +932,7 @@ export function useSunoRunner(): RunnerState {
             collectionQueueId: queue.queueId,
             runMode: queue.runMode,
             regenerateDurationOutliers: queue.regenerateDurationOutliers,
+            playlistEnabled,
             downloadEnabled,
             durationOutlierWarnings: overrides?.durationOutlierWarnings,
             overrides,
@@ -940,6 +963,7 @@ export function useSunoRunner(): RunnerState {
       setRunning,
       settleRejectedCollectionQueueStart,
       writePausedCollectionQueue,
+      playlistEnabled,
       downloadEnabled,
     ]
   );
@@ -1254,6 +1278,7 @@ export function useSunoRunner(): RunnerState {
       resumeCheckedAt === null ||
       !collectionQueueChecked ||
       !downloadEnabledLoaded ||
+      !playlistEnabledLoaded ||
       initialFetchStartedRef.current
     ) {
       return;
@@ -1287,6 +1312,7 @@ export function useSunoRunner(): RunnerState {
     fetchData,
     collectionQueueChecked,
     downloadEnabledLoaded,
+    playlistEnabledLoaded,
     reportStorageFailure,
     resumableCollectionId,
     resumeCheckedAt,
@@ -1421,6 +1447,7 @@ export function useSunoRunner(): RunnerState {
             collectionId: selectedCollectionId,
             runMode: runModeId,
             regenerateDurationOutliers,
+            playlistEnabled,
             downloadEnabled,
             durationOutlierWarnings: overrides?.durationOutlierWarnings,
             overrides,
@@ -1439,6 +1466,7 @@ export function useSunoRunner(): RunnerState {
       selectedCollectionId,
       runModeId,
       regenerateDurationOutliers,
+      playlistEnabled,
       downloadEnabled,
       report,
       reportRunDispatchFailure,
@@ -1815,6 +1843,9 @@ export function useSunoRunner(): RunnerState {
     completionSoundSettings,
     completionSoundSettingsLoaded,
     setCompletionSoundEnabled,
+    playlistEnabled,
+    playlistEnabledLoaded,
+    setPlaylistEnabled,
     downloadEnabled,
     downloadEnabledLoaded,
     setDownloadEnabled,

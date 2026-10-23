@@ -123,6 +123,10 @@ import {
   writeResumeState,
 } from "../lib/resume-state";
 import {
+  resolveRunFinalStage,
+  type RunFinalStage,
+} from "../lib/run-final-stage";
+import {
   beginRunTiming,
   finalizeRunTiming,
   resumeRunTiming,
@@ -155,13 +159,22 @@ import {
   type DurationOutlierPolicy,
 } from "../lib/yield-guard";
 
-const DOWNLOAD_SKIPPED_MESSAGE =
-  "ダウンロード未実行。Suno から手動で取得して 02-Individual-music/ へ配置してください。";
+const FINAL_STAGE_COMPLETION_MESSAGES: Record<
+  RunFinalStage,
+  string | undefined
+> = {
+  generation:
+    "playlist 追加とダウンロードは未実行。Suno から手動で取得して 02-Individual-music/ へ配置してください。",
+  playlist:
+    "ダウンロード未実行。Suno から手動で取得して 02-Individual-music/ へ配置してください。",
+  download: undefined,
+};
 
-function downloadCompletionMessage(
-  downloadEnabled: boolean
+function finalStageCompletionMessage(
+  finalStage: RunFinalStage
 ): Pick<ProgressPayload, "message"> {
-  return downloadEnabled ? {} : { message: DOWNLOAD_SKIPPED_MESSAGE };
+  const message = FINAL_STAGE_COMPLETION_MESSAGES[finalStage];
+  return message === undefined ? {} : { message };
 }
 
 function advanceRunTimingReceipt(
@@ -382,7 +395,7 @@ function assertOptionalIndices(
 
 // fallow-ignore-next-line complexity
 function assertRunPayload(value: unknown): RunPayload & {
-  downloadEnabled: boolean;
+  finalStage: RunFinalStage;
 } {
   const record = assertRecord(value, "run payload");
   if (!Array.isArray(record.entries)) {
@@ -419,9 +432,14 @@ function assertRunPayload(value: unknown): RunPayload & {
         record.regenerateDurationOutliers,
         "run.regenerateDurationOutliers"
       ) ?? DEFAULT_REGENERATE_DURATION_OUTLIERS,
-    downloadEnabled:
-      assertOptionalBoolean(record.downloadEnabled, "run.downloadEnabled") ??
-      true,
+    finalStage: resolveRunFinalStage({
+      playlistEnabled:
+        assertOptionalBoolean(record.playlistEnabled, "run.playlistEnabled") ??
+        true,
+      downloadEnabled:
+        assertOptionalBoolean(record.downloadEnabled, "run.downloadEnabled") ??
+        true,
+    }),
     durationFilter: assertOptionalDurationFilter(
       record.durationFilter,
       "run.durationFilter"
@@ -489,7 +507,7 @@ function assertOptionalDurationOutlierWarnings(
 }
 
 function assertRetryDownloadSettings(record: Record<string, unknown>): {
-  downloadEnabled: boolean;
+  finalStage: RunFinalStage;
   shouldDownload: boolean;
 } {
   const shouldDownload = assertOptionalBoolean(
@@ -502,13 +520,16 @@ function assertRetryDownloadSettings(record: Record<string, unknown>): {
       "retryPlaylist.downloadEnabled"
     ) ?? true;
   return {
-    downloadEnabled,
+    finalStage: resolveRunFinalStage({
+      playlistEnabled: true,
+      downloadEnabled,
+    }),
     shouldDownload: shouldDownload === true && downloadEnabled,
   };
 }
 
 function assertRetryPlaylistPayload(value: unknown): RetryPlaylistPayload & {
-  downloadEnabled: boolean;
+  finalStage: RunFinalStage;
 } {
   const record = assertRecord(value, "retryPlaylist payload");
   const unattendedRecord =
@@ -1708,7 +1729,7 @@ export default defineContentScript({
       durationOutlierPolicy: DurationOutlierPolicy;
       collectionQueueId?: string;
       unattended?: RunPayload["unattended"];
-      downloadEnabled: boolean;
+      finalStage: RunFinalStage;
     }
 
     // fallow-ignore-next-line complexity
@@ -1777,7 +1798,7 @@ export default defineContentScript({
           : new Set(previousSubmittedClipIds).size +
             order.length * CLIPS_PER_REQUEST;
       const shouldRunDownloadAfterPlaylist =
-        options.downloadEnabled &&
+        options.finalStage === "download" &&
         expectedRawPlaylistClipCount >= total * CLIPS_PER_REQUEST;
       // リトライ上限まで失敗しスキップした entry の 0-based index (#948)。終了時に resume state へ
       // 永続化し、popup の「失敗分のみ再実行」導線が消費する。
@@ -1895,7 +1916,11 @@ export default defineContentScript({
         emitProgress({
           phase: PHASE.FINISHED,
           total,
-          message: `${failedIndices.length} 件の entry が失敗しました (entry ${list})。「失敗分のみ再実行」で完走後に playlist 追加が実行されます。`,
+          message: `${failedIndices.length} 件の entry が失敗しました (entry ${list})。${
+            options.finalStage === "generation"
+              ? "「失敗分のみ再実行」で残りを生成できます。"
+              : "「失敗分のみ再実行」で完走後に playlist 追加が実行されます。"
+          }`,
         });
       }
 
@@ -2575,40 +2600,42 @@ export default defineContentScript({
         }
       }
       let studioClipIds: string[] | null = null;
-      try {
-        verifiedPlaylistClipCount = await addClipsToPlaylist(
-          total,
-          playlistName,
-          previousSubmittedClipIds,
-          playlistTargetClipCount,
-          entries,
-          completedOrder,
-          options.durationFilter,
-          options.submittedClipIdsAreDurationFiltered === true,
-          options.durationOutlierPolicy,
-          async (info) => {
-            playlistPersistInfo = info;
-            studioClipIds = info.submittedClipIds;
-            if (unattended) {
-              // playlist create は不可逆。定期実行では clip IDs と作成前 URL baseline の
-              // durable checkpoint が成功した場合だけ先へ進む。
-              persistInterruptState(total, undefined, undefined, true);
-              await resumeStateWrite;
+      if (options.finalStage !== "generation") {
+        try {
+          verifiedPlaylistClipCount = await addClipsToPlaylist(
+            total,
+            playlistName,
+            previousSubmittedClipIds,
+            playlistTargetClipCount,
+            entries,
+            completedOrder,
+            options.durationFilter,
+            options.submittedClipIdsAreDurationFiltered === true,
+            options.durationOutlierPolicy,
+            async (info) => {
+              playlistPersistInfo = info;
+              studioClipIds = info.submittedClipIds;
+              if (unattended) {
+                // playlist create は不可逆。定期実行では clip IDs と作成前 URL baseline の
+                // durable checkpoint が成功した場合だけ先へ進む。
+                persistInterruptState(total, undefined, undefined, true);
+                await resumeStateWrite;
+              }
             }
+          );
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          if (message.includes("playlist 対象の OK clip ID が 0 件")) {
+            playlistPersistInfo = {
+              submittedClipIds: [],
+              submittedClipIdsAreDurationFiltered: true,
+              playlistExpectedClipCount: 0,
+            };
           }
-        );
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        if (message.includes("playlist 対象の OK clip ID が 0 件")) {
-          playlistPersistInfo = {
-            submittedClipIds: [],
-            submittedClipIdsAreDurationFiltered: true,
-            playlistExpectedClipCount: 0,
-          };
+          persistInterruptState(total);
+          emitProgress({ phase: PHASE.ERROR, index: total, total, message });
+          return;
         }
-        persistInterruptState(total);
-        emitProgress({ phase: PHASE.ERROR, index: total, total, message });
-        return;
       }
       if (aborted) {
         persistInterruptState(total);
@@ -2679,8 +2706,12 @@ export default defineContentScript({
         emitProgress({
           phase: PHASE.FINISHED,
           total,
-          message: `${details.join(" / ")}。完了分の playlist 追加は実行済みです。${
-            downloadCompletionMessage(options.downloadEnabled).message ??
+          message: `${details.join(" / ")}。${
+            options.finalStage === "generation"
+              ? ""
+              : "完了分の playlist 追加は実行済みです。"
+          }${
+            finalStageCompletionMessage(options.finalStage).message ??
             "ダウンロードは実行済みです。"
           }「失敗分のみ再実行」で残りを生成できます。`,
         });
@@ -2718,7 +2749,7 @@ export default defineContentScript({
         phase: PHASE.FINISHED,
         total,
         ...(downloadSummary === undefined ? {} : { downloadSummary }),
-        ...downloadCompletionMessage(options.downloadEnabled),
+        ...finalStageCompletionMessage(options.finalStage),
       });
       // run 一式完了時リロード (#1411 要件2)。playlist 追加で作った multi-select 状態は
       // Suno 内部 state に残り、同一タブの次 run の Cmd+P に混入するためページごと破棄する。
@@ -2755,7 +2786,7 @@ export default defineContentScript({
         playlistExpectedClipCount,
         collectionQueueId,
         unattended,
-        downloadEnabled,
+        finalStage,
       } = assertRunPayload(data);
       // 手動 run では過去の定期実行 state を更新しない。定期実行だけが明示的に
       // active context を設定し、以降の progress を checkpoint へ反映する。
@@ -2846,7 +2877,7 @@ export default defineContentScript({
         playlistExpectedClipCount,
         collectionQueueId,
         unattended,
-        downloadEnabled,
+        finalStage,
       }).finally(async () => {
         running = false;
         // queue failure で resume state を消す場合、最後の checkpoint write より後に
@@ -2892,7 +2923,7 @@ export default defineContentScript({
         durationOutlierWarnings,
         submittedClipIdsAreDurationFiltered,
         shouldDownload,
-        downloadEnabled,
+        finalStage,
         unattended,
         timingReceipt,
       } = assertRetryPlaylistPayload(data);
@@ -3020,7 +3051,7 @@ export default defineContentScript({
           emitProgress({
             phase: PHASE.FINISHED,
             total: 0,
-            ...downloadCompletionMessage(downloadEnabled),
+            ...finalStageCompletionMessage(finalStage),
           });
           // retryPlaylist も playlist 追加で multi-select 状態を作るため完了時にページごと破棄する (#1411)。
           // リロード前に FINISHED snapshot を退避する（runAll の完了経路と同じ）。

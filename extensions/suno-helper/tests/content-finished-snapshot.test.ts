@@ -144,12 +144,14 @@ async function loadContentScript(
     detectSunoViewMode: vi.fn(() => "list"),
   }));
 
+  const openAddToPlaylistDialogMock = vi.fn(() =>
+    Promise.resolve({} as HTMLElement)
+  );
+  const fillPlaylistNameAndCreateMock = vi.fn(() => Promise.resolve());
   vi.doMock("../../shared/playlist-dom", () => ({
     clickPlaylistRowByName: vi.fn(() => Promise.resolve()),
-    fillPlaylistNameAndCreate: vi.fn(() => Promise.resolve()),
-    openAddToPlaylistDialogViaCmdP: vi.fn(() =>
-      Promise.resolve({} as HTMLElement)
-    ),
+    fillPlaylistNameAndCreate: fillPlaylistNameAndCreateMock,
+    openAddToPlaylistDialogViaCmdP: openAddToPlaylistDialogMock,
     readSelectedClipIds: vi.fn(() => Promise.resolve(lastMultiSelectIds)),
     scrollAndMultiSelectByIds: vi.fn((ids: string[]) => {
       lastMultiSelectIds = ids;
@@ -178,15 +180,16 @@ async function loadContentScript(
     },
   }));
 
+  const requestStudioMultitrackExportMock = vi.fn(async () => {
+    if (overrides?.downloadFilename) {
+      handlers.get("downloadComplete")?.({
+        data: { filename: overrides.downloadFilename },
+      });
+    }
+    return 73;
+  });
   vi.doMock("../lib/studio-export", () => ({
-    requestStudioMultitrackExport: vi.fn(async () => {
-      if (overrides?.downloadFilename) {
-        handlers.get("downloadComplete")?.({
-          data: { filename: overrides.downloadFilename },
-        });
-      }
-      return 73;
-    }),
+    requestStudioMultitrackExport: requestStudioMultitrackExportMock,
     performStudioMultitrackExport: vi.fn(() => Promise.resolve()),
     closeStudioExportTab: vi.fn(() => Promise.resolve()),
   }));
@@ -218,6 +221,9 @@ async function loadContentScript(
     clearFinishedSnapshotMock,
     scheduleRunCompleteReloadMock,
     clearResumeStateForCollectionMock,
+    openAddToPlaylistDialogMock,
+    fillPlaylistNameAndCreateMock,
+    requestStudioMultitrackExportMock,
   };
 }
 
@@ -335,6 +341,88 @@ describe("content.ts 完了時リロード前の FINISHED snapshot 退避", () =
     expect(
       progressMessages.some(({ phase }) => phase === PHASE.DOWNLOADING)
     ).toBe(false);
+  });
+
+  it("Given playlist Switch OFF When 全 entry 完走 Then 生成完了で FINISHED になり playlist 追加と download を行わない", async () => {
+    const autoRunClipIds = ["clip-1", "clip-2", "clip-3", "clip-4"];
+    const {
+      runHandler,
+      progressMessages,
+      sentMessages,
+      clearResumeStateForCollectionMock,
+      openAddToPlaylistDialogMock,
+      fillPlaylistNameAndCreateMock,
+      requestStudioMultitrackExportMock,
+    } = await loadContentScript(autoRunClipIds);
+
+    runHandler({
+      data: {
+        ...partialRunPayload(),
+        range: undefined,
+        playlistEnabled: false,
+        downloadEnabled: true,
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({
+          phase: PHASE.FINISHED,
+          message: expect.stringContaining(
+            "playlist 追加とダウンロードは未実行"
+          ),
+        })
+      )
+    );
+    expect(clearResumeStateForCollectionMock).toHaveBeenCalledWith("coll-1");
+    expect(openAddToPlaylistDialogMock).not.toHaveBeenCalled();
+    expect(fillPlaylistNameAndCreateMock).not.toHaveBeenCalled();
+    expect(requestStudioMultitrackExportMock).not.toHaveBeenCalled();
+    expect(
+      sentMessages.filter(({ type }) =>
+        ["startDownload", "startStudioExport", "postDownloaded"].includes(type)
+      )
+    ).toHaveLength(0);
+    const phases = progressMessages.map(({ phase }) => phase);
+    expect(phases).not.toContain(PHASE.ADDING_TO_PLAYLIST);
+    expect(phases).not.toContain(PHASE.DOWNLOADING);
+  });
+
+  it("Given playlist Switch ON When 全 entry 完走 Then playlist 追加と download を経て FINISHED になる", async () => {
+    const autoRunClipIds = ["clip-1", "clip-2", "clip-3", "clip-4"];
+    const {
+      runHandler,
+      progressMessages,
+      openAddToPlaylistDialogMock,
+      requestStudioMultitrackExportMock,
+    } = await loadContentScript(autoRunClipIds, {
+      downloadFilename: "/downloads/collection.zip",
+    });
+
+    runHandler({
+      data: {
+        ...partialRunPayload(),
+        range: undefined,
+        playlistEnabled: true,
+        downloadEnabled: true,
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(progressMessages).toContainEqual(
+        expect.objectContaining({ phase: PHASE.FINISHED })
+      )
+    );
+    expect(openAddToPlaylistDialogMock).toHaveBeenCalled();
+    expect(requestStudioMultitrackExportMock).toHaveBeenCalled();
+    const phases = progressMessages.map(({ phase }) => phase);
+    expect(phases.indexOf(PHASE.ADDING_TO_PLAYLIST)).toBeGreaterThanOrEqual(0);
+    expect(phases.indexOf(PHASE.DOWNLOADING)).toBeGreaterThan(
+      phases.indexOf(PHASE.ADDING_TO_PLAYLIST)
+    );
+    expect(
+      progressMessages.find(({ phase }) => phase === PHASE.FINISHED)?.message
+    ).toBeUndefined();
   });
 
   it("Given snapshot 退避が失敗 When FINISHED Then リロードを見送る（in-memory snapshot を生かして復元性を守る）", async () => {
