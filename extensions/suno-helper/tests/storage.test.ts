@@ -17,7 +17,19 @@ const storageItems = vi.hoisted(() => {
     removeValue: vi.fn(),
     fallback: undefined as unknown,
   };
-  return { serverUrl, legacySources, downloadEnabled, defineItem: vi.fn() };
+  const playlistEnabled = {
+    getValue: vi.fn(),
+    setValue: vi.fn(),
+    removeValue: vi.fn(),
+    fallback: undefined as unknown,
+  };
+  return {
+    serverUrl,
+    legacySources,
+    downloadEnabled,
+    playlistEnabled,
+    defineItem: vi.fn(),
+  };
 });
 
 vi.mock("wxt/utils/storage", () => {
@@ -28,6 +40,10 @@ vi.mock("wxt/utils/storage", () => {
         storageItems.downloadEnabled.fallback = options?.fallback;
         return storageItems.downloadEnabled;
       }
+      if (key === "local:sunoPlaylistEnabled") {
+        storageItems.playlistEnabled.fallback = options?.fallback;
+        return storageItems.playlistEnabled;
+      }
       return storageItems.legacySources;
     }
   );
@@ -37,6 +53,7 @@ vi.mock("wxt/utils/storage", () => {
 import {
   downloadEnabledItem,
   migrateServerSourcesStorage,
+  playlistEnabledItem,
   serverUrlItem,
 } from "../lib/storage";
 
@@ -88,5 +105,10 @@ describe("download preference storage", () => {
   it("defaults the local download preference to enabled", () => {
     expect(storageItems.downloadEnabled.fallback).toBe(true);
     expect(downloadEnabledItem).toBe(storageItems.downloadEnabled);
+  });
+
+  it("defaults the local playlist preference to enabled", () => {
+    expect(storageItems.playlistEnabled.fallback).toBe(true);
+    expect(playlistEnabledItem).toBe(storageItems.playlistEnabled);
   });
 });

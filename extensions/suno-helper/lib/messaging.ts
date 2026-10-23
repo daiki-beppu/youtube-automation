@@ -42,6 +42,7 @@ export interface RunPayload {
   /** 生成完了待ちの方式。serial は従来挙動、queue は ACK 後に次 entry を投入する。 */
   runMode: RunModeId;
   regenerateDurationOutliers: boolean;
+  playlistEnabled?: boolean;
   downloadEnabled?: boolean;
   durationOutlierWarnings?: Record<number, string>;
   timingReceipt?: RunTimingReceipt;

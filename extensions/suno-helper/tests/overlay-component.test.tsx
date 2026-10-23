@@ -72,6 +72,9 @@ const runner = vi.hoisted(() => ({
   completionSoundSettings: { enabled: true },
   completionSoundSettingsLoaded: true,
   setCompletionSoundEnabled: vi.fn(),
+  playlistEnabled: true,
+  playlistEnabledLoaded: true,
+  setPlaylistEnabled: vi.fn(),
   downloadEnabled: true,
   downloadEnabledLoaded: true,
   setDownloadEnabled: vi.fn(),
@@ -166,9 +169,12 @@ describe("Overlay shell", () => {
       itemStates: [],
       canRun: false,
       collectionQueue: null,
+      playlistEnabled: true,
+      playlistEnabledLoaded: true,
       downloadEnabled: true,
       downloadEnabledLoaded: true,
     });
+    runner.setPlaylistEnabled.mockClear();
     runner.setDownloadEnabled.mockClear();
     runner.runCollectionQueue.mockClear();
     runner.resumeCollectionQueue.mockClear();
@@ -346,6 +352,34 @@ describe("Overlay shell", () => {
       runner.retryDownload
     );
     await clickControl('button[data-suno-control="run"]', runner.run);
+  });
+
+  it("playlist Switch OFF を永続化し、Playlist / Download 再開を隠して download-only は残す", async () => {
+    Object.assign(runner, {
+      selectedCollectionId: "collection",
+      playlistName: "playlist",
+      playlistEnabled: true,
+      downloadEnabled: true,
+    });
+    await act(async () => root.render(createElement(Overlay)));
+
+    const toggle = container.querySelector<HTMLElement>(
+      '[data-suno-control="playlist-enabled"]'
+    )!;
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    await act(async () => toggle.click());
+    expect(runner.setPlaylistEnabled).toHaveBeenCalledWith(false);
+
+    runner.playlistEnabled = false;
+    await act(async () => root.render(createElement(Overlay)));
+    for (const control of ["retry-playlist", "retry-download"]) {
+      expect(
+        container.querySelector(`[data-suno-control="${control}"]`)
+      ).toBeNull();
+    }
+    expect(
+      container.querySelector('[data-suno-control="download-only"]')
+    ).not.toBeNull();
   });
 
   it("challenge履歴を総件数と直近5件で表示する", async () => {

@@ -54,6 +54,10 @@ import {
   writeResumeState,
 } from "../lib/resume-state";
 import {
+  finalStageCompletionMessage,
+  resolveRunFinalStage,
+} from "../lib/run-final-stage";
+import {
   buildFailedEntriesRunOverrides,
   buildRunPayload,
   buildResumeRunOverrides,
@@ -62,6 +66,7 @@ import {
 import { isTerminalPhase, nextItemStates } from "../lib/snapshot";
 import {
   downloadEnabledItem,
+  playlistEnabledItem,
   migrateServerSourcesStorage,
   serverUrlItem,
 } from "../lib/storage";
@@ -99,6 +104,9 @@ interface RunnerState {
   completionSoundSettings: CompletionSoundSettings;
   completionSoundSettingsLoaded: boolean;
   setCompletionSoundEnabled: (enabled: boolean) => void;
+  playlistEnabled: boolean;
+  playlistEnabledLoaded: boolean;
+  setPlaylistEnabled: (enabled: boolean) => void;
   downloadEnabled: boolean;
   downloadEnabledLoaded: boolean;
   setDownloadEnabled: (enabled: boolean) => void;
@@ -276,6 +284,8 @@ export function useSunoRunner(): RunnerState {
   const [regenerateDurationOutliers, setRegenerateDurationOutliers] = useState(
     DEFAULT_REGENERATE_DURATION_OUTLIERS
   );
+  const [playlistEnabled, setPlaylistEnabledState] = useState(true);
+  const [playlistEnabledLoaded, setPlaylistEnabledLoaded] = useState(false);
   const [downloadEnabled, setDownloadEnabledState] = useState(true);
   const [downloadEnabledLoaded, setDownloadEnabledLoaded] = useState(false);
   const [
@@ -709,6 +719,22 @@ export function useSunoRunner(): RunnerState {
   );
 
   useEffect(() => {
+    void playlistEnabledItem
+      .getValue()
+      .then(setPlaylistEnabledState)
+      .catch(reportStorageFailure)
+      .finally(() => setPlaylistEnabledLoaded(true));
+  }, [reportStorageFailure]);
+
+  const setPlaylistEnabled = useCallback(
+    (enabled: boolean) => {
+      setPlaylistEnabledState(enabled);
+      void playlistEnabledItem.setValue(enabled).catch(reportStorageFailure);
+    },
+    [reportStorageFailure]
+  );
+
+  useEffect(() => {
     void downloadEnabledItem
       .getValue()
       .then(setDownloadEnabledState)
@@ -910,6 +936,7 @@ export function useSunoRunner(): RunnerState {
             collectionQueueId: queue.queueId,
             runMode: queue.runMode,
             regenerateDurationOutliers: queue.regenerateDurationOutliers,
+            playlistEnabled,
             downloadEnabled,
             durationOutlierWarnings: overrides?.durationOutlierWarnings,
             overrides,
@@ -940,6 +967,7 @@ export function useSunoRunner(): RunnerState {
       setRunning,
       settleRejectedCollectionQueueStart,
       writePausedCollectionQueue,
+      playlistEnabled,
       downloadEnabled,
     ]
   );
@@ -1254,6 +1282,7 @@ export function useSunoRunner(): RunnerState {
       resumeCheckedAt === null ||
       !collectionQueueChecked ||
       !downloadEnabledLoaded ||
+      !playlistEnabledLoaded ||
       initialFetchStartedRef.current
     ) {
       return;
@@ -1287,6 +1316,7 @@ export function useSunoRunner(): RunnerState {
     fetchData,
     collectionQueueChecked,
     downloadEnabledLoaded,
+    playlistEnabledLoaded,
     reportStorageFailure,
     resumableCollectionId,
     resumeCheckedAt,
@@ -1421,6 +1451,7 @@ export function useSunoRunner(): RunnerState {
             collectionId: selectedCollectionId,
             runMode: runModeId,
             regenerateDurationOutliers,
+            playlistEnabled,
             downloadEnabled,
             durationOutlierWarnings: overrides?.durationOutlierWarnings,
             overrides,
@@ -1439,6 +1470,7 @@ export function useSunoRunner(): RunnerState {
       selectedCollectionId,
       runModeId,
       regenerateDurationOutliers,
+      playlistEnabled,
       downloadEnabled,
       report,
       reportRunDispatchFailure,
@@ -1466,10 +1498,34 @@ export function useSunoRunner(): RunnerState {
       );
       return;
     }
+    const finalStage = resolveRunFinalStage({
+      playlistEnabled,
+      downloadEnabled,
+    });
+    if (finalStage === "generation") {
+      // 現在の Switch を優先する。生成は完了済みなので resume を閉じ、通常 run の生成完了と同じ表示で終える。
+      persistedResumeRef.current = null;
+      setPersistedResume(null);
+      setResumeDismissed(true);
+      report(
+        phaseToStatus(
+          {
+            phase: PHASE.FINISHED,
+            total: resumeBanner?.total ?? entries.length,
+            ...finalStageCompletionMessage(finalStage),
+          },
+          entries
+        ).text
+      );
+      await clearResumeStateForCollection(selectedCollectionId).catch(
+        reportStorageFailure
+      );
+      return;
+    }
     const expectedClipCount =
       playlistExpectedClipCountForResume ?? submittedClipIdsForResume.length;
     const shouldDownload =
-      downloadEnabled &&
+      finalStage === "download" &&
       resumeBanner !== null &&
       resumeBanner.failedIndex >= resumeBanner.total &&
       !resumeBanner.remainingIndices?.length;
@@ -1525,7 +1581,10 @@ export function useSunoRunner(): RunnerState {
     report,
     setRunning,
     persistedResume?.timingReceipt,
+    playlistEnabled,
     downloadEnabled,
+    entries,
+    reportStorageFailure,
   ]);
 
   // バナー承認 = 1-click 自動再開 (#892 要件6)。failedIndex === total（全 entry 投入済み）のときは
@@ -1815,6 +1874,9 @@ export function useSunoRunner(): RunnerState {
     completionSoundSettings,
     completionSoundSettingsLoaded,
     setCompletionSoundEnabled,
+    playlistEnabled,
+    playlistEnabledLoaded,
+    setPlaylistEnabled,
     downloadEnabled,
     downloadEnabledLoaded,
     setDownloadEnabled,

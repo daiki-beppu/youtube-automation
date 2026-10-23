@@ -94,7 +94,7 @@ Chrome DevTools MCP は必須ではない。通常運用は browser use を prim
 6. `[data-suno-control="collection-select"]` で対象 collection を選ぶ。選択後、Playlist 名が表示されること、`data-suno-collection-id` が対象 id になることを確認する。
 7. 配信元または collection の選択後に自動取得が完了し、`role="status"` の live region が `N パターンを取得しました。` になること、`data-suno-entry-count` が 1 以上で `[data-suno-entry-list]` に entry 行が並ぶことを確認する。配信元候補は selector を開き、候補更新後に表示された対象を選択する。実行前に overlay 自体が更新されない場合だけページを再読み込みし、手順 3 からやり直す。
 8. 必要な entry だけを checkbox で残す。各行は `data-suno-entry-index` / `data-suno-entry-state` / `data-suno-entry-selected` を持つ。通常は全選択のままにする。
-9. `[data-suno-control="download-enabled"]` を確認する。既定 ON は Suno Studio・Premier が必要。Premier でない場合は OFF にし、playlist 追加で完了した後に Suno から手動取得して `02-Individual-music/` へ配置する。この Switch は連続実行と再開に適用され、`[data-suno-control="download-only"]` の明示操作には適用されない。
+9. `[data-suno-control="playlist-enabled"]` が ON（既定）であることを確認する。OFF は生成完了で `finished` になり playlist 追加と download を行わないため、この flow の完了判定を満たさない。続けて `[data-suno-control="download-enabled"]` を確認する。既定 ON は Suno Studio・Premier が必要。Premier でない場合は OFF にし、playlist 追加で完了した後に Suno から手動取得して `02-Individual-music/` へ配置する。この Switch は連続実行と再開に適用され、`[data-suno-control="download-only"]` の明示操作には適用されない。
 10. preset を確認し、`[data-suno-control="run"]`（表示文言: 全パターンを連続実行 / 選択したN件を連続実行）を押す。
 11. 実行中は Suno タブを reload / close せず、overlay の `data-suno-phase` と `role="status"` を監視する。agent は `finished` / `stopped` / `error` の終端 phase まで待つ。非終端 phase が変化しない場合は下記「無限待機を避ける監視ルール」で判断する。
 
@@ -127,6 +127,7 @@ browser use で Suno タブを前面にし、拡張アイコンをクリック�
 | 自動取得 | 初回表示・配信元選択・collection 選択 | サーバーから prompts JSON を fetch。配信元候補は selector を開く操作で再検出し、更新完了後に選択肢を表示 |
 | 連続実行 | 実行時 | 開始 |
 | 停止 | 実行中のみ有効 | 任意中断 |
+| プレイリストに追加する | 任意 | 既定 ON。OFF は生成完了で完了し、playlist 追加・download を行わない。ダウンロード Switch は無効になり、Playlist / Download から再開は表示しない |
 | ダウンロードまで実行する | 任意 | 既定 ON。OFF は playlist 追加で完了し、Download から再開は表示しない |
 | ダウンロードのみ実行 | 任意 | Suno 上の選択中 clip を採用し、生成・playlist 追加をやり直さず Studio download を開始する。Switch が OFF でも実行可能 |
 
@@ -148,6 +149,7 @@ agent が優先して使う DOM signal:
 | `[data-suno-control="run"]` / `[data-suno-control="stop"]` | 連続実行 / 停止 |
 | `[data-suno-control="resume"]` / `[data-suno-control="dismiss-resume"]` | 前回中断 resume バナーの再開 / 閉じる |
 | `[data-suno-control="adopt-selected-clips"]` | Suno 上の選択中 clip を採用 |
+| `[data-suno-control="playlist-enabled"]` | 連続実行時のプレイリスト追加 Switch（既定 ON） |
 | `[data-suno-control="download-enabled"]` | 連続実行時のダウンロード Switch（既定 ON） |
 | `[data-suno-control="download-only"]` | ダウンロードのみ実行。Switch が OFF でも実行可能 |
 | `[data-suno-control="retry-playlist"]` / `[data-suno-control="retry-download"]` | playlist / download phase から再開 |

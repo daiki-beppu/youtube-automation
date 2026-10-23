@@ -52,6 +52,11 @@ const downloadEnabledMocks = vi.hoisted(() => ({
   setValue: vi.fn(async () => undefined),
 }));
 
+const playlistEnabledMocks = vi.hoisted(() => ({
+  getValue: vi.fn(async () => true),
+  setValue: vi.fn(async () => undefined),
+}));
+
 const legacySourceState = vi.hoisted(() => ({ present: true }));
 
 const resumeStateMocks = vi.hoisted(() => ({
@@ -86,6 +91,7 @@ vi.mock("wxt/browser", () => ({
 vi.mock("../lib/storage", () => ({
   serverUrlItem: storageMocks,
   downloadEnabledItem: downloadEnabledMocks,
+  playlistEnabledItem: playlistEnabledMocks,
   completionSoundSettingsItem: completionSoundMocks,
   readCompletionSoundSettings: vi.fn(() => completionSoundMocks.getValue()),
   migrateServerSourcesStorage: serverSourcesMocks.migrateServerSourcesStorage,
@@ -99,6 +105,25 @@ vi.mock("../lib/completion-sound", async () => {
 });
 
 vi.mock("../lib/messaging", () => messagingMocks);
+
+// 再開経路の hook API は App のボタン表示条件より先で不変条件を持つため、App 越しに最新の戻り値を掴む。
+const runnerCapture = vi.hoisted(() => ({
+  current: null as null | { acceptResume: () => void },
+}));
+
+vi.mock("../components/useSunoRunner", async () => {
+  const actual = await vi.importActual<
+    typeof import("../components/useSunoRunner")
+  >("../components/useSunoRunner");
+  return {
+    ...actual,
+    useSunoRunner: () => {
+      const runner = actual.useSunoRunner();
+      runnerCapture.current = runner;
+      return runner;
+    },
+  };
+});
 
 async function readJson(url: string): Promise<unknown> {
   const resp = await fetch(url);
@@ -397,6 +422,8 @@ describe("Suno popup compatibility check", () => {
     storageMocks.setValue.mockResolvedValue(undefined);
     downloadEnabledMocks.getValue.mockResolvedValue(true);
     downloadEnabledMocks.setValue.mockResolvedValue(undefined);
+    playlistEnabledMocks.getValue.mockResolvedValue(true);
+    playlistEnabledMocks.setValue.mockResolvedValue(undefined);
     completionSoundMocks.getValue.mockResolvedValue({
       enabled: true,
     });
@@ -826,6 +853,31 @@ describe("Suno popup compatibility check", () => {
     );
   });
 
+  it("playlist Switch は既定 ON で保存し、再表示時に OFF を復元して download Switch を無効化する", async () => {
+    const enabled = expectControl(container, "playlist-enabled");
+    expect(enabled.dataset.slot).toBe("switch");
+    expect(enabled.getAttribute("aria-checked")).toBe("true");
+    expect(
+      expectControl(container, "download-enabled").hasAttribute("data-disabled")
+    ).toBe(false);
+
+    await act(async () => enabled.click());
+    expect(playlistEnabledMocks.setValue).toHaveBeenCalledWith(false);
+
+    playlistEnabledMocks.getValue.mockResolvedValueOnce(false);
+    await rerenderApp();
+    await waitFor(() =>
+      expect(
+        expectControl(container, "playlist-enabled").getAttribute(
+          "aria-checked"
+        )
+      ).toBe("false")
+    );
+    const download = expectControl(container, "download-enabled");
+    expect(download.getAttribute("aria-checked")).toBe("false");
+    expect(download.hasAttribute("data-disabled")).toBe(true);
+  });
+
   it("agent 操作用の root 状態属性と主要 control selector を実 DOM に公開する", async () => {
     const entries = [
       { name: "p1", style: "lofi", lyrics: "" },
@@ -1234,6 +1286,7 @@ describe("Suno popup compatibility check", () => {
       collectionId: "20260601-clm-theme-a-collection",
       runMode: "serial",
       regenerateDurationOutliers: false,
+      playlistEnabled: true,
       downloadEnabled: true,
       indices: undefined,
       submittedClipIds: undefined,
@@ -1359,6 +1412,7 @@ describe("Suno popup compatibility check", () => {
       collectionId: "20260601-clm-theme-a-collection",
       runMode: "queue",
       regenerateDurationOutliers: true,
+      playlistEnabled: true,
       downloadEnabled: true,
       indices: undefined,
       submittedClipIds: undefined,
@@ -1677,6 +1731,7 @@ describe("Suno popup compatibility check", () => {
       collectionId: "20260601-clm-theme-a-collection",
       runMode: "queue",
       regenerateDurationOutliers: false,
+      playlistEnabled: true,
       downloadEnabled: true,
       indices: undefined,
       submittedClipIds: [],
@@ -1775,6 +1830,7 @@ describe("Suno popup compatibility check", () => {
       regenerateDurationOutliers: false,
       indices: [1],
       submittedClipIds: ["clip-a", "clip-short"],
+      playlistEnabled: true,
       downloadEnabled: true,
       submittedClipIdsAreDurationFiltered: false,
       playlistExpectedClipCount: 4,
@@ -1942,6 +1998,7 @@ describe("Suno popup compatibility check", () => {
       regenerateDurationOutliers: true,
       indices: [0, 2],
       submittedClipIds: undefined,
+      playlistEnabled: true,
       downloadEnabled: true,
       submittedClipIdsAreDurationFiltered: undefined,
       playlistExpectedClipCount: undefined,
@@ -2123,6 +2180,7 @@ describe("Suno popup compatibility check", () => {
       collectionId: "20260602-clm-snapshot-collection",
       runMode: "serial",
       regenerateDurationOutliers: false,
+      playlistEnabled: true,
       downloadEnabled: true,
       indices: undefined,
       submittedClipIds: [],
@@ -2210,6 +2268,7 @@ describe("Suno popup compatibility check", () => {
       collectionId: "20260603-clm-fresh-collection",
       runMode: "serial",
       regenerateDurationOutliers: true,
+      playlistEnabled: true,
       downloadEnabled: true,
       indices: undefined,
       submittedClipIds: undefined,
@@ -3323,6 +3382,97 @@ describe("Suno popup compatibility check", () => {
     });
     expect(container.textContent).toContain("異常値警告");
     expect(container.textContent).toContain("clip-b");
+  });
+
+  async function renderPlaylistStageResume(): Promise<void> {
+    act(() => {
+      root.unmount();
+    });
+    root = createRoot(container);
+    resumeStateMocks.readResumeState.mockResolvedValue({
+      collectionId: "20260601-clm-theme-a-collection",
+      failedIndex: 1,
+      total: 1,
+      timestamp: Date.now(),
+      submittedClipIds: ["clip-a", "clip-b"],
+      submittedClipIdsAreDurationFiltered: true,
+      playlistExpectedClipCount: 2,
+    } as never);
+    fetchMock.mockReset();
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse(200, {
+          version: "5.5.7",
+          min_extension_version: MANIFEST_VERSION,
+        })
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(200, [
+          {
+            id: "20260601-clm-theme-a-collection",
+            name: "theme-a-collection",
+            status: "ready",
+            pattern_count: 1,
+            downloaded_count: 0,
+            expected_file_count: 2,
+          },
+        ])
+      )
+      .mockResolvedValueOnce(jsonResponse(500, {}));
+    messagingMocks.sendMessage.mockImplementation(defaultSendMessage);
+
+    await act(async () => {
+      root.render(createElement(App));
+    });
+    await setSelectValue(expectControl(container, "server-url"), BASE_URL);
+    await waitFor(() => {
+      expect(container.textContent).toContain("Playlist: clm | theme-a");
+    });
+  }
+
+  it("プレイリスト OFF で playlist 段階の resume を承認すると retryPlaylist を送らず resume state を消して生成完了を表示する", async () => {
+    playlistEnabledMocks.getValue.mockResolvedValue(false);
+    await renderPlaylistStageResume();
+
+    messagingMocks.sendMessage.mockClear();
+    resumeStateMocks.clearResumeStateForCollection.mockClear();
+    await act(async () => {
+      runnerCapture.current?.acceptResume();
+    });
+
+    expect(messagingMocks.sendMessage).not.toHaveBeenCalledWith(
+      "retryPlaylist",
+      expect.anything()
+    );
+    expect(resumeStateMocks.clearResumeStateForCollection).toHaveBeenCalledWith(
+      "20260601-clm-theme-a-collection"
+    );
+    expect(container.textContent).toContain(
+      "playlist 追加とダウンロードは未実行。"
+    );
+  });
+
+  it("プレイリスト ON で playlist 段階の resume を承認すると retryPlaylist を Studio export 付きで送る", async () => {
+    await renderPlaylistStageResume();
+
+    messagingMocks.sendMessage.mockClear();
+    resumeStateMocks.clearResumeStateForCollection.mockClear();
+    await act(async () => {
+      runnerCapture.current?.acceptResume();
+    });
+
+    expect(messagingMocks.sendMessage).toHaveBeenCalledWith(
+      "retryPlaylist",
+      expect.objectContaining({
+        collectionId: "20260601-clm-theme-a-collection",
+        submittedClipIds: ["clip-a", "clip-b"],
+        shouldDownload: true,
+        downloadEnabled: true,
+      })
+    );
+    expect(
+      resumeStateMocks.clearResumeStateForCollection
+    ).not.toHaveBeenCalled();
   });
 
   it("persisted resume が entries 未取得の途中再開ならバナーを残して run を送らない", async () => {
