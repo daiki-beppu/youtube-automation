@@ -14,7 +14,12 @@ from datetime import datetime
 from pathlib import Path
 
 from youtube_automation.configuration.distrokid import Distrokid
-from youtube_automation.core.errors import ConfigError, WorkflowStateError
+from youtube_automation.core.errors import (
+    ConfigError,
+    WorkflowStateError,
+    WorkflowStateRootTypeError,
+    WorkflowStateSectionTypeError,
+)
 from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.distrokid.metadata import (
@@ -88,9 +93,9 @@ def _read_release_date(paths: CollectionPaths) -> str | None:
         cause = exc.__cause__
         if isinstance(cause, json.JSONDecodeError):
             raise ConfigError(f"workflow-state.json が不正な JSON です: {state_path}") from exc
-        if "root must be an object" in str(exc):
+        if isinstance(exc, WorkflowStateRootTypeError):
             raise ConfigError(f"workflow-state.json のトップレベルが object ではありません: {state_path}") from exc
-        if "::planning must be an object" in str(exc):
+        if isinstance(exc, WorkflowStateSectionTypeError) and exc.section == "planning":
             raise ConfigError(f"workflow-state.json の planning が object ではありません: {state_path}") from exc
         detail = f": {cause}" if isinstance(cause, OSError) else ""
         raise ConfigError(f"workflow-state.json を読み取れませんでした: {state_path}{detail}") from exc

@@ -11,7 +11,15 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Literal, TypedDict, cast
 
-from youtube_automation.core.errors import ValidationError, WorkflowStateError, WorkflowStateSectionTypeError
+from youtube_automation.core.errors import (
+    ValidationError,
+    WorkflowStateError,
+    WorkflowStateNotRegularFileError,
+    WorkflowStateRootTypeError,
+    WorkflowStateSectionTypeError,
+    WorkflowStateSymlinkError,
+    WorkflowStateWriteError,
+)
 from youtube_automation.domains.media_store import MediaKey
 from youtube_automation.infrastructure.filesystem import JSONValue, file_lock
 
@@ -1021,15 +1029,15 @@ def _validate_iso_datetime(value: str, label: str) -> None:
 
 def _read_payload(path: Path) -> dict[str, JSONValue]:
     if path.is_symlink():
-        raise WorkflowStateError(f"workflow-state.json must not be a symlink: {path}")
+        raise WorkflowStateSymlinkError(f"workflow-state.json must not be a symlink: {path}")
     if not path.is_file():
-        raise WorkflowStateError(f"workflow-state.json is not a regular file: {path}")
+        raise WorkflowStateNotRegularFileError(f"workflow-state.json is not a regular file: {path}")
     try:
         payload: object = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise WorkflowStateError(f"workflow-state.json could not be read: {path}") from exc
     if not isinstance(payload, dict):
-        raise WorkflowStateError(f"workflow-state.json root must be an object: {path}")
+        raise WorkflowStateRootTypeError(f"workflow-state.json root must be an object: {path}")
     return cast(dict[str, JSONValue], payload)
 
 
@@ -1041,7 +1049,7 @@ def read(path: Path) -> WorkflowState:
 def read_or_none(path: Path) -> WorkflowState | None:
     """ファイル不在だけを None とし、破損や symlink は拒否する。"""
     if path.is_symlink():
-        raise WorkflowStateError(f"workflow-state.json must not be a symlink: {path}")
+        raise WorkflowStateSymlinkError(f"workflow-state.json must not be a symlink: {path}")
     if not path.exists():
         return None
     return read(path)
@@ -1057,7 +1065,7 @@ def _write_atomically(path: Path, state: WorkflowState) -> None:
             stream.flush()
             os.fsync(stream.fileno())
         if path.is_symlink():
-            raise WorkflowStateError(f"workflow-state.json must not be a symlink: {path}")
+            raise WorkflowStateSymlinkError(f"workflow-state.json must not be a symlink: {path}")
         os.replace(temporary, path)
     except WorkflowStateError as exc:
         try:
@@ -1072,11 +1080,11 @@ def _write_atomically(path: Path, state: WorkflowState) -> None:
         try:
             temporary.unlink(missing_ok=True)
         except OSError as cleanup_exc:
-            raise WorkflowStateError(
+            raise WorkflowStateWriteError(
                 f"workflow-state.json could not be written and temporary file could not be removed: {path}: "
                 f"{exc}; {cleanup_exc}"
             ) from cleanup_exc
-        raise WorkflowStateError(f"workflow-state.json could not be written: {path}") from exc
+        raise WorkflowStateWriteError(f"workflow-state.json could not be written: {path}") from exc
 
 
 def update(path: Path, updater: WorkflowStateUpdater) -> WorkflowState:

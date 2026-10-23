@@ -1,0 +1,2 @@
+- workflow-state.json の読み書き失敗を `WorkflowStateError` の subclass（`WorkflowStateRootTypeError` / `WorkflowStateSymlinkError` / `WorkflowStateNotRegularFileError` / `WorkflowStateWriteError`）で区別するようにし、各 CLI と skill スクリプトが例外メッセージの文言照合で失敗種別を判定していた処理を型判定へ置き換えた。CLI 引数・出力・エラーメッセージ・終了コードなどの外部仕様は変わらない。
+- ファイルパスや workflow-state.json の値に照合対象の文言が含まれていると失敗種別を取り違える可能性があったが、型判定に変えたことで起きなくなった。

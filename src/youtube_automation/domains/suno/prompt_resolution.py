@@ -13,7 +13,7 @@ from typing import cast
 import yaml
 
 from youtube_automation.configuration.skills import load_channel_override, load_skill_config
-from youtube_automation.core.errors import ConfigError, WorkflowStateError
+from youtube_automation.core.errors import ConfigError, WorkflowStateError, WorkflowStateRootTypeError
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.suno.config import ResolvedSunoConfig, infer_suno_mode, resolve_suno_config
 from youtube_automation.domains.suno.downloaded.models import (
@@ -458,7 +458,7 @@ def _read_workflow_track_count(workflow_state_path: Path) -> int:
         state = read_workflow_state(workflow_state_path)
         track_count = state.track_count
     except WorkflowStateError as exc:
-        if "root must be an object" in str(exc):
+        if isinstance(exc, WorkflowStateRootTypeError):
             raise ConfigError(
                 f"workflow-state.json のトップレベルは object である必要があります: {workflow_state_path}"
             ) from exc

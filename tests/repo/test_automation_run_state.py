@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from types import ModuleType
 
+import pytest
+
 from tests.helpers.paths import REPO_ROOT
 
 ROOT = REPO_ROOT
@@ -73,3 +75,24 @@ def test_prepared_collection_requires_audio_approval_when_not_skipped(tmp_path: 
 
     assert decision["action"] == "blocked"
     assert decision["reason"] == "audio_approval_required"
+
+
+@pytest.mark.parametrize(
+    ("state_text", "expected"),
+    [
+        ("[]", "JSON root は object でなければなりません"),
+        ("{broken", "JSON を読めません"),
+        ('{"assets": []}', "workflow-state.json::assets must be an object"),
+    ],
+    ids=["non-object-root", "broken-json", "non-object-assets"],
+)
+def test_state_reports_invalid_workflow_state_by_failure_kind(tmp_path: Path, state_text: str, expected: str) -> None:
+    state = _load_state_module()
+    collection = tmp_path / "collection"
+    collection.mkdir()
+    (collection / "workflow-state.json").write_text(state_text, encoding="utf-8")
+
+    with pytest.raises(ValueError) as exc_info:
+        state._state(collection)
+
+    assert expected in str(exc_info.value)

@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import NotRequired, TypedDict
 
-from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.core.errors import WorkflowStateError, WorkflowStateSectionTypeError
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 
 EXIT_SKIP = 0
@@ -129,7 +129,7 @@ def evaluate(
     except WorkflowStateError as exc:
         if not state_path.exists():
             return EXIT_RUN, _result("run", "workflow_state_missing")
-        if "::upload must be an object" in str(exc):
+        if isinstance(exc, WorkflowStateSectionTypeError) and exc.section == "upload":
             return EXIT_BLOCKED, _result("blocked", "upload_state_invalid")
         return EXIT_BLOCKED, _result("blocked", "workflow_state_invalid")
     upload = state.upload

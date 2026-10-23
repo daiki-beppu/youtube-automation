@@ -14,7 +14,12 @@ from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from youtube_automation.configuration import channel_dir, load_config
-from youtube_automation.core.errors import ConfigError, WorkflowStateError
+from youtube_automation.core.errors import (
+    ConfigError,
+    WorkflowStateError,
+    WorkflowStateRootTypeError,
+    WorkflowStateSectionTypeError,
+)
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 
@@ -46,9 +51,9 @@ def _read_state(collection: Path) -> WorkflowState:
     try:
         return read_workflow_state(state_path)
     except WorkflowStateError as exc:
-        if "root must be an object" in str(exc):
+        if isinstance(exc, WorkflowStateRootTypeError):
             raise ConfigError("workflow-state.json の root は object でなければなりません") from exc
-        if "::planning must be an object" in str(exc):
+        if isinstance(exc, WorkflowStateSectionTypeError) and exc.section == "planning":
             raise ConfigError("workflow-state.json::planning が未設定です") from exc
         raise ConfigError(f"workflow-state.json が不正な JSON です: {state_path}: {exc}") from exc
 

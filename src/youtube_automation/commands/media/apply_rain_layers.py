@@ -41,6 +41,7 @@ from youtube_automation.core.errors import (
     ConfigError,
     ValidationError,
     WorkflowStateError,
+    WorkflowStateRootTypeError,
     WorkflowStateSectionTypeError,
 )
 from youtube_automation.domains.collections.paths import CollectionPaths, resolve_collection_dir
@@ -180,7 +181,7 @@ def _update_workflow_state_raw_master(workflow_state_path: Path, new_name: str) 
     except WorkflowStateError as error:
         if isinstance(error.__cause__, OSError):
             raise error.__cause__ from error
-        if "root must be an object" in str(error):
+        if isinstance(error, WorkflowStateRootTypeError):
             raise ValidationError("workflow-state.json の root は object である必要があります") from error
         if isinstance(error, WorkflowStateSectionTypeError) and error.section == "assets":
             raise ValidationError("workflow-state.json::assets は object である必要があります") from error

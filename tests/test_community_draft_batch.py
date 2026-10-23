@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from tests.helpers.paths import REPO_ROOT
 
 REPO_ROOT = REPO_ROOT
@@ -84,6 +86,28 @@ def test_generate_batch_fails_loudly_without_publish_target(tmp_path: Path) -> N
     assert result.returncode != 0
     assert "planning.publish_target_at" in result.stderr
     assert not (collection / "30-promo/community-posts.json").exists()
+
+
+@pytest.mark.parametrize(
+    ("state_text", "expected", "unexpected"),
+    [
+        ("[]", "workflow-state.json の root は object でなければなりません", "不正な JSON"),
+        ('{"planning": []}', "workflow-state.json::planning が未設定です", "不正な JSON"),
+        ("{broken", "workflow-state.json が不正な JSON です", "object でなければなりません"),
+    ],
+    ids=["non-object-root", "non-object-planning", "broken-json"],
+)
+def test_generate_batch_reports_invalid_workflow_state_by_failure_kind(
+    tmp_path: Path, state_text: str, expected: str, unexpected: str
+) -> None:
+    channel, collection = _channel(tmp_path, publish_target_at="2026-06-25T08:00:00+09:00")
+    (collection / "workflow-state.json").write_text(state_text, encoding="utf-8")
+
+    result = _run(channel, collection)
+
+    assert result.returncode == 1
+    assert expected in result.stderr
+    assert unexpected not in result.stderr
 
 
 def test_active_community_docs_have_no_legacy_type_markdown_or_clipboard_flow() -> None:

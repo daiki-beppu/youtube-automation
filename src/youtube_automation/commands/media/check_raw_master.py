@@ -29,7 +29,13 @@ from pathlib import Path
 
 from youtube_automation.commands._shared.arguments import add_optional_collection_argument
 from youtube_automation.configuration.skills import load_skill_config
-from youtube_automation.core.errors import ValidationError, WorkflowStateError, WorkflowStateSectionTypeError
+from youtube_automation.core.errors import (
+    ValidationError,
+    WorkflowStateError,
+    WorkflowStateRootTypeError,
+    WorkflowStateSectionTypeError,
+    WorkflowStateWriteError,
+)
 from youtube_automation.domains.collections.paths import CollectionPaths, resolve_collection_dir
 from youtube_automation.domains.collections.workflow_state import WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
@@ -74,7 +80,7 @@ def _load_state(workflow_state_path: Path) -> dict:
     try:
         return read_workflow_state(workflow_state_path).to_dict()
     except WorkflowStateError as error:
-        if "root must be an object" in str(error):
+        if isinstance(error, WorkflowStateRootTypeError):
             raise ValidationError("workflow-state.json の root は object である必要があります") from error
         raise ValidationError(f"workflow-state.json のパースに失敗: {error}") from error
 
@@ -174,9 +180,9 @@ def apply_raw_master(collection_dir: Path, new_name: str, *, loudness_receipt: P
     try:
         update_workflow_state(paths.workflow_state_path, record_raw_master)
     except WorkflowStateError as error:
-        if isinstance(error.__cause__, OSError) and "could not be written" in str(error):
+        if isinstance(error, WorkflowStateWriteError) and isinstance(error.__cause__, OSError):
             raise error.__cause__ from error
-        if "root must be an object" in str(error):
+        if isinstance(error, WorkflowStateRootTypeError):
             raise ValidationError("workflow-state.json の root は object である必要があります") from error
         if isinstance(error, WorkflowStateSectionTypeError) and error.section == "assets":
             raise ValidationError("workflow-state.json::assets は object である必要があります") from error

@@ -19,7 +19,9 @@ from youtube_automation.core.errors import (
     ReviewError,
     ValidationError,
     WorkflowStateError,
+    WorkflowStateRootTypeError,
     WorkflowStateSectionTypeError,
+    WorkflowStateWriteError,
 )
 from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import WorkflowState
@@ -48,7 +50,7 @@ def _read_state(path: Path) -> dict:
     try:
         return read_workflow_state(path).to_dict()
     except WorkflowStateError as error:
-        if "root must be an object" in str(error):
+        if isinstance(error, WorkflowStateRootTypeError):
             raise ValidationError(f"workflow-state.json の root は object である必要があります: {path}") from error
         raise ValidationError(f"workflow-state.json を読めません: {path}: {error}") from error
 
@@ -185,7 +187,7 @@ def _update_workflow_state(collection: Path) -> str:
     except ReviewError as error:
         raise ValidationError(f"生成された master video を読み込めません: {video}: {error}") from error
     except WorkflowStateError as error:
-        if isinstance(error.__cause__, OSError) and "could not be written" in str(error):
+        if isinstance(error, WorkflowStateWriteError) and isinstance(error.__cause__, OSError):
             raise error.__cause__ from error
         if isinstance(error, WorkflowStateSectionTypeError) and error.section == "assets":
             raise ValidationError(

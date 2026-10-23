@@ -12,7 +12,11 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from youtube_automation.core.errors import WorkflowStateError
+from youtube_automation.core.errors import (
+    WorkflowStateError,
+    WorkflowStateRootTypeError,
+    WorkflowStateSectionTypeError,
+)
 from youtube_automation.domains.collections.workflow_state import AssetsState, WorkflowState
 from youtube_automation.domains.collections.workflow_state import read as read_workflow_state
 from youtube_automation.domains.collections.workflow_state import update as update_workflow_state
@@ -57,9 +61,9 @@ def _load_state(path: Path) -> WorkflowState:
         cause = exc.__cause__
         if isinstance(cause, json.JSONDecodeError):
             raise ValueError(f"invalid workflow-state.json: {cause}") from exc
-        if "root must be an object" in str(exc):
+        if isinstance(exc, WorkflowStateRootTypeError):
             raise ValueError("workflow-state.json root must be an object") from exc
-        if "::assets must be an object" in str(exc):
+        if isinstance(exc, WorkflowStateSectionTypeError) and exc.section == "assets":
             raise ValueError("workflow-state.json::assets must be an object") from exc
         raise ValueError(f"workflow-state.json could not be read: {cause or exc}") from exc
     if state.assets is None:

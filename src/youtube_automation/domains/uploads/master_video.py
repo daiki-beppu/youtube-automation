@@ -2,7 +2,12 @@
 
 from pathlib import Path
 
-from youtube_automation.core.errors import ValidationError, WorkflowStateError
+from youtube_automation.core.errors import (
+    ValidationError,
+    WorkflowStateError,
+    WorkflowStateRootTypeError,
+    WorkflowStateSectionTypeError,
+)
 from youtube_automation.domains.collections.paths import CollectionPaths
 from youtube_automation.domains.collections.workflow_state import read_or_none as read_workflow_state_or_none
 from youtube_automation.infrastructure.filesystem import glob_files, path_is_file
@@ -15,9 +20,9 @@ def resolve_master_video(collection_dir: Path) -> Path:
     try:
         state = read_workflow_state_or_none(state_path)
     except WorkflowStateError as exc:
-        if "root must be an object" in str(exc):
+        if isinstance(exc, WorkflowStateRootTypeError):
             raise ValidationError("workflow-state.json root は object である必要があります") from exc
-        if "::assets must be an object" in str(exc):
+        if isinstance(exc, WorkflowStateSectionTypeError) and exc.section == "assets":
             raise ValidationError("workflow-state.json::assets は object である必要があります") from exc
         raise ValidationError(f"workflow-state.json を読めません: {state_path}: {exc}") from exc
     if state is not None:

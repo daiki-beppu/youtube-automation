@@ -157,6 +157,22 @@ class WorkflowStateSectionTypeError(WorkflowStateError):
         self.section = section
 
 
+class WorkflowStateRootTypeError(WorkflowStateError):
+    """workflow-state.json の root が object でないことを型で識別する例外。"""
+
+
+class WorkflowStateSymlinkError(WorkflowStateError):
+    """workflow-state.json が symlink であることを型で識別する例外。"""
+
+
+class WorkflowStateNotRegularFileError(WorkflowStateError):
+    """workflow-state.json が通常ファイルでないことを型で識別する例外。"""
+
+
+class WorkflowStateWriteError(WorkflowStateError):
+    """workflow-state.json を書き込めなかったことを型で識別する例外。"""
+
+
 class MediaStoreError(AutomationError):
     """境界メディアの転送・完全性検証エラー。"""
 
