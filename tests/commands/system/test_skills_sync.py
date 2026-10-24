@@ -171,6 +171,24 @@ def test_cmd_sync_never_overwrites_existing_channel_gitignore_even_with_force(
     assert "migrate-state-git" in capsys.readouterr().out
 
 
+def test_cmd_diff_reports_existing_channel_gitignore_as_kept_not_local_fix(
+    fake_repo: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    downstream = tmp_path / "downstream"
+    downstream.mkdir()
+    (downstream / ".gitignore").write_text("# local policy\n", encoding="utf-8")
+    monkeypatch.chdir(downstream)
+
+    parser = build_parser()
+    args = parser.parse_args(["diff", "--asset", "channel-gitignore"])
+    skills_sync._resolve_default_target(args)
+    assert args.func(args) == 0
+
+    out = capsys.readouterr().out
+    assert "内容が異なる" not in out
+    assert "sync は上書きしません" in out
+
+
 def test_migrate_state_git_requires_explicit_channel_dir() -> None:
     parser = build_parser()
     with pytest.raises(SystemExit) as exc_info:

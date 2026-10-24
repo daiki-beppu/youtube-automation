@@ -1,0 +1,1 @@
+- チャンネル独自の `.gitignore` があると `yt-automation-update apply` が local fix ガードで停止し、`--force-sync` 以外に進めなかった問題を解消した。`yt-skills diff` は、sync が上書きしない既存の `.gitignore` を「内容が異なる」ではなく「sync は上書きしません」と表示する（#5303）。

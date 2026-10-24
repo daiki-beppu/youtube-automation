@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from youtube_automation.commands.system.skills_sync import (
+    _KEEP_EXISTING_FILE_ASSETS,
     _dispatch_asset,
     _distribution_entries,
     _resolve_file_target,
@@ -46,6 +47,9 @@ def _diff_file_asset(asset: str, spec: dict[str, str], root: Path, target: Path)
         return 1
     if filecmp.cmp(src, target, shallow=False):
         print("差分なし。target は同梱版と一致しています。")
+    elif asset in _KEEP_EXISTING_FILE_ASSETS:
+        print("同梱版と異なりますが、既存ファイルのため sync は上書きしません:")
+        print(f"  = {target.name}")
     else:
         print("内容が異なる:")
         print(f"  ~ {target.name}")

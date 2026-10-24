@@ -8,6 +8,7 @@ from pathlib import Path
 
 from youtube_automation.commands.system.skills_sync import (
     _DEV_ONLY_SKILL_NAMES,
+    _KEEP_EXISTING_FILE_ASSETS,
     _dispatch_asset,
     _list_entries,
     _resolve_file_target,
@@ -112,7 +113,7 @@ def _sync_file_asset(
     target = _resolve_file_target(args.asset, spec, target)
     _ensure_target_parent(target)
 
-    if args.asset == "channel-gitignore" and (target.exists() or target.is_symlink()):
+    if args.asset in _KEEP_EXISTING_FILE_ASSETS and (target.exists() or target.is_symlink()):
         print(f"  {'skipped':>8}: {target.name}")
         print(
             "  既存 .gitignore は上書きしません。制御面JSONのGit管理移行は "
