@@ -1,0 +1,1 @@
+- 公開ドキュメントサイトの Cloudflare Pages の Build watch paths を Cloudflare の wildcard 書式（`site/*` 等）に合わせ、`site/` / `.claude/skills/` / `docs/release-notes/` だけを変更した push で production が更新されなかった問題を解消した。`flake.nix` / `flake.lock` を `.node-version` に差し替え、一覧が `site.yml` の `paths` と一致することを契約テストで担保した（#5301）。

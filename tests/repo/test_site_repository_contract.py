@@ -85,6 +85,23 @@ def test_site_workflow_checks_every_stacked_pull_request_and_main_push() -> None
     assert triggers["push"] == {"branches": ["main"], "paths": expected_paths}
 
 
+def test_cloudflare_build_watch_paths_doc_matches_site_workflow_paths() -> None:
+    # Cloudflare の `*` は `/` をまたぐ。`/**` のままだと一致せず build が skip される
+    doc = (ROOT / "docs/release-notes-deployment.md").read_text(encoding="utf-8")
+    section = doc.split("### repository workflow と Build watch paths", maxsplit=1)[1]
+    block = section.split("```text\n", maxsplit=1)[1].split("```", maxsplit=1)[0]
+    documented = block.splitlines()
+
+    push = _triggers(_workflow())["push"]
+    assert isinstance(push, dict)
+    expected = [re.sub(r"/\*\*$", "/*", path) for path in push["paths"]]
+
+    assert documented == expected
+    assert not any("**" in path for path in documented)
+    assert f"の {len(expected)} 項目" in doc
+    assert f"上記{len(expected)}項目" in doc
+
+
 def test_site_content_map_is_an_existing_exact_allowlist() -> None:
     sources = _operator_doc_sources()
 
