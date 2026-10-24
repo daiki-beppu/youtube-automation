@@ -18,7 +18,7 @@
 | pnpm | `11.15.1`（`site/package.json::packageManager` と `PNPM_VERSION`） |
 | Production deploy | `main` への push で自動実行 |
 | Preview deploy | repository 内の production 以外の全 branch / pull request |
-| Build watch paths | 下記「repository workflow と Build watch paths」の 29 項目 |
+| Build watch paths | 下記「repository workflow と Build watch paths」の 28 項目 |
 
 Cloudflare Pages の GitHub integration が commit を取得し、production branch では
 `https://youtube-automation-release-notes.pages.dev/`、それ以外では commit 固有 URL と
@@ -47,10 +47,16 @@ Cloudflare Pages Git integration の **Build watch paths** は Pages build の�
 片方を編集しても、もう片方へ自動同期されない。公開原本を追加・削除するときは両方を同じ変更で更新し、
 次の一覧と一致することを確認する。
 
+wildcard の書式は両者で異なる。GitHub Actions の `paths` は `site/**` と書くが、Cloudflare の
+Build watch paths は `*` 1 つで `/` をまたいで一致するため `site/*` と書く。Cloudflare に `site/**`
+を登録すると一致せず、該当ディレクトリだけを変更した push は `is_skipped` になって production が
+更新されない（2026-10-15〜10-24 に v6.1.0 / ext-v0.5.0 の公開ノートで発生）。次の一覧は Cloudflare
+側の書式で、`site.yml` の `paths` の末尾 `/**` を `/*` に置き換えたものと一致する。
+
 ```text
-site/**
-.claude/skills/**
-docs/release-notes/**
+site/*
+.claude/skills/*
+docs/release-notes/*
 ONBOARDING.md
 docs/tool-setup.md
 docs/oauth-setup.md
@@ -75,13 +81,16 @@ docs/upgrades/v5.5.0.md
 docs/upgrades/v5.5.1.md
 docs/upgrades/v6.0.0.md
 .github/workflows/site.yml
-flake.nix
-flake.lock
+.node-version
 ```
 
 Cloudflare Dashboard で既存の `youtube-automation-release-notes` project を開き、Git integration の
-Build watch paths を上記29項目へ更新して保存する。保存後は設定画面を再表示し、各項目が完全一致すること、
-`docs/**` のように公開対象外まで含む広い pattern がないことを確認する。
+Build watch paths を上記28項目へ更新して保存する。保存後は設定画面を再表示し、各項目が完全一致すること、
+`docs/*` のように公開対象外まで含む広い pattern がないことを確認する。
+
+merge 後に公開 URL が更新されない場合は、Cloudflare の deployment 一覧で対象 commit の
+`is_skipped` を確認する。`true` なら Build watch paths の不一致なので、上記一覧と Cloudflare 側の
+設定を照合してから、その deployment を retry する。
 
 ## Preview 受け入れ確認
 
