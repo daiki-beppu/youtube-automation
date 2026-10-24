@@ -128,6 +128,9 @@ _ASSET_SPECS: dict[str, dict[str, str]] = {
 # build hook の設定値との一致は test_dev_only_skills_not_distributed.py が担保する。
 _DEV_ONLY_SKILL_NAMES = frozenset({"automation-release", "hallmark", "shadcn"})
 
+# チャンネル独自の保護規則を持ち得るため、既存 target は --force でも上書きしない。
+_KEEP_EXISTING_FILE_ASSETS = frozenset({"channel-gitignore"})
+
 
 def _editable_root() -> Path:
     """Resolve the owning checkout without assuming an ancestor depth."""
