@@ -17,6 +17,7 @@ import sys
 from youtube_automation.application.youtube_auth import YouTubeOAuthHandler
 from youtube_automation.configuration import load_config
 from youtube_automation.core.errors import AuthError
+from youtube_automation.domains.uploads.playlists import iter_playlist_item_pages
 from youtube_automation.infrastructure import cost_tracker
 from youtube_automation.infrastructure.google.youtube import YouTubeClients
 
@@ -56,17 +57,17 @@ class PlaylistStatusViewer:
         youtube = self._youtube_service()
         video_ids = set()
 
+        def execute(request):
+            try:
+                # pagination の 1 ページ = 1 リクエストごとに quota を記録する
+                return request.execute()
+            finally:
+                _record_read_quota("playlistItems.list")
+
         try:
-            request = youtube.playlistItems().list(playlistId=playlist_id, part="contentDetails", maxResults=50)
-            while request:
-                try:
-                    # pagination の 1 ページ = 1 リクエストごとに quota を記録する
-                    response = request.execute()
-                finally:
-                    _record_read_quota("playlistItems.list")
+            for response in iter_playlist_item_pages(youtube, playlist_id, "contentDetails", execute):
                 for item in response.get("items", []):
                     video_ids.add(item["contentDetails"]["videoId"])
-                request = youtube.playlistItems().list_next(request, response)
         except Exception as e:
             logger.warning(f"プレイリスト {playlist_id} の項目取得エラー: {e}")
 
