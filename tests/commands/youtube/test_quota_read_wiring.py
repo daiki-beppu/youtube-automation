@@ -405,10 +405,9 @@ class TestPlaylistStatusQuota:
     def test_pagination_records_one_entry_per_request(self, quota_recorder):
         youtube = MagicMock()
         req1, req2 = MagicMock(), MagicMock()
-        req1.execute.return_value = {"items": [{"contentDetails": {"videoId": "v1"}}]}
+        req1.execute.return_value = {"items": [{"contentDetails": {"videoId": "v1"}}], "nextPageToken": "P2"}
         req2.execute.return_value = {"items": [{"contentDetails": {"videoId": "v2"}}]}
-        youtube.playlistItems.return_value.list.return_value = req1
-        youtube.playlistItems.return_value.list_next.side_effect = [req2, None]
+        youtube.playlistItems.return_value.list.side_effect = [req1, req2]
 
         viewer = _viewer_with_youtube(youtube)
         video_ids = viewer._list_playlist_video_ids("PL1")
@@ -441,3 +440,22 @@ class TestPlaylistStatusQuota:
 
         viewer = _viewer_with_youtube(youtube)
         assert viewer._list_playlist_video_ids("PL1") == {"v1"}
+
+    def test_endless_pagination_stops_at_page_cap(self, quota_recorder):
+        """nextPageToken を返し続ける API でも 100 ページで打ち切る（#5305）。"""
+        youtube = MagicMock()
+        req = MagicMock()
+
+        def execute():
+            if req.execute.call_count > 1000:
+                raise AssertionError("pagination did not stop")
+            return {"items": [], "nextPageToken": "NEXT"}
+
+        req.execute.side_effect = execute
+        youtube.playlistItems.return_value.list.return_value = req
+        youtube.playlistItems.return_value.list_next.return_value = req
+
+        viewer = _viewer_with_youtube(youtube)
+        assert viewer._list_playlist_video_ids("PL1") == set()
+        assert req.execute.call_count == 100
+        assert len(quota_recorder) == 100

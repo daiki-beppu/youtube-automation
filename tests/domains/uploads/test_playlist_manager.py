@@ -392,6 +392,38 @@ class TestListPlaylistVideoIds:
         assert quota_log.call_count == 2
 
 
+def _endless_page_request(mock_youtube, runaway_limit=1000):
+    """nextPageToken を返し続ける playlistItems.list を再現する（#5305）。"""
+    request = MagicMock()
+
+    def execute():
+        if request.execute.call_count > runaway_limit:
+            raise AssertionError("pagination did not stop")
+        return {"items": [], "nextPageToken": "NEXT"}
+
+    request.execute.side_effect = execute
+    mock_items = mock_youtube.playlistItems.return_value
+    mock_items.list.return_value = request
+    mock_items.list_next.return_value = request
+    return request
+
+
+class TestPlaylistItemsPaginationCap:
+    def test_list_playlist_video_ids_stops_endless_pagination(self, manager, mock_youtube):
+        request = _endless_page_request(mock_youtube)
+
+        with pytest.raises(YouTubeAPIError, match="PL_LOOP"):
+            manager._list_playlist_video_ids("PL_LOOP")
+        assert request.execute.call_count == 100
+
+    def test_clean_deleted_entries_stops_endless_pagination(self, manager, mock_youtube):
+        request = _endless_page_request(mock_youtube)
+
+        with pytest.raises(YouTubeAPIError, match="PL_ALL"):
+            manager.clean_deleted_entries()
+        assert request.execute.call_count == 100
+
+
 # ---------------------------------------------------------------------------
 # _create_playlist (旧 VideoUploader.create_playlist から PlaylistManager に内包)
 # ---------------------------------------------------------------------------
@@ -556,13 +588,13 @@ class TestQuotaLogging:
 
     def test_list_playlist_video_ids_records_list_per_page(self, manager, mock_youtube, quota_log):
         """read-before-write の playlistItems.list (1 unit) がページ単位で記録される"""
-        page1 = {"items": [{"contentDetails": {"videoId": "VID_A"}}]}
-        page2 = {"items": [{"contentDetails": {"videoId": "VID_B"}}]}
-        mock_items = mock_youtube.playlistItems.return_value
-        mock_items.list.return_value.execute.return_value = page1
-        next_request = MagicMock()
-        next_request.execute.return_value = page2
-        mock_items.list_next.side_effect = [next_request, None]
+        first_request, next_request = MagicMock(), MagicMock()
+        first_request.execute.return_value = {
+            "items": [{"contentDetails": {"videoId": "VID_A"}}],
+            "nextPageToken": "P2",
+        }
+        next_request.execute.return_value = {"items": [{"contentDetails": {"videoId": "VID_B"}}]}
+        mock_youtube.playlistItems.return_value.list.side_effect = [first_request, next_request]
 
         result = manager._list_playlist_video_ids("PL_PAGED")
 
@@ -802,12 +834,10 @@ def test_list_playlist_video_ids_fails_closed_for_invalid_item(manager):
 
 def test_list_playlist_video_ids_fails_closed_when_next_page_fails(manager):
     items = manager._youtube.playlistItems.return_value
-    first_request = items.list.return_value
-    first_response = {"items": [{"contentDetails": {"videoId": "v1"}}]}
-    first_request.execute.return_value = first_response
-    second_request = MagicMock()
+    first_request, second_request = MagicMock(), MagicMock()
+    first_request.execute.return_value = {"items": [{"contentDetails": {"videoId": "v1"}}], "nextPageToken": "P2"}
     second_request.execute.side_effect = OSError("page unavailable")
-    items.list_next.side_effect = [second_request]
+    items.list.side_effect = [first_request, second_request]
 
     with pytest.raises(YouTubeAPIError, match="page unavailable"):
         manager._list_playlist_video_ids("PL_ALL")

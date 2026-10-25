@@ -3,7 +3,7 @@
 import logging
 import time
 from abc import abstractmethod
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Iterator
 from pathlib import Path
 from typing import Protocol
 
@@ -49,9 +49,32 @@ _PROPAGATION_MAX_ATTEMPTS = 6
 _PROPAGATION_BASE_DELAY_SECONDS = 2.0
 _PROPAGATION_MAX_DELAY_SECONDS = 20.0
 
+# YouTube のプレイリストは最大 5,000 件なので、maxResults=50 で 100 ページを超えるのは
+# API が nextPageToken を返し続けている状態。打ち切らないと日次クォータを使い切る（#5305）。
+PLAYLIST_ITEMS_MAX_PAGES = 100
+
 
 def _log_playlist_quota(bucket: str, **metadata):
     return youtube_quota_recorder(bucket, _QUOTA_UNITS_BY_BUCKET[bucket], metadata=metadata or None)
+
+
+def iter_playlist_item_pages(
+    youtube, playlist_id: str, part: str, execute: Callable[[object], object]
+) -> Iterator[dict]:
+    """playlistItems.list を ``PLAYLIST_ITEMS_MAX_PAGES`` までページングして各レスポンスを返す。"""
+    page_token = None
+    for _ in range(PLAYLIST_ITEMS_MAX_PAGES):
+        request = youtube.playlistItems().list(part=part, playlistId=playlist_id, maxResults=50, pageToken=page_token)
+        response = execute(request)
+        if not isinstance(response, dict):
+            raise ValidationError("playlistItems.list response must be an object")
+        yield response
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            return
+    raise YouTubeAPIError(
+        f"playlistItems.list: playlist {playlist_id} のページングが {PLAYLIST_ITEMS_MAX_PAGES} ページで終わらない"
+    )
 
 
 def _read_sync_candidate(col_path: Path) -> tuple[str, str, str] | None:
@@ -286,13 +309,9 @@ class PlaylistManager:
         youtube = self._youtube_service()
         video_ids = set()
 
-        request = youtube.playlistItems().list(playlistId=playlist_id, part="contentDetails", maxResults=50)
-        while request:
-            response = execute_youtube_request(
-                request,
-                "playlistItems.list failed",
-                on_attempt=_log_playlist_quota("playlistItems.list", playlist_id=playlist_id),
-            )
+        for response in iter_playlist_item_pages(
+            youtube, playlist_id, "contentDetails", self._execute_playlist_items_list(playlist_id)
+        ):
             for item in validate_youtube_response_items(response, "playlistItems.list"):
                 if not isinstance(item, dict):
                     raise ValidationError("playlistItems.list response item must be an object")
@@ -301,9 +320,16 @@ class PlaylistManager:
                 if not isinstance(video_id, str) or not video_id:
                     raise ValidationError("playlistItems.list response is missing contentDetails.videoId")
                 video_ids.add(video_id)
-            request = youtube.playlistItems().list_next(request, response)
 
         return video_ids
+
+    @staticmethod
+    def _execute_playlist_items_list(playlist_id: str) -> Callable[[object], object]:
+        return lambda request: execute_youtube_request(
+            request,
+            "playlistItems.list failed",
+            on_attempt=_log_playlist_quota("playlistItems.list", playlist_id=playlist_id),
+        )
 
     def assign_video(
         self,
@@ -433,25 +459,10 @@ class PlaylistManager:
                 continue
 
             removed = 0
-            page_token = None
-            while True:
-                request = youtube.playlistItems().list(
-                    part="snippet",
-                    playlistId=playlist_id,
-                    maxResults=50,
-                    pageToken=page_token,
-                )
-                resp = execute_youtube_request(
-                    request,
-                    "playlistItems.list failed",
-                    on_attempt=_log_playlist_quota("playlistItems.list", playlist_id=playlist_id),
-                )
-
+            for resp in iter_playlist_item_pages(
+                youtube, playlist_id, "snippet", self._execute_playlist_items_list(playlist_id)
+            ):
                 removed += _clean_playlist_page(youtube, resp, key=key, playlist_id=playlist_id, dry_run=dry_run)
-
-                page_token = resp.get("nextPageToken")
-                if not page_token:
-                    break
 
             removed_per_playlist[key] = removed
             if removed == 0:
