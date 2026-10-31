@@ -104,7 +104,7 @@ def test_default_shell_sets_only_a_default_pnpm_worker_limit() -> None:
 
 def test_node_version_is_declared_once_at_the_repository_root() -> None:
     """vp と CI の setup-vp が読む Node の版は root の .node-version を正とする。"""
-    assert _read(".node-version") == "24\n"
+    assert _read(".node-version") == "26\n"
 
 
 def test_every_node_package_pins_the_pnpm_version() -> None:
