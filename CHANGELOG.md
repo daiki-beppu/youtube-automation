@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [6.1.1] - 2026-10-31
+
+### Fixed
+
+- 公開ドキュメントサイトの Cloudflare Pages の Build watch paths を Cloudflare の wildcard 書式（`site/*` 等）に合わせ、`site/` / `.claude/skills/` / `docs/release-notes/` だけを変更した push で production が更新されなかった問題を解消した。`flake.nix` / `flake.lock` を `.node-version` に差し替え、一覧が `site.yml` の `paths` と一致することを契約テストで担保した（#5301）。
+- チャンネル独自の `.gitignore` があると `yt-automation-update apply` が local fix ガードで停止し、`--force-sync` 以外に進めなかった問題を解消した。`yt-skills diff` は、sync が上書きしない既存の `.gitignore` を「内容が異なる」ではなく「sync は上書きしません」と表示する（#5303）。
+- プレイリストの重複チェック・削除済みエントリ除去・状態表示で `playlistItems.list` のページングを 100 ページで打ち切るようにした。YouTube API が `nextPageToken` を返し続けるプレイリストで呼び出しが止まらず、日次クォータを使い切って後続のプレイリスト追加や live 移行まで失敗していた。上限に達したときは部分結果で重複チェックせず、`YouTubeAPIError` で止める
+
+### Migration
+
+所要時間の目安: 1〜3 分
+
+local fix 衝突注意:
+- 無し
+
+サマリ:
+- `yt-upload-collection` のプレイリスト追加で、YouTube API が `nextPageToken` を返し続けるプレイリストに当たると `playlistItems.list` が止まらず、日次クォータを使い切っていた問題を修正しました。呼び出しは 1 プレイリストあたり 100 回で止まり、`YouTubeAPIError` で失敗します。installed package に上限を直接パッチしていた場合は、本リリースへの追従で不要になります。
+- チャンネル独自の `.gitignore` があっても `yt-automation-update apply` が local fix ガードで止まらなくなりました。
+- CLI entry point の撤去・改名、config の必須キー追加、skill の変更はありません。
+
+Python module 移動: なし
+
+移動監査: v6.1.0 との差分を rename 検出付きで照合しました。削除・追加・rename された module は無く、既存 module 5 件の変更だけです。
+
 ## [6.1.0] - 2026-10-23
 
 ### Added
@@ -3750,3 +3774,5 @@ uv run yt-config-migrate verify                  # 新 loader で読めるか検
 [6.0.1]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v6.0.1
 
 [6.1.0]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v6.1.0
+
+[6.1.1]: https://github.com/daiki-beppu/youtube-automation/releases/tag/v6.1.1
